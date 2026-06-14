@@ -27,19 +27,16 @@ Write-Host "--> Copying files..."
 Copy-ToPi "display.py"    "$REMOTE_DIR/display.py"
 Copy-ToPi "requirements.txt" "$REMOTE_DIR/requirements.txt"
 
-# Copy config only if it doesn't already exist on the Pi
-$hasConfig = (ssh -i $KeyFile -o StrictHostKeyChecking=no $PI "test -f $REMOTE_DIR/config.toml && echo yes || echo no").Trim()
-if ($hasConfig -ne "yes") {
-    Copy-ToPi "config.example.toml" "$REMOTE_DIR/config.toml"
-    Write-Host ""
-    Write-Host "  NOTE: config.toml created from example."
-    Write-Host "  Edit $REMOTE_DIR/config.toml on the Pi and add your HA long-lived token."
-    Write-Host ""
+# Always deploy local config.toml (gitignored, contains real token)
+if (Test-Path "config.toml") {
+    Copy-ToPi "config.toml" "$REMOTE_DIR/config.toml"
+} else {
+    Write-Host "  WARNING: config.toml not found locally — skipping (Pi will use existing or example)"
 }
 
 # Install Python dependencies
 Write-Host "--> Installing Python dependencies..."
-Invoke-Pi "pip3 install -r $REMOTE_DIR/requirements.txt --break-system-packages -q"
+Invoke-Pi "pip3 install -r $REMOTE_DIR/requirements.txt --break-system-packages --prefer-binary"
 
 # Install and substitute user into systemd units
 Write-Host "--> Installing systemd units..."

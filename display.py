@@ -341,8 +341,8 @@ def main():
 
     log.info("Rendering to Inky display...")
     try:
-        from inky.auto import auto
-        inky = auto()
+        from inky.inky_uc8159 import Inky
+        inky = Inky(resolution=(600, 400))
     except ImportError:
         log.error("inky library not available — use --save <path.png> for development")
         sys.exit(1)
