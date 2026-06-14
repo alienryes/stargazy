@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stargazing conditions display for Pimoroni Inky Impression 4" (600×400, 7-colour)."""
+"""Stargazing conditions display for Pimoroni Inky Impression 4" (640×400, 7-colour)."""
 
 import argparse
 import logging
@@ -34,7 +34,7 @@ PREVIEW_PALETTE = [
     230, 120, 0,      # 6 ORANGE
 ] + [0, 0, 0] * 249
 
-W, H = 600, 400
+W, H = 640, 400
 
 ENTITIES = [
     "sensor.astroweather_backyard_astronomical_night_duration",
@@ -342,7 +342,7 @@ def main():
     log.info("Rendering to Inky display...")
     try:
         from inky.inky_uc8159 import Inky
-        inky = Inky(resolution=(600, 400))
+        inky = Inky(resolution=(640, 400))
     except ImportError:
         log.error("inky library not available — use --save <path.png> for development")
         sys.exit(1)
