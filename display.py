@@ -176,10 +176,10 @@ def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
     draw.polygon(pts, fill=YELLOW)
 
 
-def render(states, palette=None):
-    """Render the 600×400 display image. Returns a PIL Image in P mode."""
+def render(states):
+    """Render the 640×400 display image. Returns a PIL Image in P mode."""
     img = Image.new("P", (W, H))
-    img.putpalette(palette if palette else PREVIEW_PALETTE)
+    img.putpalette(PREVIEW_PALETTE)
     draw = ImageDraw.Draw(img)
 
     f_large = _font("DejaVuSans-Bold.ttf", 52)
@@ -347,7 +347,7 @@ def main():
         log.error("inky library not available — use --save <path.png> for development")
         sys.exit(1)
 
-    img = render(states, palette=inky.palette)
+    img = render(states).convert("RGB")
     inky.set_image(img)
     inky.show()
     log.info("Done. v%s", FIRMWARE_VERSION)
