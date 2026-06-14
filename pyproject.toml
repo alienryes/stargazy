@@ -1,0 +1,10 @@
+[project]
+name = "inky-stargazing-display"
+version = "1.0.0"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

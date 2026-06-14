@@ -1,0 +1,64 @@
+param(
+    [string]$User = "pi",
+    [string]$Host = "192.168.1.82",
+    [string]$KeyFile = "$env:USERPROFILE\.ssh\id_rsa"
+)
+
+$PI = "$User@$Host"
+$REMOTE_DIR = "/home/$User/inky-stargazing"
+
+function Invoke-Pi($cmd) {
+    ssh -i $KeyFile -o StrictHostKeyChecking=no $PI $cmd
+    if ($LASTEXITCODE -ne 0) { throw "SSH command failed: $cmd" }
+}
+
+function Copy-ToPi($local, $remote) {
+    scp -i $KeyFile -o StrictHostKeyChecking=no $local "${PI}:${remote}"
+    if ($LASTEXITCODE -ne 0) { throw "scp failed: $local -> $remote" }
+}
+
+Write-Host "==> Deploying inky-stargazing-display to $PI"
+
+# One-time setup: fonts + SPI enable reminder
+Write-Host "--> Checking font package..."
+Invoke-Pi "sudo apt-get install -y fonts-dejavu-core -qq"
+
+# Create remote directory
+Invoke-Pi "mkdir -p $REMOTE_DIR"
+
+# Copy files
+Write-Host "--> Copying files..."
+Copy-ToPi "display.py"    "$REMOTE_DIR/display.py"
+Copy-ToPi "requirements.txt" "$REMOTE_DIR/requirements.txt"
+
+# Copy config only if it doesn't already exist on the Pi
+$hasConfig = (ssh -i $KeyFile -o StrictHostKeyChecking=no $PI "test -f $REMOTE_DIR/config.toml && echo yes || echo no").Trim()
+if ($hasConfig -ne "yes") {
+    Copy-ToPi "config.example.toml" "$REMOTE_DIR/config.toml"
+    Write-Host ""
+    Write-Host "  NOTE: config.toml created from example."
+    Write-Host "  Edit $REMOTE_DIR/config.toml on the Pi and add your HA long-lived token."
+    Write-Host ""
+}
+
+# Install Python dependencies
+Write-Host "--> Installing Python dependencies..."
+Invoke-Pi "pip3 install -r $REMOTE_DIR/requirements.txt --break-system-packages -q"
+
+# Install and substitute user into systemd units
+Write-Host "--> Installing systemd units..."
+$svc = (Get-Content "systemd\inky-stargazing.service" -Raw) -replace "__USER__", $User
+$svc | ssh -i $KeyFile -o StrictHostKeyChecking=no $PI "cat > /tmp/inky-stargazing.service"
+Copy-ToPi "systemd\inky-stargazing.timer" "/tmp/inky-stargazing.timer"
+Invoke-Pi "sudo cp /tmp/inky-stargazing.service /tmp/inky-stargazing.timer /etc/systemd/system/"
+Invoke-Pi "sudo systemctl daemon-reload"
+Invoke-Pi "sudo systemctl enable inky-stargazing.timer"
+Invoke-Pi "sudo systemctl restart inky-stargazing.timer"
+
+# Run once immediately
+Write-Host "--> Running display now..."
+Invoke-Pi "python3 $REMOTE_DIR/display.py"
+
+Write-Host ""
+Write-Host "==> Done."
+Write-Host "    Timer fires every 2 h at :30 past. Check logs: journalctl -u inky-stargazing"
