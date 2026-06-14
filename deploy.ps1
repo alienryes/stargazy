@@ -1,5 +1,5 @@
 param(
-    [string]$User = "pi",
+    [string]$User = "operations",
     [string]$Host = "192.168.1.82",
     [string]$KeyFile = "$env:USERPROFILE\.ssh\id_rsa"
 )
