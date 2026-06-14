@@ -1,10 +1,10 @@
 param(
     [string]$User = "operations",
-    [string]$Host = "192.168.1.82",
+    [string]$PiHost = "192.168.1.82",
     [string]$KeyFile = "$env:USERPROFILE\.ssh\id_rsa"
 )
 
-$PI = "$User@$Host"
+$PI = "$User@$PiHost"
 $REMOTE_DIR = "/home/$User/inky-stargazing"
 
 function Invoke-Pi($cmd) {
@@ -18,10 +18,6 @@ function Copy-ToPi($local, $remote) {
 }
 
 Write-Host "==> Deploying inky-stargazing-display to $PI"
-
-# One-time setup: fonts + SPI enable reminder
-Write-Host "--> Checking font package..."
-Invoke-Pi "sudo apt-get install -y fonts-dejavu-core -qq"
 
 # Create remote directory
 Invoke-Pi "mkdir -p $REMOTE_DIR"
