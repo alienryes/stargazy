@@ -31,7 +31,7 @@ Copy-ToPi "requirements.txt" "$REMOTE_DIR/requirements.txt"
 if (Test-Path "config.toml") {
     Copy-ToPi "config.toml" "$REMOTE_DIR/config.toml"
 } else {
-    Write-Host "  WARNING: config.toml not found locally — skipping (Pi will use existing or example)"
+    Write-Host "  WARNING: config.toml not found locally - skipping (Pi will use existing or example)"
 }
 
 # Install Python dependencies
