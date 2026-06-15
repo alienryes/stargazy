@@ -13,7 +13,7 @@ import requests
 import tomllib
 from PIL import Image, ImageDraw, ImageFont
 
-FIRMWARE_VERSION = "1.1.0"
+FIRMWARE_VERSION = "1.2.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -263,28 +263,51 @@ def render(states):
     draw.text((12, 107), v_sub, fill=WHITE, font=f_sm)
     draw.line([(0, HLINE2), (W, HLINE2)], fill=WHITE, width=1)
 
-    # ── Condition bars — left panel (x 0–375, y 132–288) ──────────────
-    # Bar borders are ORANGE when no astronomical night (visual warning).
-    bar_border = ORANGE if no_dark else BLUE
-    LX, LBLW, BARW, BARH, GAP = 12, 105, 210, 14, 37
-    BARX = LX + LBLW
-    VALX = BARX + BARW + 8
+    # ── Left panel (x 0–375, y 132–288) ──────────────────────────────
+    LP_CX = DIV_X // 2  # 187 — horizontal centre of left panel
 
-    conditions = [
-        ("Cloudless",    100 - cloud, _bar_colour(100 - cloud, 60, 40)),
-        ("Seeing",       seeing,      _bar_colour(seeing,       60, 40)),
-        ("Transparency", transp,      _bar_colour(transp,       60, 40)),
-        ("Calm",         calm,        _bar_colour(calm,         70, 50)),
-    ]
-    for i, (label, value, colour) in enumerate(conditions):
-        y = 138 + i * GAP
-        draw.text((LX, y), label, fill=WHITE, font=f_sm)
-        # Coloured border > black trough > coloured fill — correct empty/full contrast.
-        draw.rectangle([BARX - 1, y + 2,  BARX + BARW + 1, y + BARH + 4], fill=bar_border)
-        draw.rectangle([BARX,     y + 3,  BARX + BARW,     y + BARH + 3], fill=BLACK)
-        filled = max(1, int(BARW * value / 100))
-        draw.rectangle([BARX, y + 3, BARX + filled, y + BARH + 3], fill=colour)
-        draw.text((VALX, y), f"{value}%", fill=WHITE, font=f_sm)
+    if no_dark:
+        # Condition bars are irrelevant without astronomical darkness.
+        # Show a countdown to next dark sky instead.
+        if next_dark:
+            days_until = max(0, (next_dark.date() - datetime.now().date()).days)
+            if days_until == 0:
+                big_text = "Tonight"
+                sub_text = "dark sky returns"
+            else:
+                big_text = str(days_until)
+                sub_text = "days until dark sky"
+            big_w = int(draw.textlength(big_text, font=f_large))
+            draw.text((LP_CX - big_w // 2, 148), big_text, fill=ORANGE, font=f_large)
+            sub_w = int(draw.textlength(sub_text, font=f_sm))
+            draw.text((LP_CX - sub_w // 2, 210), sub_text, fill=WHITE, font=f_sm)
+            dt_text = next_dark.strftime("%d %b %Y")
+            dt_w = int(draw.textlength(dt_text, font=f_xs))
+            draw.text((LP_CX - dt_w // 2, 230), dt_text, fill=ORANGE, font=f_xs)
+        else:
+            msg = "No dark sky"
+            msg_w = int(draw.textlength(msg, font=f_med))
+            draw.text((LP_CX - msg_w // 2, 195), msg, fill=ORANGE, font=f_med)
+    else:
+        LX, LBLW, BARW, BARH, GAP = 12, 105, 210, 14, 37
+        BARX = LX + LBLW
+        VALX = BARX + BARW + 8
+
+        conditions = [
+            ("Cloudless",    100 - cloud, _bar_colour(100 - cloud, 60, 40)),
+            ("Seeing",       seeing,      _bar_colour(seeing,       60, 40)),
+            ("Transparency", transp,      _bar_colour(transp,       60, 40)),
+            ("Calm",         calm,        _bar_colour(calm,         70, 50)),
+        ]
+        for i, (label, value, colour) in enumerate(conditions):
+            y = 138 + i * GAP
+            draw.text((LX, y), label, fill=WHITE, font=f_sm)
+            # Coloured border > black trough > coloured fill — correct empty/full contrast.
+            draw.rectangle([BARX - 1, y + 2,  BARX + BARW + 1, y + BARH + 4], fill=BLUE)
+            draw.rectangle([BARX,     y + 3,  BARX + BARW,     y + BARH + 3], fill=BLACK)
+            filled = max(1, int(BARW * value / 100))
+            draw.rectangle([BARX, y + 3, BARX + filled, y + BARH + 3], fill=colour)
+            draw.text((VALX, y), f"{value}%", fill=WHITE, font=f_sm)
 
     # Vertical divider
     draw.line([(DIV_X, HLINE2), (DIV_X, HLINE3)], fill=WHITE, width=1)
@@ -342,15 +365,6 @@ def render(states):
     # Row 3 — weather
     wx = f"{temp:.1f}°C  ·  Dew {dew:.1f}°  ·  {humidity}% RH  ·  {wind_dir} {wind_spd:.1f} m/s"
     draw.text((12, 342), wx, fill=WHITE, font=f_sm)
-
-    # Row 4 — dark-sky return date (conditional)
-    if no_dark and next_dark:
-        draw.text(
-            (12, 364),
-            f"Astronomical night returns: {next_dark.strftime('%d %b %Y')}",
-            fill=ORANGE,
-            font=f_sm,
-        )
 
     # Version stamp
     ver   = f"v{FIRMWARE_VERSION}"
