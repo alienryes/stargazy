@@ -4,6 +4,7 @@
 import argparse
 import logging
 import math
+import random as _rng
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +13,7 @@ import requests
 import tomllib
 from PIL import Image, ImageDraw, ImageFont
 
-FIRMWARE_VERSION = "1.0.0"
+FIRMWARE_VERSION = "1.1.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -25,16 +26,23 @@ BLACK, WHITE, GREEN, BLUE, RED, YELLOW, ORANGE = 0, 1, 2, 3, 4, 5, 6
 
 # Preview palette for --save mode (RGB values for each index)
 PREVIEW_PALETTE = [
-    0, 0, 0,          # 0 BLACK
-    255, 255, 255,    # 1 WHITE
-    0, 200, 0,        # 2 GREEN
-    30, 80, 220,      # 3 BLUE
-    220, 30, 30,      # 4 RED
-    240, 220, 0,      # 5 YELLOW
-    230, 120, 0,      # 6 ORANGE
+    0,   0,   0,    # 0 BLACK
+    255, 255, 255,  # 1 WHITE
+    0,   200, 0,    # 2 GREEN
+    30,  80,  220,  # 3 BLUE
+    220, 30,  30,   # 4 RED
+    240, 220, 0,    # 5 YELLOW
+    230, 120, 0,    # 6 ORANGE
 ] + [0, 0, 0] * 249
 
 W, H = 640, 400
+
+# Layout constants
+DIV_X    = 375                        # vertical divider: conditions | moon
+HLINE1   = 40                         # header bottom
+HLINE2   = 128                        # verdict bottom
+HLINE3   = 290                        # footer top
+RIGHT_CX = (DIV_X + W) // 2          # horizontal centre of right (moon) panel = 507
 
 ENTITIES = [
     "sensor.astroweather_backyard_astronomical_night_duration",
@@ -63,15 +71,23 @@ ENTITIES = [
 ]
 
 PHASE_NAMES = {
-    "moon-new": "New Moon",
+    "moon-new":             "New Moon",
     "moon-waxing-crescent": "Waxing Crescent",
-    "moon-first-quarter": "First Quarter",
-    "moon-waxing-gibbous": "Waxing Gibbous",
-    "moon-full": "Full Moon",
-    "moon-waning-gibbous": "Waning Gibbous",
-    "moon-last-quarter": "Last Quarter",
+    "moon-first-quarter":   "First Quarter",
+    "moon-waxing-gibbous":  "Waxing Gibbous",
+    "moon-full":            "Full Moon",
+    "moon-waning-gibbous":  "Waning Gibbous",
+    "moon-last-quarter":    "Last Quarter",
     "moon-waning-crescent": "Waning Crescent",
 }
+
+# Seeded star positions in the header gap between "STARGAZING" and the timestamp.
+# x 235–490 avoids both text blocks; y 5–32 stays within the 40px header.
+_rng.seed(42)
+_STARS = [
+    (int(_rng.uniform(235, 490)), int(_rng.uniform(5, 32)), 2 if _rng.random() > 0.6 else 1)
+    for _ in range(14)
+]
 
 
 def load_config():
@@ -147,22 +163,20 @@ def _bar_colour(value, good, warn):
 
 def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
     """Draw moon phase on a palette-mode image using parametric geometry."""
-    # Dark face
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=BLUE, outline=YELLOW, width=2)
 
     if illumination < 1:
-        return  # New moon — just the dark circle
+        return  # new moon — dark circle only
 
     if illumination > 99:
         draw.ellipse([cx - r + 2, cy - r + 2, cx + r - 2, cy + r - 2], fill=YELLOW)
         return
 
-    # Build the lit polygon: bright-limb semicircle + terminator ellipse
     phase_angle = math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * illumination / 100.0)))
-    term_scale = math.cos(phase_angle)  # terminator semi-minor / r
+    term_scale  = math.cos(phase_angle)
 
     steps = 80
-    pts = []
+    pts   = []
     for i in range(steps + 1):
         t = math.pi / 2.0 - math.pi * i / steps
         pts.append((cx + r * math.cos(t), cy - r * math.sin(t)))
@@ -178,144 +192,170 @@ def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
 
 def render(states):
     """Render the 640×400 display image. Returns a PIL Image in P mode."""
-    img = Image.new("P", (W, H))
+    img  = Image.new("P", (W, H))
     img.putpalette(PREVIEW_PALETTE)
     draw = ImageDraw.Draw(img)
 
     f_large = _font("DejaVuSans-Bold.ttf", 52)
-    f_med = _font("DejaVuSans-Bold.ttf", 22)
-    f_sm = _font("DejaVuSans.ttf", 16)
-    f_xs = _font("DejaVuSans.ttf", 13)
+    f_med   = _font("DejaVuSans-Bold.ttf", 22)
+    f_sm    = _font("DejaVuSans.ttf", 16)
+    f_xs    = _font("DejaVuSans.ttf", 13)
 
-    # ── Parse ────────────────────────────────────────────────────────
-    s = states  # shorthand
+    # ── Parse ─────────────────────────────────────────────────────────
+    s = states
 
     astro_dur = _f(s.get("sensor.astroweather_backyard_astronomical_night_duration"))
-    no_dark = astro_dur < 3600  # < 1 h of astronomical darkness (midsummer at 51°N)
+    no_dark   = astro_dur < 3600
 
-    dsky_today = _i(s.get("sensor.astroweather_backyard_deepsky_forecast_today"))
+    dsky_today      = _i(s.get("sensor.astroweather_backyard_deepsky_forecast_today"))
     dsky_today_desc = s.get("sensor.astroweather_backyard_deepsky_forecast_today_description", "")
-    dsky_tmrw = _i(s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow"))
-    dsky_tmrw_desc = s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow_description", "")
+    dsky_tmrw       = _i(s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow"))
+    dsky_tmrw_desc  = s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow_description", "")
 
-    cloud = _i(s.get("sensor.astroweather_backyard_cloud_cover"))
+    cloud  = _i(s.get("sensor.astroweather_backyard_cloud_cover"))
     seeing = _i(s.get("sensor.astroweather_backyard_seeing_percentage"))
     transp = _i(s.get("sensor.astroweather_backyard_transparency"))
-    calm = _i(s.get("sensor.astroweather_backyard_calm_percentage"))
+    calm   = _i(s.get("sensor.astroweather_backyard_calm_percentage"))
 
     moon_phase = _f(s.get("sensor.astroweather_backyard_moon_phase"))
-    moon_icon = s.get("sensor.astroweather_backyard_moon_icon", "moon-new")
+    moon_icon  = s.get("sensor.astroweather_backyard_moon_icon", "moon-new")
     moon_const = s.get("sensor.astroweather_backyard_moon_constellation", "")
 
-    next_new = _dt(s.get("sensor.astroweather_backyard_moon_next_new_moon"))
+    next_new  = _dt(s.get("sensor.astroweather_backyard_moon_next_new_moon"))
     next_full = _dt(s.get("sensor.astroweather_backyard_moon_next_full_moon"))
     next_dark = _dt(s.get("sensor.astroweather_backyard_moon_next_dark_night"))
-    sunset = _dt(s.get("sensor.astroweather_backyard_sun_next_setting"))
-    sunrise = _dt(s.get("sensor.astroweather_backyard_sun_next_rising"))
+    sunset    = _dt(s.get("sensor.astroweather_backyard_sun_next_setting"))
+    sunrise   = _dt(s.get("sensor.astroweather_backyard_sun_next_rising"))
 
-    temp = _f(s.get("sensor.astroweather_backyard_2m_temperature"))
-    dew = _f(s.get("sensor.astroweather_backyard_2m_dewpoint"))
+    temp     = _f(s.get("sensor.astroweather_backyard_2m_temperature"))
+    dew      = _f(s.get("sensor.astroweather_backyard_2m_dewpoint"))
     humidity = _i(s.get("sensor.astroweather_backyard_2m_relative_humidity"))
     wind_spd = _f(s.get("sensor.astroweather_backyard_10m_wind_speed"))
     wind_dir = s.get("sensor.astroweather_backyard_10m_wind_direction", "")
-    lifted = s.get("sensor.astroweather_backyard_lifted_index_plain", "")
+    lifted   = s.get("sensor.astroweather_backyard_lifted_index_plain", "")
 
     waxing = any(k in moon_icon for k in ("waxing", "new", "first"))
 
-    # ── Background ───────────────────────────────────────────────────
+    # ── Background ────────────────────────────────────────────────────
     draw.rectangle([0, 0, W, H], fill=BLACK)
 
-    # ── Header (y 0–38) ──────────────────────────────────────────────
-    draw.text((12, 8), "STARGAZING", fill=WHITE, font=f_med)
-    now_str = datetime.now().strftime("%a %d %b  %H:%M")
-    ts_w = int(draw.textlength(now_str, font=f_sm))
-    draw.text((W - ts_w - 10, 11), now_str, fill=WHITE, font=f_sm)
-    draw.line([(0, 38), (W, 38)], fill=WHITE, width=1)
+    # ── Stars (precomputed, header zone) ──────────────────────────────
+    for sx, sy, sr in _STARS:
+        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=WHITE)
 
-    # ── Verdict (y 45–118) ───────────────────────────────────────────
+    # ── Header (y 0–40) ───────────────────────────────────────────────
+    draw.text((12, 10), "STARGAZING", fill=WHITE, font=f_med)
+    now_str = datetime.now().strftime("%a %d %b  %H:%M")
+    ts_w    = int(draw.textlength(now_str, font=f_sm))
+    draw.text((W - ts_w - 10, 13), now_str, fill=WHITE, font=f_sm)
+    draw.line([(0, HLINE1), (W, HLINE1)], fill=WHITE, width=1)
+
+    # ── Verdict (y 44–126) ────────────────────────────────────────────
     if no_dark:
-        v_text = "NO DARK SKY"
+        v_text   = "NO DARK SKY"
         v_colour = ORANGE
-        v_sub = f"Next dark night: {next_dark.strftime('%d %b') if next_dark else 'unknown'}"
+        v_sub    = f"Next dark night: {next_dark.strftime('%d %b') if next_dark else 'unknown'}"
     else:
         v_text, v_colour = _verdict(dsky_today)
         v_sub = f"Deep sky: {dsky_today}%  –  {dsky_today_desc}"
 
-    draw.text((12, 45), v_text, fill=v_colour, font=f_large)
-    draw.text((12, 105), v_sub, fill=WHITE, font=f_sm)
-    draw.line([(0, 126), (W, 126)], fill=WHITE, width=1)
+    draw.text((12, 46), v_text, fill=v_colour, font=f_large)
+    draw.text((12, 107), v_sub, fill=WHITE, font=f_sm)
+    draw.line([(0, HLINE2), (W, HLINE2)], fill=WHITE, width=1)
 
-    # ── Condition bars — left side (x 0–350, y 134–282) ─────────────
-    LX, LBLW, BARW, BARH, GAP = 12, 120, 178, 13, 35
+    # ── Condition bars — left panel (x 0–375, y 132–288) ──────────────
+    # Bar borders are ORANGE when no astronomical night (visual warning).
+    bar_border = ORANGE if no_dark else BLUE
+    LX, LBLW, BARW, BARH, GAP = 12, 105, 210, 14, 37
     BARX = LX + LBLW
-    VALX = BARX + BARW + 6
+    VALX = BARX + BARW + 8
 
     conditions = [
-        ("Cloudless", 100 - cloud, _bar_colour(100 - cloud, 60, 40)),
-        ("Seeing",    seeing,      _bar_colour(seeing,       60, 40)),
-        ("Transparency", transp,   _bar_colour(transp,       60, 40)),
-        ("Calm",      calm,        _bar_colour(calm,         70, 50)),
+        ("Cloudless",    100 - cloud, _bar_colour(100 - cloud, 60, 40)),
+        ("Seeing",       seeing,      _bar_colour(seeing,       60, 40)),
+        ("Transparency", transp,      _bar_colour(transp,       60, 40)),
+        ("Calm",         calm,        _bar_colour(calm,         70, 50)),
     ]
     for i, (label, value, colour) in enumerate(conditions):
-        y = 136 + i * GAP
+        y = 138 + i * GAP
         draw.text((LX, y), label, fill=WHITE, font=f_sm)
-        draw.rectangle([BARX, y + 3, BARX + BARW, y + 3 + BARH], fill=WHITE)
+        # Coloured border > black trough > coloured fill — correct empty/full contrast.
+        draw.rectangle([BARX - 1, y + 2,  BARX + BARW + 1, y + BARH + 4], fill=bar_border)
+        draw.rectangle([BARX,     y + 3,  BARX + BARW,     y + BARH + 3], fill=BLACK)
         filled = max(1, int(BARW * value / 100))
-        draw.rectangle([BARX, y + 3, BARX + filled, y + 3 + BARH], fill=colour)
+        draw.rectangle([BARX, y + 3, BARX + filled, y + BARH + 3], fill=colour)
         draw.text((VALX, y), f"{value}%", fill=WHITE, font=f_sm)
 
-    draw.line([(355, 126), (355, 288)], fill=WHITE, width=1)
+    # Vertical divider
+    draw.line([(DIV_X, HLINE2), (DIV_X, HLINE3)], fill=WHITE, width=1)
 
-    # ── Moon — right side (x 360–600, y 134–282) ─────────────────────
-    MX = 368
-    MCX, MCY, MR = 490, 208, 52
-
-    phase_name = PHASE_NAMES.get(moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title())
-    draw.text((MX, 134), "MOON", fill=WHITE, font=f_med)
-    draw.text((MX, 158), phase_name, fill=YELLOW, font=f_sm)
-    if moon_const:
-        draw.text((MX, 176), f"In {moon_const}", fill=WHITE, font=f_xs)
+    # ── Moon — right panel (x 380–640, y 132–288) ─────────────────────
+    # All text below the circle avoids the original overlap with phase labels.
+    MCX = RIGHT_CX  # 507
+    MR  = 58
+    MCY = 194       # circle: top=136, bottom=252
 
     _draw_moon(draw, MCX, MCY, MR, moon_phase, waxing)
 
-    y_dates = MCY + MR + 6
-    if next_new:
-        draw.text((MX, y_dates), f"New: {next_new.strftime('%d %b')}", fill=WHITE, font=f_xs)
-    if next_full:
-        draw.text((MX + 88, y_dates), f"Full: {next_full.strftime('%d %b')}", fill=WHITE, font=f_xs)
+    # Phase name centred below circle
+    phase_name = PHASE_NAMES.get(
+        moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title()
+    )
+    pn_w = int(draw.textlength(phase_name, font=f_sm))
+    draw.text((MCX - pn_w // 2, MCY + MR + 4), phase_name, fill=YELLOW, font=f_sm)
 
-    # ── Bottom (y 288–400) ────────────────────────────────────────────
-    draw.line([(0, 288), (W, 288)], fill=WHITE, width=1)
+    # Constellation centred below phase name
+    if moon_const:
+        mc_text = f"in {moon_const}"
+        mc_w    = int(draw.textlength(mc_text, font=f_xs))
+        draw.text((MCX - mc_w // 2, MCY + MR + 22), mc_text, fill=WHITE, font=f_xs)
 
-    # Tomorrow forecast
+    # ── Footer (y 292–400) ────────────────────────────────────────────
+    draw.line([(0, HLINE3), (W, HLINE3)], fill=WHITE, width=1)
+
+    # Row 1 — tomorrow forecast (left) + lifted index (right)
     t_colour = _verdict(dsky_tmrw)[1]
-    draw.text((12, 296), "Tomorrow:", fill=WHITE, font=f_sm)
-    draw.text((97, 296), f"{dsky_tmrw_desc}  ({dsky_tmrw}%)", fill=t_colour, font=f_sm)
-
-    # Atmospheric stability (right side)
+    draw.text((12, 297), "Tomorrow:", fill=WHITE, font=f_sm)
+    draw.text((100, 297), f"{dsky_tmrw_desc}  ({dsky_tmrw}%)", fill=t_colour, font=f_sm)
     if lifted and lifted not in ("unknown", ""):
-        draw.text((360, 296), lifted, fill=WHITE, font=f_xs)
+        li_w = int(draw.textlength(lifted, font=f_xs))
+        draw.text((W - li_w - 8, 301), lifted, fill=WHITE, font=f_xs)
 
-    # Sun times
+    # Row 2 — sun times (left) + next new/full moon dates (right)
     sun_parts = []
     if sunset:
         sun_parts.append(f"Sunset {sunset.strftime('%H:%M')}")
     if sunrise:
         sun_parts.append(f"Sunrise {sunrise.strftime('%H:%M')}")
-    draw.text((12, 318), "  ·  ".join(sun_parts), fill=WHITE, font=f_xs)
+    draw.text((12, 319), "  ·  ".join(sun_parts), fill=WHITE, font=f_sm)
 
-    # Weather
+    moon_date_parts = []
+    if next_new:
+        moon_date_parts.append(f"New {next_new.strftime('%d %b')}")
+    if next_full:
+        moon_date_parts.append(f"Full {next_full.strftime('%d %b')}")
+    if moon_date_parts:
+        md_text = "  ·  ".join(moon_date_parts)
+        md_w    = int(draw.textlength(md_text, font=f_xs))
+        draw.text((W - md_w - 8, 323), md_text, fill=WHITE, font=f_xs)
+
+    # Row 3 — weather
     wx = f"{temp:.1f}°C  ·  Dew {dew:.1f}°  ·  {humidity}% RH  ·  {wind_dir} {wind_spd:.1f} m/s"
-    draw.text((12, 335), wx, fill=WHITE, font=f_xs)
+    draw.text((12, 342), wx, fill=WHITE, font=f_sm)
 
-    # No-dark-sky note
+    # Row 4 — dark-sky return date (conditional)
     if no_dark and next_dark:
-        draw.text((12, 354), f"Astronomical night returns: {next_dark.strftime('%d %b %Y')}", fill=ORANGE, font=f_xs)
+        draw.text(
+            (12, 364),
+            f"Astronomical night returns: {next_dark.strftime('%d %b %Y')}",
+            fill=ORANGE,
+            font=f_sm,
+        )
 
     # Version stamp
-    ver = f"v{FIRMWARE_VERSION}"
+    ver   = f"v{FIRMWARE_VERSION}"
     ver_w = int(draw.textlength(ver, font=f_xs))
-    draw.text((W - ver_w - 6, H - 16), ver, fill=WHITE, font=f_xs)
+    draw.text((W - ver_w - 6, H - 15), ver, fill=WHITE, font=f_xs)
 
     return img
 
@@ -327,7 +367,7 @@ def main():
 
     config = load_config()
     ha_url = config["ha"]["url"].rstrip("/")
-    token = config["ha"]["token"]
+    token  = config["ha"]["token"]
 
     log.info("Fetching HA states...")
     states = fetch_states(ha_url, token)
@@ -344,7 +384,7 @@ def main():
         from inky.inky_uc8159 import Inky
         inky = Inky(resolution=(640, 400))
     except ImportError:
-        log.error("inky library not available — use --save <path.png> for development")
+        log.error("inky library not available -- use --save <path.png> for development")
         sys.exit(1)
 
     img = render(states).convert("RGB")
