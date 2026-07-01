@@ -108,6 +108,47 @@ python3 display.py --save preview.png
 
 ---
 
+## 🧰 Case — 3D-printed desktop stand
+
+A two-part parametric stand (CadQuery) lives in [`case/`](./case). The **frame** holds the Inky PCB behind its bezel; the **riser** is a tilting back panel with an integrated foot that leans the display back by 15°. No front-face fasteners are used — retention posts on the riser press the PCB forward against the window.
+
+![Riser preview](./case/case_riser_v2_preview.png)
+
+**Parts**
+
+| File | Part | Print orientation |
+|---|---|---|
+| `case/case_frame_v2.py` / `.stl` | Front frame + PCB pocket | Bezel (show face) **down** on the bed, pocket up — smooth face, no supports |
+| `case/case_riser_v2.py` / `.stl` / `.3mf` | Tilting back panel + foot | Flat **on its back**, posts/screw holes up — no supports despite the 15° lean |
+
+**Key dimensions**
+
+- Outer frame: 117.6 × 89.5 × 16 mm, 2 mm bezel, 10 mm walls
+- Display window: 86 × 54 mm (active area), centred X, +2.15 mm Y
+- PCB pocket: 97.6 × 69.5 mm (fits the 96.8 × 68.7 × **2.5 mm** Inky PCB with 0.4 mm/side clearance)
+- Cable slot through the bottom edge of both frame and riser for the USB/power lead
+
+**Hardware:** 4 × M2.5 × 8 mm self-tapping screws (riser Ø2.9 mm clearance → frame Ø2.0 mm pilots). PLA/PETG, no supports.
+
+**Assembly**
+
+1. Slide the Inky PCB into the frame pocket from the back; the active area shows through the window.
+2. Route the USB/power cable out through the bottom cable slot.
+3. Fit the riser over the back — its four posts press the PCB against the bezel.
+4. Drive the four M2.5 screws through the riser corners into the frame pilots.
+
+**Regenerate the STLs** (only if you change parameters — edit the `PARAMETERS` block at the top of each script):
+
+```bash
+cd case
+python case_frame_v2.py     # writes case_frame_v2.stl
+python case_riser_v2.py     # writes case_riser_v2.stl
+```
+
+Requires `cadquery` (a local `case/.cadvenv` is used on the dev machine; see [cad-skill](https://github.com/flowful-ai/cad-skill)).
+
+---
+
 ## 🔧 Troubleshooting
 
 | Symptom | Fix |
@@ -138,4 +179,11 @@ setup.sh                One-time Pi setup (run with sudo)
 systemd/
   inky-stargazing.service
   inky-stargazing.timer
+case/                   3D-printed desktop stand (CadQuery)
+  case_frame_v2.py      Front frame + PCB pocket (source)
+  case_frame_v2.stl     Frame mesh
+  case_riser_v2.py      Tilting back panel + foot (source)
+  case_riser_v2.stl     Riser mesh
+  case_riser_v2.3mf     Riser, sliced project
+  case_riser_v2_preview.png
 ```
