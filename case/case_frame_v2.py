@@ -113,11 +113,14 @@ frame = frame.cut(screws)
 # ============================================================
 # LED BEZEL RING (v3.0) - WS2812B 60/m strip in the front bezel band
 # ============================================================
-# The strip sits in a channel behind the 2mm front wall, LEDs facing forward
-# through small holes (front-firing dots). The channel is open to the back so
-# the strip drops in during assembly; snap tabs hold it forward against the
-# wall. Four straight channels (one per side); the corners stay solid because
-# the corner screws (+/-screw_x, +/-screw_y) block the channel path.
+# Light exits a continuous slot per side, filled by a translucent diffuser
+# window printed INTO the frame with the MMU (exported as
+# case_frame_v2_windows.stl - no separate insert). Within the channel band the
+# front is thickened to slot_front_t (diffuser window + air gap); the strip
+# seats against its back, so it sits led_gap behind the diffuser and the light
+# spreads before reaching it. The channel is open to the back so the strip drops
+# in; snap tabs hold it. Four straight channels (one per side); the corners stay
+# solid (the screws +/-screw_x/screw_y block them).
 led_pitch = 16.7          # mm - WS2812B 60 LEDs/m pitch
 strip_w = 10.0            # mm - strip width  (measure the actual reel; 10mm PCB)
 strip_th = 2.0            # mm - strip thickness (PCB + 5050 LED)
@@ -126,13 +129,15 @@ led_count_tb = 6          # LEDs along the top and along the bottom
 led_count_lr = 4          # LEDs along the left and along the right
 
 # Light exit: a continuous slot per side (not per-LED holes) so every LED
-# contributes, with a white diffuser insert behind it for an even glow.
-diff_t = 1.5              # mm - diffuser insert thickness (thin white translucent)
-slot_w = 7.0              # mm - visible slot width; < led_ch_w so the front-wall
-#                           shoulders retain the diffuser (see case_diffusers_v1.py)
-# Stack behind the front wall (front -> back): diffuser, then LED strip; tabs
-# hold the strip, which presses the diffuser forward against the wall shoulders.
-led_ch_clear_z = diff_t + strip_th + 0.3   # mm - front-wall back -> tab underside
+# contributes; the slot is filled by an MMU-printed translucent diffuser window.
+diff_t = 0.8             # mm - diffuser window thickness (0.8-1.2mm; at the face)
+led_gap = 3.0            # mm - air gap between the LEDs and the diffuser window so
+#                           the light spreads before it hits it (no hotspots)
+slot_front_t = diff_t + led_gap   # mm - thickened front within the channel band
+#                           (3.8mm = window + gap); the strip seats against its
+#                           back, a positive stop led_gap behind the diffuser.
+slot_w = 7.0             # mm - light slot width (< led_ch_w; shoulders stop the strip)
+strip_back_z = slot_front_t + strip_th   # mm - strip back face (front seats at slot_front_t)
 
 # Snap-tab retention
 tab_proj = 1.5            # mm - how far each tab overhangs into the channel
@@ -161,11 +166,12 @@ lr_ch_half = abs(ys_lr[-1]) + led_pitch / 2 + ch_end_margin
 assert tb_ch_half < screw_x - screw_pilot_d / 2 - 1.0, "top/bottom channel hits corner screw"
 assert lr_ch_half < screw_y - screw_pilot_d / 2 - 1.0, "left/right channel hits corner screw"
 
-# --- Channels: open-to-back moats, one per side ---
+# --- Channels: open-to-back moats, one per side. They start at slot_front_t
+#     (behind the thickened front), so the strip seats against that shoulder. ---
 def _channel(cx, cy, lx, ly):
-    return (cq.Workplane("XY").workplane(offset=bezel_t)
+    return (cq.Workplane("XY").workplane(offset=slot_front_t)
             .center(cx, cy)
-            .box(lx, ly, frame_t - bezel_t + eps, centered=(True, True, False)))
+            .box(lx, ly, frame_t - slot_front_t + eps, centered=(True, True, False)))
 
 for chan in (
     _channel(0,  band_cy, 2 * tb_ch_half, led_ch_w),   # top
@@ -175,31 +181,36 @@ for chan in (
 ):
     frame = frame.cut(chan)
 
-# --- Continuous light slots through the 2mm front wall, one per side ---
-# Each slot spans the LEDs on that side (outermost LED + half a pitch). It is
-# slot_w wide - narrower than the channel - so the remaining front-wall
-# shoulders on either side retain the diffuser insert that sits behind it.
+# --- Continuous light slots (through the full thickened front) + diffuser
+#     windows. Each slot spans the LEDs on that side (outermost LED + half a
+#     pitch), slot_w wide - narrower than the channel - so the shoulders on
+#     either side form the strip's front-stop. The translucent window fills just
+#     the front diff_t of each slot and is exported separately for the MMU. ---
 slot_half_tb = abs(xs_tb[-1]) + led_pitch / 2
 slot_half_lr = abs(ys_lr[-1]) + led_pitch / 2
+slot_specs = [
+    (0, band_cy, 2 * slot_half_tb, slot_w),    # top
+    (0, -band_cy, 2 * slot_half_tb, slot_w),   # bottom
+    (-band_cx, 0, slot_w, 2 * slot_half_lr),   # left
+    (band_cx, 0, slot_w, 2 * slot_half_lr),    # right
+]
 
+for cx, cy, lx, ly in slot_specs:
+    frame = frame.cut(
+        cq.Workplane("XY").workplane(offset=-eps)
+        .center(cx, cy)
+        .box(lx, ly, slot_front_t + 2 * eps, centered=(True, True, False)))
 
-def _slot(cx, cy, lx, ly):
-    return (cq.Workplane("XY").workplane(offset=-eps)
-            .center(cx, cy)
-            .box(lx, ly, bezel_t + 2 * eps, centered=(True, True, False)))
+# Diffuser windows (translucent, MMU): fill the front diff_t of each slot void.
+windows = None
+for cx, cy, lx, ly in slot_specs:
+    win = (cq.Workplane("XY").center(cx, cy)
+           .box(lx, ly, diff_t, centered=(True, True, False)))
+    windows = win if windows is None else windows.union(win)
 
-
-for slot in (
-    _slot(0, band_cy, 2 * slot_half_tb, slot_w),    # top
-    _slot(0, -band_cy, 2 * slot_half_tb, slot_w),   # bottom
-    _slot(-band_cx, 0, slot_w, 2 * slot_half_lr),   # left
-    _slot(band_cx, 0, slot_w, 2 * slot_half_lr),    # right
-):
-    frame = frame.cut(slot)
-
-# --- Snap tabs: small overhangs on both channel walls that hold the strip
-#     forward against the front wall. Placed near both ends and the middle. ---
-tab_z = bezel_t + led_ch_clear_z
+# --- Snap tabs: small overhangs on both channel walls that hold the strip back
+#     against its front-stop shoulder. Placed near both ends and the middle. ---
+tab_z = strip_back_z + 0.3
 w = led_ch_w / 2
 tab_pos_tb = [-tb_ch_half + tab_len / 2 + 1, 0.0, tb_ch_half - tab_len / 2 - 1]
 tab_pos_lr = [-lr_ch_half + tab_len / 2 + 1, 0.0, lr_ch_half - tab_len / 2 - 1]
@@ -222,14 +233,13 @@ for sx in (band_cx, -band_cx):                 # left & right: tabs run along Y
 # --- Corner wire tunnels: straight passages through each solid corner AT STRIP
 #     LEVEL, connecting the end of one side's channel to the next, so the jumper
 #     wire between segments stays in the strips' plane (no bending back to the
-#     rear and forward again). They run at the front of the frame (Z bezel_t ..
-#     bezel_t+led_ch_clear_z), where the strips sit, and so pass in front of the
-#     corner screw pilots (which are Z frame_t-screw_depth .. frame_t at the
-#     back) - no XY keep-out needed. ---
+#     rear and forward again). They run at strip level (Z slot_front_t ..
+#     strip_back_z+0.3) and so pass in front of the corner screw pilots (which
+#     are Z frame_t-screw_depth .. frame_t at the back) - no XY keep-out. ---
 tunnel_w = 4.0           # mm - tunnel width (fits a 3-conductor jumper)
 tunnel_extra = 6.0       # mm - length overrun so each end bites into its channel
-tunnel_z0 = bezel_t
-tunnel_z1 = bezel_t + led_ch_clear_z
+tunnel_z0 = slot_front_t
+tunnel_z1 = strip_back_z + 0.3
 
 for sx in (1, -1):
     for sy in (1, -1):
@@ -249,8 +259,15 @@ for sx in (1, -1):
 # ============================================================
 cq.exporters.export(frame, "case_frame_v2.stl",
                     tolerance=0.01, angularTolerance=0.1)
+# Translucent diffuser windows - co-print with the frame in the MMU's second
+# extruder (load in PrusaSlicer as a part of the frame object; they are already
+# aligned in the frame's coordinates).
+cq.exporters.export(windows, "case_frame_v2_windows.stl",
+                    tolerance=0.01, angularTolerance=0.1)
 n_leds = 2 * led_count_tb + 2 * led_count_lr
 print(f"Exported case_frame_v2.stl (v{VERSION}): outer {frame_w}x{frame_h}x{frame_t}mm, "
       f"window {window_w}x{window_h}mm @Y+{window_cy}, "
       f"pocket {pocket_w}x{pocket_h}mm, diffused LED ring {n_leds} LEDs "
       f"({led_count_tb} top/bottom, {led_count_lr} sides), slot {slot_w}mm")
+print(f"Exported case_frame_v2_windows.stl: MMU diffuser windows, "
+      f"{diff_t}mm translucent in the front of each slot")

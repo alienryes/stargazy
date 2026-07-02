@@ -2,11 +2,13 @@
 
 An optional ring of addressable LEDs around the front bezel of the frame — 20
 LEDs (6 top, 6 bottom, 4 each side) firing forward through a **continuous slot
-per side** with a **white diffuser insert**, so every LED contributes to an
-even glowing border (not discrete dots). Driven by the Pi Zero, powered from the
-5V supply. The frame (`case_frame_v2.py` v3.0) is sized around a **10 mm-wide
-WS2812B strip** — the outer footprint grew +4 mm/side (117.6×89.5 → 125.6×97.5)
-so the bezel band can host the strip channel.
+per side**, each filled by a **translucent diffuser window printed into the
+frame with the MMU**, so every LED contributes to an even glowing border (not
+discrete dots). The LEDs sit **3 mm behind the window** so the light spreads and
+there are no hotspots. Driven by the Pi Zero, powered from the 5V supply. The
+frame (`case_frame_v2.py` v3.0) is sized around a **10 mm-wide WS2812B strip** —
+the outer footprint grew +4 mm/side (117.6×89.5 → 125.6×97.5) so the bezel band
+can host the strip channel.
 
 ## Strip
 
@@ -35,15 +37,27 @@ level**, so each link threads straight through the corner in the strips' plane �
 no bending back to the rear. Keep the arrow direction consistent all the way
 round.
 
-## Mounting
+## Printing the frame (2-material, MMU)
 
-1. Print the diffusers (`case_diffusers_v1.py` → `.stl`) in **white or natural
-   translucent** filament, ~1.5 mm thin so they glow. Four strips.
-2. From the **back** of the frame, drop a diffuser strip into each side channel
-   first — it seats against the front-wall shoulders, covering the slot.
-3. Drop the matching LED strip segment in behind it, LEDs facing forward against
-   the diffuser. The snap tabs hold the strip, pressing the diffuser against the
-   wall.
+The diffuser windows are printed **into** the frame, so it is a two-material
+MMU print:
+
+- `case_frame_v2.stl` — the frame, in the main (opaque) filament.
+- `case_frame_v2_windows.stl` — the four diffuser windows (0.8 mm), in **white
+  or natural translucent** filament.
+
+In PrusaSlicer: load `case_frame_v2.stl`, then right-click → **Add part** →
+`case_frame_v2_windows.stl` (it lands already aligned in the slots). Assign the
+windows part to the translucent extruder. Print bezel-face down as usual; a
+wipe/purge tower is added for the colour change.
+
+## Fitting the strip
+
+1. Cut and chain the four segments (see Cut plan above).
+2. From the **back** of the frame, drop each LED strip segment into its side
+   channel. It seats against the front-stop shoulder, **3 mm behind the diffuser
+   window**; the snap tabs hold it there.
+3. Route the corner links through the corner tunnels.
 4. The strip tail (3 wires) exits via the **bottom cable slot**, alongside the
    Pi's power lead.
 
