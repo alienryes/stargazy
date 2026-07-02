@@ -182,11 +182,12 @@ for chan in (
 ):
     frame = frame.cut(chan)
 
-# --- Continuous light slots (through the full thickened front) + diffuser
-#     windows. Each slot spans the LEDs on that side (outermost LED + half a
-#     pitch), slot_w wide - narrower than the channel - so the shoulders on
-#     either side form the strip's front-stop. The translucent window fills just
-#     the front diff_t of each slot and is exported separately for the MMU. ---
+# --- Continuous light slots (straight, over the LEDs) + a continuous diffuser
+#     window ring. Each straight slot spans the LEDs on that side (outermost LED
+#     + half a pitch), slot_w wide, and carries light through the thickened front
+#     to the air gap. The diffuser window is a single filleted ring round the
+#     whole frame (exported for the MMU); its corners are a decorative inlay -
+#     solid behind, no light - that softens the frame's corners. ---
 slot_half_tb = abs(xs_tb[-1]) + led_pitch / 2
 slot_half_lr = abs(ys_lr[-1]) + led_pitch / 2
 slot_specs = [
@@ -195,19 +196,33 @@ slot_specs = [
     (-band_cx, 0, slot_w, 2 * slot_half_lr),   # left
     (band_cx, 0, slot_w, 2 * slot_half_lr),    # right
 ]
-
 for cx, cy, lx, ly in slot_specs:
     frame = frame.cut(
         cq.Workplane("XY").workplane(offset=-eps)
         .center(cx, cy)
         .box(lx, ly, slot_front_t + 2 * eps, centered=(True, True, False)))
 
-# Diffuser windows (translucent, MMU): fill the front diff_t of each slot void.
-windows = None
-for cx, cy, lx, ly in slot_specs:
-    win = (cq.Workplane("XY").center(cx, cy)
-           .box(lx, ly, diff_t, centered=(True, True, False)))
-    windows = win if windows is None else windows.union(win)
+# Diffuser window ring (translucent, MMU) - a filleted band round the whole
+# frame, corners rounded to echo the frame's outer corners.
+window_r = corner_r      # ring corner fillet (match the frame's outer corner)
+win_out_hx, win_out_hy = band_cx + slot_w / 2, band_cy + slot_w / 2
+win_in_hx, win_in_hy = band_cx - slot_w / 2, band_cy - slot_w / 2
+
+
+def _window_ring(z0, thickness):
+    outer = (cq.Workplane("XY").workplane(offset=z0)
+             .box(2 * win_out_hx, 2 * win_out_hy, thickness, centered=(True, True, False))
+             .edges("|Z").fillet(window_r))
+    inner = (cq.Workplane("XY").workplane(offset=z0 - eps)
+             .box(2 * win_in_hx, 2 * win_in_hy, thickness + 2 * eps, centered=(True, True, False))
+             .edges("|Z").fillet(window_r))
+    return outer.cut(inner)
+
+
+windows = _window_ring(0.0, diff_t)
+# Recess the front face to seat the ring - adds the corner pockets (the straight
+# sections are already open from the slots above).
+frame = frame.cut(_window_ring(-eps, diff_t + eps))
 
 # --- Snap tabs: small overhangs on both channel walls that hold the strip back
 #     against its front-stop shoulder. Placed near both ends and the middle. ---
@@ -279,6 +294,6 @@ n_leds = 2 * led_count_tb + 2 * led_count_lr
 print(f"Exported case_frame_v2.stl (v{VERSION}): outer {frame_w}x{frame_h}x{frame_t}mm, "
       f"window {window_w}x{window_h}mm @Y+{window_cy}, "
       f"pocket {pocket_w}x{pocket_h}mm, diffused LED ring {n_leds} LEDs "
-      f"({led_count_tb} top/bottom, {led_count_lr} sides), slot {slot_w}mm")
+      f"({led_count_tb} top/bottom, {led_count_lr} sides), continuous window ring")
 print(f"Exported case_frame_v2_windows.stl: MMU diffuser windows, "
       f"{diff_t}mm translucent in the front of each slot")

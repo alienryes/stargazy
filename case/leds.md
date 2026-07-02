@@ -2,9 +2,10 @@
 
 An optional ring of addressable LEDs around the front bezel of the frame — 20
 LEDs (6 top, 6 bottom, 4 each side) firing forward through a **continuous slot
-per side**, each filled by a **translucent diffuser window printed into the
-frame with the MMU**, so every LED contributes to an even glowing border (not
-discrete dots). The LEDs sit **3 mm behind the window** so the light spreads and
+per side** behind a single **translucent diffuser window ring printed into the
+frame with the MMU** — a filleted band round the whole bezel (the straight sides
+glow; the corners are a decorative inlay). Every LED contributes to an even
+glowing border (not discrete dots). The LEDs sit **3 mm behind the window** so the light spreads and
 there are no hotspots. Driven by the Pi Zero, powered from the 5V supply. The
 frame (`case_frame_v2.py` v3.0) is sized around a **10 mm-wide WS2812B strip** —
 the outer footprint grew +4 mm/side (117.6×89.5 → 125.6×97.5) so the bezel band
@@ -43,11 +44,11 @@ The diffuser windows are printed **into** the frame, so it is a two-material
 MMU print:
 
 - `case_frame_v2.stl` — the frame, in the main (opaque) filament.
-- `case_frame_v2_windows.stl` — the four diffuser windows (0.8 mm), in **white
+- `case_frame_v2_windows.stl` — the diffuser window ring (0.8 mm), in **white
   or natural translucent** filament.
 
 In PrusaSlicer: load `case_frame_v2.stl`, then right-click → **Add part** →
-`case_frame_v2_windows.stl` (it lands already aligned in the slots). Assign the
+`case_frame_v2_windows.stl` (it lands already aligned in the frame). Assign the
 windows part to the translucent extruder. Print bezel-face down as usual; a
 wipe/purge tower is added for the colour change.
 
