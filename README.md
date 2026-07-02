@@ -112,37 +112,45 @@ python3 display.py --save preview.png
 
 A two-part parametric stand (CadQuery) lives in [`case/`](./case). The **frame** holds the Inky PCB behind its bezel; the **riser** is a tilting back panel with an integrated foot that leans the display back by 15°. No front-face fasteners are used — retention posts on the riser press the PCB forward against the window.
 
+The frame also carries an optional **addressable LED bezel ring** — 20 WS2812B LEDs (6 top, 6 bottom, 4 each side) behind a continuous slot per side, with printable **white diffuser inserts** for an even glow. The riser has a **ventilation grid** over the Pi. See [`case/leds.md`](./case/leds.md) for the strip, cut plan, and wiring to the Pi.
+
+![Frame preview](./case/case_frame_v2_preview.png)
 ![Riser preview](./case/case_riser_v2_preview.png)
 
 **Parts**
 
 | File | Part | Print orientation |
 |---|---|---|
-| `case/case_frame_v2.py` / `.stl` | Front frame + PCB pocket | Bezel (show face) **down** on the bed, pocket up — smooth face, no supports |
-| `case/case_riser_v2.py` / `.stl` / `.3mf` | Tilting back panel + foot | Flat **on its back**, posts/screw holes up — no supports despite the 15° lean |
+| `case/case_frame_v2.py` / `.stl` | Front frame + PCB pocket + LED ring | Bezel (show face) **down** on the bed, pocket up — smooth face, no supports |
+| `case/case_riser_v2.py` / `.stl` / `.3mf` | Tilting back panel + foot + vents | Flat **on its back**, posts/screw holes up — no supports despite the 15° lean |
+| `case/case_diffusers_v1.py` / `.stl` | 4 LED diffuser strips | Flat on the bed; print in **white/translucent** filament, ~1.5 mm thin |
 
 **Key dimensions**
 
-- Outer frame: 117.6 × 89.5 × 16 mm, 2 mm bezel, 10 mm walls
+- Outer frame: 125.6 × 97.5 × 16 mm, 2 mm bezel, 14 mm walls (the wall grew from 10 mm to host the LED strip channel)
 - Display window: 86 × 54 mm (active area), centred X, +2.15 mm Y
 - PCB pocket: 97.6 × 69.5 mm (fits the 96.8 × 68.7 × **2.5 mm** Inky PCB with 0.4 mm/side clearance)
-- Cable slot through the bottom edge of both frame and riser for the USB/power lead
+- LED bezel ring: 10.6 mm channel in the front bezel band, a 7 mm light slot per side + white diffuser inserts; see [`case/leds.md`](./case/leds.md)
+- Ventilation: 45-hole (Ø4 mm) grid in the riser back panel over the Pi
+- Cable slot through the bottom edge of both frame and riser for the USB/power lead (and the LED strip tail)
 
 **Hardware:** 4 × M2.5 × 8 mm self-tapping screws (riser Ø2.9 mm clearance → frame Ø2.0 mm pilots). PLA/PETG, no supports.
 
 **Assembly**
 
-1. Slide the Inky PCB into the frame pocket from the back; the active area shows through the window.
-2. Route the USB/power cable out through the bottom cable slot.
-3. Fit the riser over the back — its four posts press the PCB against the bezel.
-4. Drive the four M2.5 screws through the riser corners into the frame pilots.
+1. *(Optional LED ring)* Drop a white diffuser strip into each bezel channel from the back, then the LED strip segment behind it, and link the segments at the corners — see [`case/leds.md`](./case/leds.md).
+2. Slide the Inky PCB into the frame pocket from the back; the active area shows through the window.
+3. Route the USB/power cable (and LED tail, if fitted) out through the bottom cable slot.
+4. Fit the riser over the back — its four posts press the PCB against the bezel.
+5. Drive the four M2.5 screws through the riser corners into the frame pilots.
 
 **Regenerate the STLs** (only if you change parameters — edit the `PARAMETERS` block at the top of each script):
 
 ```bash
 cd case
-python case_frame_v2.py     # writes case_frame_v2.stl
-python case_riser_v2.py     # writes case_riser_v2.stl
+python case_frame_v2.py      # writes case_frame_v2.stl
+python case_riser_v2.py      # writes case_riser_v2.stl
+python case_diffusers_v1.py  # writes case_diffusers_v1.stl (LED diffusers)
 ```
 
 Requires `cadquery` (a local `case/.cadvenv` is used on the dev machine; see [cad-skill](https://github.com/flowful-ai/cad-skill)).
@@ -180,10 +188,14 @@ systemd/
   inky-stargazing.service
   inky-stargazing.timer
 case/                   3D-printed desktop stand (CadQuery)
-  case_frame_v2.py      Front frame + PCB pocket (source)
+  case_frame_v2.py      Front frame + PCB pocket + LED ring (source)
   case_frame_v2.stl     Frame mesh
-  case_riser_v2.py      Tilting back panel + foot (source)
+  case_frame_v2_preview.png
+  case_riser_v2.py      Tilting back panel + foot + vent grid (source)
   case_riser_v2.stl     Riser mesh
   case_riser_v2.3mf     Riser, sliced project
   case_riser_v2_preview.png
+  case_diffusers_v1.py  LED diffuser strips (source, print in white)
+  case_diffusers_v1.stl Diffuser mesh
+  leds.md               LED bezel ring — strip, cut plan, wiring
 ```

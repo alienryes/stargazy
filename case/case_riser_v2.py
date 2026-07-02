@@ -1,17 +1,24 @@
 import math
+
 import cadquery as cq
 
 # ============================================================
 # PARAMETERS - Edit these to customize the model
 # ============================================================
-# Overall dimensions - matches the Inky case frame footprint
-panel_width = 117.6    # mm - full frame width
-panel_height = 89.5    # mm - full frame height (covers the frame's back face)
+VERSION = "3.0"        # case rev - 3.0 matches the LED-ring frame growth
+
+# Overall dimensions - matches the Inky case frame footprint.
+# Panel grown +4mm per side (from 117.6x89.5) to match the LED-ring frame
+# (case_frame_v2.py v3.0). Screw holes, posts and base_width are unchanged -
+# they are driven by the (unchanged) screw/PCB positions, not the panel size,
+# so the mate to the frame is preserved. The end overhang just grows 10->14mm.
+panel_width = 125.6    # mm - full frame width   [was 117.6]
+panel_height = 97.5    # mm - full frame height (covers the frame's back face)  [was 89.5]
 panel_thickness = 3.0  # mm - back panel thickness
 
 base_depth = 20.0      # mm - depth of the flat foot resting on the table
 corner_r = 2.0         # mm - fillet radius on panel corners, measured from inky_case_frame.stl
-base_width = 97.6      # mm - base is narrower than panel (10mm cut from each end) to expose lower screw holes
+base_width = 97.6      # mm - base narrower than panel to expose lower screw holes (screw-driven, unchanged)
 
 # Cable slot cut through the base (full Y depth, full Z thickness)
 # Positioned to align with the cable slot on the frame
@@ -38,6 +45,14 @@ post_protrusion = 11.0    # mm - reach from panel's front face to the PCB's
                            # back face (box_depth=16mm frame thickness,
                            # front_wall=2mm bezel, pcb_thickness=2.5mm:
                            # 16 - 2 - 2.5 = 11.5mm; reduced to 11.0mm by user)
+
+# Ventilation grid - holes through the back panel over the Pi to let heat from
+# the Pi (and the LEDs) escape. Centred over the PCB pocket, kept inside the
+# retention posts (+/-post_x/post_y) and clear of the screws and cable notch.
+vent_hole_d = 4.0         # mm - vent hole diameter
+vent_pitch = 9.0          # mm - grid spacing
+vent_half_x = 36.0        # mm - grid half-extent in X (posts at +/-44.4)
+vent_half_y = 22.0        # mm - grid half-extent in world-Y (posts at +/-30.35)
 
 # ============================================================
 # MODEL
@@ -98,6 +113,21 @@ panel = panel.cut(
     .extrude(panel_thickness)
 )
 
+# Ventilation grid, straight through the panel thickness (world-centred grid,
+# mapped to local Y). Region stays inside the posts, so no filtering needed.
+_nx = int(vent_half_x // vent_pitch)
+_ny = int(vent_half_y // vent_pitch)
+vent_points = [
+    (i * vent_pitch, j * vent_pitch + panel_height / 2)
+    for i in range(-_nx, _nx + 1)
+    for j in range(-_ny, _ny + 1)
+]
+panel = panel.cut(
+    bottom_wp.pushPoints(vent_points)
+    .circle(vent_hole_d / 2)
+    .extrude(panel_thickness)
+)
+
 # Retention posts, protruding from the panel's front face (local -Z,
 # which after rotation faces forward toward the frame)
 posts = bottom_wp.pushPoints(post_points).circle(post_d / 2).extrude(-post_protrusion)
@@ -120,7 +150,7 @@ panel_rotated = panel.rotate((0, 0, 0), (1, 0, 0), rotation_deg)
 panel_positioned = panel_rotated.translate((0, base_depth, panel_thickness))
 
 # Base: flat foot resting on the table.
-# Narrower than the panel (97.6mm vs 117.6mm) - 10mm cut from each end to
+# Narrower than the panel (97.6mm vs 125.6mm) - 14mm cut from each end to
 # leave the lower screw holes on the upright accessible from the sides.
 base = (
     cq.Workplane("XY")
@@ -147,7 +177,7 @@ result = base.union(panel_positioned)
 # X positions of the three base cuts, so the cuts are hidden when viewed from
 # the front. Each skirt is flush with the panel's front face (Y=base_depth)
 # and panel_thickness deep in Y.
-overhang = (panel_width - base_width) / 2   # = 10mm each end
+overhang = (panel_width - base_width) / 2   # = 14mm each end
 skirt_specs = [
     (-(base_width / 2 + overhang / 2), overhang),  # left end overhang
     (+(base_width / 2 + overhang / 2), overhang),  # right end overhang
@@ -179,6 +209,7 @@ cq.exporters.export(result, "case_riser_v2.stl", tolerance=0.01, angularToleranc
 
 tip_y = base_depth - panel_height * math.sin(math.radians(lean_angle_deg))
 tip_z = panel_height * math.cos(math.radians(lean_angle_deg))
-print(f"Exported case_riser_v2.stl: panel {panel_width}x{panel_height}x{panel_thickness}mm, "
-      f"base_depth={base_depth}mm, lean_angle={lean_angle_deg} deg")
+print(f"Exported case_riser_v2.stl (v{VERSION}): panel {panel_width}x{panel_height}x{panel_thickness}mm, "
+      f"base_depth={base_depth}mm, lean_angle={lean_angle_deg} deg, "
+      f"{len(vent_points)} vent holes")
 print(f"Panel top edge position: Y={tip_y:.2f}mm, Z={tip_z:.2f}mm (from base front edge / table)")
