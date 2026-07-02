@@ -13,7 +13,7 @@ import requests
 import tomllib
 from PIL import Image, ImageDraw, ImageFont
 
-FIRMWARE_VERSION = "1.2.0"
+FIRMWARE_VERSION = "1.2.2"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -43,6 +43,11 @@ HLINE1   = 40                         # header bottom
 HLINE2   = 128                        # verdict bottom
 HLINE3   = 290                        # footer top
 RIGHT_CX = (DIV_X + W) // 2          # horizontal centre of right (moon) panel = 507
+
+# Right-aligned edge text nudged 1.5mm (~11px) left; version also 1mm (~7px) up.
+# Active area is 86x54mm over 640x400 -> ~7.44 px/mm.
+EDGE_DX  = 11
+VER_DY   = 7
 
 ENTITIES = [
     "sensor.astroweather_backyard_astronomical_night_duration",
@@ -247,7 +252,7 @@ def render(states):
     draw.text((12, 10), "STARGAZING", fill=WHITE, font=f_med)
     now_str = datetime.now().strftime("%a %d %b  %H:%M")
     ts_w    = int(draw.textlength(now_str, font=f_sm))
-    draw.text((W - ts_w - 10, 13), now_str, fill=WHITE, font=f_sm)
+    draw.text((W - ts_w - 10 - EDGE_DX, 13), now_str, fill=WHITE, font=f_sm)
     draw.line([(0, HLINE1), (W, HLINE1)], fill=WHITE, width=1)
 
     # ── Verdict (y 44–126) ────────────────────────────────────────────
@@ -342,7 +347,7 @@ def render(states):
     draw.text((100, 297), f"{dsky_tmrw_desc}  ({dsky_tmrw}%)", fill=t_colour, font=f_sm)
     if lifted and lifted not in ("unknown", ""):
         li_w = int(draw.textlength(lifted, font=f_xs))
-        draw.text((W - li_w - 8, 301), lifted, fill=WHITE, font=f_xs)
+        draw.text((W - li_w - 8 - EDGE_DX, 301), lifted, fill=WHITE, font=f_xs)
 
     # Row 2 — sun times (left) + next new/full moon dates (right)
     sun_parts = []
@@ -360,7 +365,7 @@ def render(states):
     if moon_date_parts:
         md_text = "  ·  ".join(moon_date_parts)
         md_w    = int(draw.textlength(md_text, font=f_xs))
-        draw.text((W - md_w - 8, 323), md_text, fill=WHITE, font=f_xs)
+        draw.text((W - md_w - 8 - EDGE_DX, 323), md_text, fill=WHITE, font=f_xs)
 
     # Row 3 — weather
     wx = f"{temp:.1f}°C  ·  Dew {dew:.1f}°  ·  {humidity}% RH  ·  {wind_dir} {wind_spd:.1f} m/s"
@@ -369,7 +374,7 @@ def render(states):
     # Version stamp
     ver   = f"v{FIRMWARE_VERSION}"
     ver_w = int(draw.textlength(ver, font=f_xs))
-    draw.text((W - ver_w - 6, H - 15), ver, fill=WHITE, font=f_xs)
+    draw.text((W - ver_w - 6 - EDGE_DX, H - 15 - VER_DY), ver, fill=WHITE, font=f_xs)
 
     return img
 
