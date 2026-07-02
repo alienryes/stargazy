@@ -63,16 +63,17 @@ wipe/purge tower is added for the colour change.
 
 ## Wiring to the Pi
 
-The Inky occupies the full 40-pin header. Solder short flying leads to the pin
-tails — accessible from the Pi's back **before** the riser is fitted. Data
-**must** be GPIO18: the Inky already uses the SPI pins (MOSI/SCLK/CE0), so the
-SPI LED method is unavailable.
+Only the **data** line touches the Pi header — power and ground reach the strip
+from a Wago junction off the supply (see Power), so no LED current flows through
+the Pi and nothing is soldered to its power pads. Data **must** be GPIO18: the
+Inky already uses the SPI pins (MOSI/SCLK/CE0), so the SPI LED method is
+unavailable. Solder the one data lead to the GPIO18 pin tail (accessible from
+the Pi's back **before** the riser is fitted).
 
 | Strip wire | Connect to |
 |---|---|
 | DIN (data) | GPIO18 — pin 12 (add a 74AHCT125 level shifter if it glitches) |
-| GND | any GND — pin 6, common with the Pi |
-| +5V | Pi 5V rail — the PP1 pad or a 5V header pin, 24 AWG (shared with the Pi; safe because brightness is capped — see Power) |
+| +5V / GND | Wago junction off the 5V supply (not the Pi) — see Power |
 
 ### Wire gauge
 
@@ -84,7 +85,7 @@ bends easily, is high strand-count, and won't shrink back when soldered:
 | Run | Gauge |
 |---|---|
 | Corner jumpers (segment→segment; 5V/GND/data) | **26 AWG** — threads the 4 mm tunnels, solders to the small pads |
-| Tail 5V + GND | **24 AWG** (22 for extra headroom) — carries the whole ring's current |
+| Tail 5V + GND (into the Wago) | **24 AWG** — 26 AWG is at/below the Wago 221's 0.14 mm² fine-stranded clamp floor |
 | Tail data (GPIO18) | 26 AWG |
 
 Keep the corner links short so they tuck into the tunnels. Voltage drop is
@@ -92,23 +93,29 @@ negligible (~60 mV even at 1.2 A over the ~0.4 m perimeter).
 
 ### Power (this build)
 
-Powered from a **Stontronics 5V / 2A** adapter on the Pi's micro-USB — the same
-supply feeds both the Pi and the strip.
+A **Stontronics 5V / 2A** adapter feeds both the Pi and the strip, split at two
+**Wago 221** lever connectors so the LED current never passes through the Pi
+(and nothing is soldered to the Pi's power pads). There is room in the frame for
+the Wagos.
+
+1. Cut the adapter's micro-USB plug off to expose bare 5V/GND.
+2. **Meter the polarity** of the bare wires (don't trust colours) — reversed 5V
+   kills the Pi. Insulate any unused conductors (D+/D-, shield).
+3. **5V Wago** (3-way): adapter 5V → Pi + strip 5V.
+   **GND Wago** (3-way): adapter GND → Pi + strip GND.
+4. Feed the Pi from the Wagos via a **micro-USB pigtail** back into its PWR port
+   (keeps the Pi's input polyfuse in circuit). Meter the pigtail's polarity too.
+5. Ground is common through the shared supply, so the GPIO18 → DIN data line has
+   its reference.
 
 Budget: Pi Zero 2W ~0.7 A + the ring. Full white would be ~1.2 A (~1.9 A total,
-right at the edge of 2 A and the micro-USB connector), but this ring is meant
-to run in the **blue/purple range** to match the Inky palette and be **capped in
-software**, so real draw is well under 0.3 A.
+edge of 2 A), but the ring runs **blue/purple** and **capped in software**, so
+real draw is well under 0.3 A. The 221 is rated 32 A — hugely over-spec.
 
 - **Brightness cap ≤ 128 / 255** (`LED_BRIGHTNESS`, see below). Never drive
   sustained full white on all 20 — both for the current budget and because the
   heat would risk softening/warping the PLA case (glass transition ~60 °C).
   Low-brightness blue/purple runs cool.
-- With the cap, the **simple connection is sufficient**: solder the strip's
-  5V/GND to the Pi's PP1/PP6 pads (or a 5V + GND header pin — see Wire gauge). No
-  separate supply, junction, or splitter needed. (Only worth splitting the feed
-  before the Pi if you ever wanted sustained bright white — which 2 A isn't
-  sized for anyway.)
 - GPIO18 data is 3.3V; WS2812B officially wants 5V logic. Short runs often work
   direct — add the level shifter if the first few LEDs flicker.
 
