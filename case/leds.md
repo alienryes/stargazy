@@ -30,8 +30,9 @@ straight segments, minding the data-flow arrow (DIN → DOUT):
 
 Chain them into **one continuous data path** around the ring. Join segments at
 the corners with short flexible wire links carrying 3 conductors (5V, GND, and
-DOUT → DIN of the next segment). The frame's corner notches route these links
-across the solid corners. Keep the arrow direction consistent all the way
+DOUT → DIN of the next segment). The frame's **corner tunnels run at strip
+level**, so each link threads straight through the corner in the strips' plane —
+no bending back to the rear. Keep the arrow direction consistent all the way
 round.
 
 ## Mounting

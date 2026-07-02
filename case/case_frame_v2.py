@@ -1,3 +1,5 @@
+import math
+
 import cadquery as cq
 
 # ============================================================
@@ -217,35 +219,30 @@ for sx in (band_cx, -band_cx):                 # left & right: tabs run along Y
         frame = frame.union(_tab(sx - w + tab_proj / 2, ty, tab_proj, tab_len))
         frame = frame.union(_tab(sx + w - tab_proj / 2, ty, tab_proj, tab_len))
 
-# --- Corner jumper-wire notches: shallow L-grooves in the back of each solid
-#     corner, routed outboard of the screw pilots, so the 3-wire jumper linking
-#     adjacent strip segments can pass across the corner. Cut only from the back
-#     (Z frame_t-notch_depth .. frame_t) and kept clear of the screw pilots in
-#     X/Y, so screw engagement is untouched. ---
-notch_w = 3.0            # mm - groove width (fits a 3-conductor jumper)
-notch_depth = 3.0        # mm - groove depth from the back face
-route_x = 57.0           # mm - X the vertical leg sits at (outboard of screw_x)
-route_y = 45.0           # mm - Y the horizontal leg sits at (outboard of screw_y)
-assert route_y > screw_y + screw_pilot_d / 2 + notch_w / 2, "corner notch clips a screw pilot"
-assert route_x > screw_x + screw_pilot_d / 2 + notch_w / 2, "corner notch clips a screw pilot"
-
-
-def _notch_leg(cx, cy, lx, ly):
-    return (cq.Workplane("XY").workplane(offset=frame_t - notch_depth)
-            .center(cx, cy)
-            .box(lx, ly, notch_depth + eps, centered=(True, True, False)))
-
+# --- Corner wire tunnels: straight passages through each solid corner AT STRIP
+#     LEVEL, connecting the end of one side's channel to the next, so the jumper
+#     wire between segments stays in the strips' plane (no bending back to the
+#     rear and forward again). They run at the front of the frame (Z bezel_t ..
+#     bezel_t+led_ch_clear_z), where the strips sit, and so pass in front of the
+#     corner screw pilots (which are Z frame_t-screw_depth .. frame_t at the
+#     back) - no XY keep-out needed. ---
+tunnel_w = 4.0           # mm - tunnel width (fits a 3-conductor jumper)
+tunnel_extra = 6.0       # mm - length overrun so each end bites into its channel
+tunnel_z0 = bezel_t
+tunnel_z1 = bezel_t + led_ch_clear_z
 
 for sx in (1, -1):
     for sy in (1, -1):
-        # horizontal leg: top/bottom channel end -> (route_x, route_y)
-        frame = frame.cut(_notch_leg(
-            sx * (tb_ch_half + route_x) / 2, sy * route_y,
-            route_x - tb_ch_half, notch_w))
-        # vertical leg: left/right channel end -> (route_x, route_y)
-        frame = frame.cut(_notch_leg(
-            sx * route_x, sy * (lr_ch_half + route_y) / 2,
-            notch_w, route_y - lr_ch_half))
+        p1 = (sx * tb_ch_half, sy * band_cy)   # top/bottom channel end (centre-line)
+        p2 = (sx * band_cx, sy * lr_ch_half)   # left/right channel end (centre-line)
+        length = math.hypot(p2[0] - p1[0], p2[1] - p1[1]) + tunnel_extra
+        angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0]))
+        mid = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2)
+        tunnel = (cq.Workplane("XY").workplane(offset=tunnel_z0)
+                  .box(length, tunnel_w, tunnel_z1 - tunnel_z0, centered=(True, True, False))
+                  .rotate((0, 0, 0), (0, 0, 1), angle)
+                  .translate((mid[0], mid[1], 0)))
+        frame = frame.cut(tunnel)
 
 # ============================================================
 # EXPORT
