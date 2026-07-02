@@ -139,10 +139,11 @@ slot_front_t = diff_t + led_gap   # mm - thickened front within the channel band
 slot_w = 7.0             # mm - light slot width (< led_ch_w; shoulders stop the strip)
 strip_back_z = slot_front_t + strip_th   # mm - strip back face (front seats at slot_front_t)
 
-# Snap-tab retention
-tab_proj = 1.5            # mm - how far each tab overhangs into the channel
+# Snap-tab retention (stop the strip dropping back out of the channel)
+tab_proj = 1.8            # mm - how far each tab overhangs the strip edge
 tab_len = 4.0             # mm - tab length along the channel
 tab_h = 1.2              # mm - tab thickness (Z)
+tab_spacing = 22.0        # mm - max gap between tabs along a channel
 
 # Radial centre of the 14mm bezel wall on each side (channel centre-lines)
 band_cx = (pocket_w / 2 + frame_w / 2) / 2   # L/R channels run in Y at +/-band_cx
@@ -212,8 +213,18 @@ for cx, cy, lx, ly in slot_specs:
 #     against its front-stop shoulder. Placed near both ends and the middle. ---
 tab_z = strip_back_z + 0.3
 w = led_ch_w / 2
-tab_pos_tb = [-tb_ch_half + tab_len / 2 + 1, 0.0, tb_ch_half - tab_len / 2 - 1]
-tab_pos_lr = [-lr_ch_half + tab_len / 2 + 1, 0.0, lr_ch_half - tab_len / 2 - 1]
+
+
+def _tab_positions(half):
+    """Evenly spaced tab centres along a channel, symmetric about 0, no wider
+    apart than tab_spacing, with the outermost tabs just inside the ends."""
+    reach = half - tab_len / 2 - 1
+    n = max(2, int(math.ceil(2 * reach / tab_spacing)) + 1)
+    return [-reach + i * (2 * reach) / (n - 1) for i in range(n)]
+
+
+tab_pos_tb = _tab_positions(tb_ch_half)
+tab_pos_lr = _tab_positions(lr_ch_half)
 
 
 def _tab(cx, cy, lx, ly):
