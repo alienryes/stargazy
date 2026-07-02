@@ -65,14 +65,17 @@ wipe/purge tower is added for the colour change.
 
 Only the **data** line touches the Pi header — power and ground reach the strip
 from a Wago junction off the supply (see Power), so no LED current flows through
-the Pi and nothing is soldered to its power pads. Data **must** be GPIO18: the
-Inky already uses the SPI pins (MOSI/SCLK/CE0), so the SPI LED method is
-unavailable. Solder the one data lead to the GPIO18 pin tail (accessible from
-the Pi's back **before** the riser is fitted).
+the Pi and nothing is soldered to its power pads. The Inky uses the SPI pins
+(MOSI/SCLK/CE0), so the SPI LED method is out — drive the strip with `rpi_ws281x`
+on a free PWM/PCM pin. Use **GPIO19 (pin 35, PWM1)**: it is unused by the Inky
+*and* both its neighbours (pins 33/37) are also free, so the solder joint is
+forgiving. The Inky's low-profile header leaves ~2 mm of the Pi pin exposed above
+the socket — tin the wire and tack it to that pin (minimal solder, then pot it in
+hot glue for strain relief).
 
 | Strip wire | Connect to |
 |---|---|
-| DIN (data) | GPIO18 — pin 12 (add a 74AHCT125 level shifter if it glitches) |
+| DIN (data) | GPIO19 — pin 35, PWM1 (add a 74AHCT125 level shifter if it glitches) |
 | +5V / GND | Wago junction off the 5V supply (not the Pi) — see Power |
 
 ### Wire gauge
@@ -86,7 +89,7 @@ bends easily, is high strand-count, and won't shrink back when soldered:
 |---|---|
 | Corner jumpers (segment→segment; 5V/GND/data) | **26 AWG** — threads the 4 mm tunnels, solders to the small pads |
 | Tail 5V + GND (into the Wago) | **24 AWG** — 26 AWG is at/below the Wago 221's 0.14 mm² fine-stranded clamp floor |
-| Tail data (GPIO18) | 26 AWG |
+| Tail data (GPIO19) | 26 AWG |
 
 Keep the corner links short so they tuck into the tunnels. Voltage drop is
 negligible (~60 mV even at 1.2 A over the ~0.4 m perimeter).
@@ -105,7 +108,7 @@ the Wagos.
    **GND Wago** (3-way): adapter GND → Pi + strip GND.
 4. Feed the Pi from the Wagos via a **micro-USB pigtail** back into its PWR port
    (keeps the Pi's input polyfuse in circuit). Meter the pigtail's polarity too.
-5. Ground is common through the shared supply, so the GPIO18 → DIN data line has
+5. Ground is common through the shared supply, so the GPIO19 → DIN data line has
    its reference.
 
 Budget: Pi Zero 2W ~0.7 A + the ring. Full white would be ~1.2 A (~1.9 A total,
@@ -116,7 +119,7 @@ real draw is well under 0.3 A. The 221 is rated 32 A — hugely over-spec.
   sustained full white on all 20 — both for the current budget and because the
   heat would risk softening/warping the PLA case (glass transition ~60 °C).
   Low-brightness blue/purple runs cool.
-- GPIO18 data is 3.3V; WS2812B officially wants 5V logic. Short runs often work
+- GPIO19 data is 3.3V; WS2812B officially wants 5V logic. Short runs often work
   direct — add the level shifter if the first few LEDs flicker.
 
 ## Pi software (not yet implemented)
@@ -125,7 +128,7 @@ Outline for a follow-up change to `display.py`:
 
 - Install `rpi_ws281x` (`sudo pip install rpi_ws281x`, or apt
   `python3-rpi-ws281x`).
-- Drive the strip on the **PWM channel of GPIO18** (needs root / `/dev/mem`).
+- Drive the strip on **PWM1 / GPIO19** (needs root / `/dev/mem`).
 - 20 pixels; set a **global brightness ceiling** ≤ 128 (see Power). ~40–80
   gives a pleasant ambient glow.
 - Keep to the **blue/purple range** to match the Inky palette and stay cool.
@@ -136,11 +139,11 @@ Outline for a follow-up change to `display.py`:
 from rpi_ws281x import PixelStrip, Color
 
 LED_COUNT      = 20
-LED_PIN        = 18        # GPIO18 (PWM0), pin 12
+LED_PIN        = 19        # GPIO19 (PWM1), pin 35
 LED_FREQ_HZ    = 800000
 LED_DMA        = 10
 LED_BRIGHTNESS = 80        # global scale; hard ceiling 128 for the 2A budget
-LED_CHANNEL    = 0
+LED_CHANNEL    = 1        # PWM1 (GPIO13/19); PWM0 pins would use 0
 
 strip = PixelStrip(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA,
                    False, LED_BRIGHTNESS, LED_CHANNEL)
