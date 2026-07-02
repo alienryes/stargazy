@@ -72,7 +72,23 @@ SPI LED method is unavailable.
 |---|---|
 | DIN (data) | GPIO18 — pin 12 (add a 74AHCT125 level shifter if it glitches) |
 | GND | any GND — pin 6, common with the Pi |
-| +5V | Pi 5V rail — the PP1 pad or a 5V header pin, ≥22 AWG (shared with the Pi; safe because brightness is capped — see Power) |
+| +5V | Pi 5V rail — the PP1 pad or a 5V header pin, 24 AWG (shared with the Pi; safe because brightness is capped — see Power) |
+
+### Wire gauge
+
+Current is tiny at the capped blue/purple brightness (<0.3 A for the whole ring;
+even theoretical full-white is only ~1.2 A), so choose wire for flexibility and
+solderability, not ampacity. Use flexible **silicone**-insulated stranded — it
+bends easily, is high strand-count, and won't shrink back when soldered:
+
+| Run | Gauge |
+|---|---|
+| Corner jumpers (segment→segment; 5V/GND/data) | **26 AWG** — threads the 4 mm tunnels, solders to the small pads |
+| Tail 5V + GND | **24 AWG** (22 for extra headroom) — carries the whole ring's current |
+| Tail data (GPIO18) | 26 AWG |
+
+Keep the corner links short so they tuck into the tunnels. Voltage drop is
+negligible (~60 mV even at 1.2 A over the ~0.4 m perimeter).
 
 ### Power (this build)
 
@@ -89,7 +105,7 @@ software**, so real draw is well under 0.3 A.
   heat would risk softening/warping the PLA case (glass transition ~60 °C).
   Low-brightness blue/purple runs cool.
 - With the cap, the **simple connection is sufficient**: solder the strip's
-  5V/GND to the Pi's PP1/PP6 pads (or a 5V + GND header pin, ≥22 AWG). No
+  5V/GND to the Pi's PP1/PP6 pads (or a 5V + GND header pin — see Wire gauge). No
   separate supply, junction, or splitter needed. (Only worth splitting the feed
   before the Pi if you ever wanted sustained bright white — which 2 A isn't
   sized for anyway.)
