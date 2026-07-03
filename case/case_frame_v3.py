@@ -116,7 +116,7 @@ frame = frame.cut(screws)
 # ============================================================
 # Light exits a continuous slot per side, filled by a translucent diffuser
 # window printed INTO the frame with the MMU (exported as
-# case_frame_v3_windows.stl - no separate insert). Within the channel band the
+# case_frame_v3_window.stl - no separate insert). Within the channel band the
 # front is thickened to slot_front_t (diffuser window + air gap); the strip
 # seats against its back, so it sits led_gap behind the diffuser and the light
 # spreads before reaching it. The channel is open to the back so the strip drops
@@ -314,12 +314,12 @@ cq.exporters.export(frame, "case_frame_v3.stl",
 # Translucent diffuser windows - co-print with the frame in the MMU's second
 # extruder (load in PrusaSlicer as a part of the frame object; they are already
 # aligned in the frame's coordinates).
-cq.exporters.export(windows, "case_frame_v3_windows.stl",
+cq.exporters.export(windows, "case_frame_v3_window.stl",
                     tolerance=0.01, angularTolerance=0.1)
 n_leds = 2 * led_count_tb + 2 * led_count_lr
 print(f"Exported case_frame_v3.stl (v{VERSION}): outer {frame_w}x{frame_h}x{frame_t}mm, "
       f"window {window_w}x{window_h}mm @Y+{window_cy}, "
       f"pocket {pocket_w}x{pocket_h}mm, diffused LED ring {n_leds} LEDs "
       f"({led_count_tb} top/bottom, {led_count_lr} sides), continuous window ring")
-print(f"Exported case_frame_v3_windows.stl: MMU diffuser windows, "
+print(f"Exported case_frame_v3_window.stl: MMU diffuser windows, "
       f"{diff_t}mm translucent in the front of each slot")

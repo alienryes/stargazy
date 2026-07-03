@@ -122,7 +122,7 @@ The frame also carries an optional **addressable LED bezel ring** — 20 WS2812B
 | File | Part | Print orientation |
 |---|---|---|
 | `case/case_frame_v3.py` / `.stl` | Front frame + PCB pocket + LED ring | Bezel (show face) **down** on the bed, pocket up — smooth face, no supports |
-| `case/case_frame_v3_windows.stl` | Diffuser window ring (co-print) | Add as a part of the frame; assign to the **translucent** MMU extruder |
+| `case/case_frame_v3_window.stl` | Diffuser window ring (co-print) | Add as a part of the frame; assign to the **translucent** MMU extruder |
 | `case/case_riser_v3.py` / `.stl` | Tilting back panel + foot + vents | Flat **on its back**, posts/screw holes up — no supports despite the 15° lean |
 
 **Key dimensions**
@@ -148,7 +148,7 @@ The frame also carries an optional **addressable LED bezel ring** — 20 WS2812B
 
 ```bash
 cd case
-python case_frame_v3.py   # writes case_frame_v3.stl + case_frame_v3_windows.stl
+python case_frame_v3.py   # writes case_frame_v3.stl + case_frame_v3_window.stl
 python case_riser_v3.py   # writes case_riser_v3.stl
 ```
 
@@ -189,7 +189,7 @@ systemd/
 case/                   3D-printed desktop stand (CadQuery)
   case_frame_v3.py      Front frame + PCB pocket + LED ring (source)
   case_frame_v3.stl     Frame mesh
-  case_frame_v3_windows.stl  Diffuser window ring, MMU translucent co-print
+  case_frame_v3_window.stl  Diffuser window ring, MMU translucent co-print
   case_frame_v3_preview.png
   case_riser_v3.py      Tilting back panel + foot + vent grid (source)
   case_riser_v3.stl     Riser mesh

@@ -45,11 +45,11 @@ The diffuser windows are printed **into** the frame, so it is a two-material
 MMU print:
 
 - `case_frame_v3.stl` — the frame, in the main (opaque) filament.
-- `case_frame_v3_windows.stl` — the diffuser window ring (0.8 mm), in **white
+- `case_frame_v3_window.stl` — the diffuser window ring (0.8 mm), in **white
   or natural translucent** filament.
 
 In PrusaSlicer: load `case_frame_v3.stl`, then right-click → **Add part** →
-`case_frame_v3_windows.stl` (it lands already aligned in the frame). Assign the
+`case_frame_v3_window.stl` (it lands already aligned in the frame). Assign the
 windows part to the translucent extruder. Print bezel-face down as usual; a
 wipe/purge tower is added for the colour change.
 
