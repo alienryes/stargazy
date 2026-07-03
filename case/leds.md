@@ -7,7 +7,7 @@ frame with the MMU** — a filleted band round the whole bezel (the straight sid
 glow; the corners are a decorative inlay). Every LED contributes to an even
 glowing border (not discrete dots). The LEDs sit **3 mm behind the window** so the light spreads and
 there are no hotspots. Driven by the Pi Zero, powered from the 5V supply. The
-frame (`case_frame_v2.py` v3.0) is sized around a **10 mm-wide WS2812B strip** —
+frame (`case_frame_v2.py` v3.1) is sized around a **10 mm-wide WS2812B strip** —
 the outer footprint grew +4 mm/side (117.6×89.5 → 125.6×97.5) so the bezel band
 can host the strip channel.
 
@@ -33,10 +33,11 @@ straight segments, minding the data-flow arrow (DIN → DOUT):
 
 Chain them into **one continuous data path** around the ring. Join segments at
 the corners with short flexible wire links carrying 3 conductors (5V, GND, and
-DOUT → DIN of the next segment). The frame's **corner tunnels run at strip
-level**, so each link threads straight through the corner in the strips' plane —
-no bending back to the rear. Keep the arrow direction consistent all the way
-round.
+DOUT → DIN of the next segment). Solder the **whole ring — four segments plus
+corner links — as one loop first**, then fit it (see Fitting the strip): the
+frame's **corner trenches are open to the back** (they route round the outboard
+side of each corner screw), so the pre-soldered assembly lays straight in and
+lifts back out. Keep the arrow direction consistent all the way round.
 
 ## Printing the frame (2-material, MMU)
 
@@ -54,12 +55,13 @@ wipe/purge tower is added for the colour change.
 
 ## Fitting the strip
 
-1. Cut and chain the four segments (see Cut plan above).
-2. From the **back** of the frame, drop each LED strip segment into its side
-   channel. It seats against the front-stop shoulder, **3 mm behind the diffuser
-   window**; the snap tabs hold it there.
-3. Route the corner links through the corner tunnels.
-4. The strip tail (3 wires) exits via the **bottom cable slot**, alongside the
+1. Cut the four segments and solder them into one loop with the corner links
+   (see Cut plan above) — do this **before** fitting, not in place.
+2. From the **back** of the frame, lay the loop in: each segment drops into its
+   side channel, seating against the front-stop shoulder **3 mm behind the
+   diffuser window** (the snap tabs hold it), and each corner link lays into the
+   open corner trench round the outboard side of the screw.
+3. The strip tail (3 wires) exits via the **bottom cable slot**, alongside the
    Pi's power lead.
 
 ## Wiring to the Pi
@@ -88,11 +90,11 @@ bends easily, is high strand-count, and won't shrink back when soldered:
 
 | Run | Gauge |
 |---|---|
-| Corner jumpers (segment→segment; 5V/GND/data) | **26 AWG** — threads the 4 mm tunnels, solders to the small pads |
+| Corner jumpers (segment→segment; 5V/GND/data) | **26 AWG** — lays into the 3 mm corner trenches, solders to the small pads |
 | Tail 5V + GND (into the Wago) | **24 AWG** — 26 AWG is at/below the Wago 221's 0.14 mm² fine-stranded clamp floor |
 | Tail data (GPIO19) | 26 AWG |
 
-Keep the corner links short so they tuck into the tunnels. Voltage drop is
+Keep the corner links short so they sit in the trenches. Voltage drop is
 negligible (~60 mV even at 1.2 A over the ~0.4 m perimeter).
 
 ### Power (this build)

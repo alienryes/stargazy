@@ -13,7 +13,8 @@ import cadquery as cq
 # Companion part: case_riser_v2.py (the tilting back panel + foot). The riser's
 # corner screw holes and PCB retention posts are sized to mate with this frame.
 
-VERSION = "3.0"        # case rev - 3.0 adds the WS2812B LED bezel ring
+VERSION = "3.1"        # 3.0 added the LED bezel ring; 3.1 opens the corner
+#                        wire trenches to the back so a pre-soldered strip drops in
 
 # --- Outer shell ---
 # Frame grown +4mm per side (from 117.6x89.5) to host a 10mm-wide WS2812B LED
@@ -256,29 +257,54 @@ for sx in (band_cx, -band_cx):                 # left & right: tabs run along Y
         frame = frame.union(_tab(sx - w + tab_proj / 2, ty, tab_proj, tab_len))
         frame = frame.union(_tab(sx + w - tab_proj / 2, ty, tab_proj, tab_len))
 
-# --- Corner wire tunnels: straight passages through each solid corner AT STRIP
-#     LEVEL, connecting the end of one side's channel to the next, so the jumper
-#     wire between segments stays in the strips' plane (no bending back to the
-#     rear and forward again). They run at strip level (Z slot_front_t ..
-#     strip_back_z+0.3) and so pass in front of the corner screw pilots (which
-#     are Z frame_t-screw_depth .. frame_t at the back) - no XY keep-out. ---
-tunnel_w = 4.0           # mm - tunnel width (fits a 3-conductor jumper)
-tunnel_extra = 6.0       # mm - length overrun so each end bites into its channel
-tunnel_z0 = slot_front_t
-tunnel_z1 = strip_back_z + 0.3
+# --- Corner wire trenches (v3.1): OPEN-TO-BACK L-shaped trenches connecting each
+#     side channel to the next, routed around the OUTBOARD side of the corner
+#     screw. Because they break through to the back (like the side channels), the
+#     whole strip + corner-jumper assembly can be soldered FIRST and then dropped
+#     in from behind. The earlier design ran an enclosed diagonal tunnel straight
+#     across the corner at strip level - it passed in front of the screw, but was
+#     bored (closed on all sides), so a pre-soldered jumper could not be pulled
+#     through it. The front stays solid (Z 0..slot_front_t) so the diffuser ring
+#     is untouched; the screw boss keeps full material on its front, inboard and
+#     pocket sides - only the outboard/outer quadrant is trenched. ---
+trench_w = 3.0           # mm - trench width (one silicone jumper, laid in open)
+trench_screw_clr = 1.0   # mm - min wall between the trench and the screw pilot hole
+trench_z0 = slot_front_t
+trench_z1 = frame_t      # open all the way through to the back face
+
+# Push the L's elbow outboard of the screw so trench_w/2 + hole radius +
+# trench_screw_clr of wall sits between the trench and the pilot on each leg.
+link_off = trench_w / 2 + screw_pilot_d / 2 + trench_screw_clr
+link_x = screw_x + link_off    # X of the vertical (L/R) leg, outboard of the screw
+link_y = screw_y + link_off    # Y of the horizontal (T/B) leg, outboard of the screw
+ch_overlap = 4.0         # mm - how far each leg reaches back into its channel
+
+# Keep-out checks - fail loudly rather than silently nick the screw or outer wall.
+assert link_y - trench_w / 2 - screw_pilot_d / 2 >= screw_y + trench_screw_clr - 1e-6, \
+    "horizontal corner trench too close to screw"
+assert link_x - trench_w / 2 - screw_pilot_d / 2 >= screw_x + trench_screw_clr - 1e-6, \
+    "vertical corner trench too close to screw"
+assert link_y + trench_w / 2 <= frame_h / 2 - 1.0, "corner trench breaks the outer wall (Y)"
+assert link_x + trench_w / 2 <= frame_w / 2 - 1.0, "corner trench breaks the outer wall (X)"
+# Each leg must sit inside its channel band so it merges with that open moat.
+assert abs(link_y - band_cy) <= led_ch_w / 2, "horizontal leg misses the T/B channel"
+assert abs(link_x - band_cx) <= led_ch_w / 2, "vertical leg misses the L/R channel"
+
+
+def _trench(cx, cy, lx, ly):
+    return (cq.Workplane("XY").workplane(offset=trench_z0)
+            .center(cx, cy)
+            .box(lx, ly, trench_z1 - trench_z0 + eps, centered=(True, True, False)))
+
 
 for sx in (1, -1):
     for sy in (1, -1):
-        p1 = (sx * tb_ch_half, sy * band_cy)   # top/bottom channel end (centre-line)
-        p2 = (sx * band_cx, sy * lr_ch_half)   # left/right channel end (centre-line)
-        length = math.hypot(p2[0] - p1[0], p2[1] - p1[1]) + tunnel_extra
-        angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0]))
-        mid = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2)
-        tunnel = (cq.Workplane("XY").workplane(offset=tunnel_z0)
-                  .box(length, tunnel_w, tunnel_z1 - tunnel_z0, centered=(True, True, False))
-                  .rotate((0, 0, 0), (0, 0, 1), angle)
-                  .translate((mid[0], mid[1], 0)))
-        frame = frame.cut(tunnel)
+        # Horizontal leg: from inside the top/bottom channel out to the elbow.
+        hx0, hx1 = sx * (tb_ch_half - ch_overlap), sx * link_x
+        frame = frame.cut(_trench((hx0 + hx1) / 2, sy * link_y, abs(hx1 - hx0), trench_w))
+        # Vertical leg: from the elbow down into the left/right channel.
+        vy0, vy1 = sy * (lr_ch_half - ch_overlap), sy * link_y
+        frame = frame.cut(_trench(sx * link_x, (vy0 + vy1) / 2, trench_w, abs(vy1 - vy0)))
 
 # ============================================================
 # EXPORT

@@ -138,7 +138,7 @@ The frame also carries an optional **addressable LED bezel ring** — 20 WS2812B
 
 **Assembly**
 
-1. *(Optional LED ring)* Drop each LED strip segment into its bezel channel from the back (it seats 3 mm behind the printed-in diffuser window ring) and link the segments at the corners — see [`case/leds.md`](./case/leds.md).
+1. *(Optional LED ring)* Solder the four LED segments into one loop with their corner links first, then lay it into the frame from the back — the segments drop into the bezel channels (seating 3 mm behind the printed-in diffuser window ring) and the corner links lay into the open corner trenches. See [`case/leds.md`](./case/leds.md).
 2. Slide the Inky PCB into the frame pocket from the back; the active area shows through the window.
 3. Route the USB/power cable (and LED tail, if fitted) out through the bottom cable slot.
 4. Fit the riser over the back — its four posts press the PCB against the bezel.
