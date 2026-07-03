@@ -13,8 +13,9 @@ import cadquery as cq
 # Companion part: case_riser_v3.py (the tilting back panel + foot). The riser's
 # corner screw holes and PCB retention posts are sized to mate with this frame.
 
-VERSION = "3.1"        # 3.0 added the LED bezel ring; 3.1 opens the corner
-#                        wire trenches to the back so a pre-soldered strip drops in
+VERSION = "3.2"        # 3.0 added the LED bezel ring; 3.1 opened the corner
+#                        wire trenches to the back; 3.2 drops the unfittable
+#                        corner-adjacent snap tab at one end of each channel
 
 # --- Outer shell ---
 # Frame grown +4mm per side (from 117.6x89.5) to host a 10mm-wide WS2812B LED
@@ -248,12 +249,22 @@ def _tab(cx, cy, lx, ly):
             .center(cx, cy).box(lx, ly, tab_h, centered=(True, True, False)))
 
 
-for sy in (band_cy, -band_cy):                 # top & bottom: tabs run along X
-    for tx in tab_pos_tb:
+# Drop the corner-adjacent snap tab at ONE end of each channel: once the strip is
+# seated under the inner tabs it can't flex enough to tuck under a tab right by
+# the corner, so that one was unfittable. It's a single end per channel in a
+# 180-deg-rotational pattern (consistent insertion direction): top -> its -X (left)
+# end, bottom -> its +X (right) end, right -> its +Y (top) end, left -> its -Y
+# (bottom) end. The opposite end of each channel keeps its tab.
+for sy, drop_tx in ((band_cy, tab_pos_tb[0]), (-band_cy, tab_pos_tb[-1])):
+    for tx in tab_pos_tb:                       # top & bottom: tabs run along X
+        if tx == drop_tx:
+            continue
         frame = frame.union(_tab(tx, sy - w + tab_proj / 2, tab_len, tab_proj))
         frame = frame.union(_tab(tx, sy + w - tab_proj / 2, tab_len, tab_proj))
-for sx in (band_cx, -band_cx):                 # left & right: tabs run along Y
-    for ty in tab_pos_lr:
+for sx, drop_ty in ((band_cx, tab_pos_lr[-1]), (-band_cx, tab_pos_lr[0])):
+    for ty in tab_pos_lr:                       # left & right: tabs run along Y
+        if ty == drop_ty:
+            continue
         frame = frame.union(_tab(sx - w + tab_proj / 2, ty, tab_proj, tab_len))
         frame = frame.union(_tab(sx + w - tab_proj / 2, ty, tab_proj, tab_len))
 
