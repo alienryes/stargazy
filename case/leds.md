@@ -7,7 +7,7 @@ frame with the MMU** — a filleted band round the whole bezel (the straight sid
 glow; the corners are a decorative inlay). Every LED contributes to an even
 glowing border (not discrete dots). The LEDs sit **3 mm behind the window** so the light spreads and
 there are no hotspots. Driven by the Pi Zero, powered from the 5V supply. The
-frame (`case_frame_v2.py` v3.1) is sized around a **10 mm-wide WS2812B strip** —
+frame (`case_frame_v3.py` v3.1) is sized around a **10 mm-wide WS2812B strip** —
 the outer footprint grew +4 mm/side (117.6×89.5 → 125.6×97.5) so the bezel band
 can host the strip channel.
 
@@ -17,7 +17,7 @@ can host the strip channel.
   (≈ part `BTF-5V-60L-B`). IP30 (bare) is fine indoors.
 - Only ~20 LEDs are used — cut from a 1 m / 60-LED reel with margin to spare.
 - Measure the actual reel width; if it isn't 10 mm, change `strip_w` in
-  `case_frame_v2.py` and re-export.
+  `case_frame_v3.py` and re-export.
 
 ## Cut plan (4 segments)
 
@@ -44,12 +44,12 @@ lifts back out. Keep the arrow direction consistent all the way round.
 The diffuser windows are printed **into** the frame, so it is a two-material
 MMU print:
 
-- `case_frame_v2.stl` — the frame, in the main (opaque) filament.
-- `case_frame_v2_windows.stl` — the diffuser window ring (0.8 mm), in **white
+- `case_frame_v3.stl` — the frame, in the main (opaque) filament.
+- `case_frame_v3_windows.stl` — the diffuser window ring (0.8 mm), in **white
   or natural translucent** filament.
 
-In PrusaSlicer: load `case_frame_v2.stl`, then right-click → **Add part** →
-`case_frame_v2_windows.stl` (it lands already aligned in the frame). Assign the
+In PrusaSlicer: load `case_frame_v3.stl`, then right-click → **Add part** →
+`case_frame_v3_windows.stl` (it lands already aligned in the frame). Assign the
 windows part to the translucent extruder. Print bezel-face down as usual; a
 wipe/purge tower is added for the colour change.
 

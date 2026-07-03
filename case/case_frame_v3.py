@@ -10,7 +10,7 @@ import cadquery as cq
 # cross-sectioning - see project_inky_case_design memory. Origin is centered
 # in X/Y; the front bezel (show face) is at Z=0, the open back is at Z=16.
 #
-# Companion part: case_riser_v2.py (the tilting back panel + foot). The riser's
+# Companion part: case_riser_v3.py (the tilting back panel + foot). The riser's
 # corner screw holes and PCB retention posts are sized to mate with this frame.
 
 VERSION = "3.1"        # 3.0 added the LED bezel ring; 3.1 opens the corner
@@ -116,7 +116,7 @@ frame = frame.cut(screws)
 # ============================================================
 # Light exits a continuous slot per side, filled by a translucent diffuser
 # window printed INTO the frame with the MMU (exported as
-# case_frame_v2_windows.stl - no separate insert). Within the channel band the
+# case_frame_v3_windows.stl - no separate insert). Within the channel band the
 # front is thickened to slot_front_t (diffuser window + air gap); the strip
 # seats against its back, so it sits led_gap behind the diffuser and the light
 # spreads before reaching it. The channel is open to the back so the strip drops
@@ -309,17 +309,17 @@ for sx in (1, -1):
 # ============================================================
 # EXPORT
 # ============================================================
-cq.exporters.export(frame, "case_frame_v2.stl",
+cq.exporters.export(frame, "case_frame_v3.stl",
                     tolerance=0.01, angularTolerance=0.1)
 # Translucent diffuser windows - co-print with the frame in the MMU's second
 # extruder (load in PrusaSlicer as a part of the frame object; they are already
 # aligned in the frame's coordinates).
-cq.exporters.export(windows, "case_frame_v2_windows.stl",
+cq.exporters.export(windows, "case_frame_v3_windows.stl",
                     tolerance=0.01, angularTolerance=0.1)
 n_leds = 2 * led_count_tb + 2 * led_count_lr
-print(f"Exported case_frame_v2.stl (v{VERSION}): outer {frame_w}x{frame_h}x{frame_t}mm, "
+print(f"Exported case_frame_v3.stl (v{VERSION}): outer {frame_w}x{frame_h}x{frame_t}mm, "
       f"window {window_w}x{window_h}mm @Y+{window_cy}, "
       f"pocket {pocket_w}x{pocket_h}mm, diffused LED ring {n_leds} LEDs "
       f"({led_count_tb} top/bottom, {led_count_lr} sides), continuous window ring")
-print(f"Exported case_frame_v2_windows.stl: MMU diffuser windows, "
+print(f"Exported case_frame_v3_windows.stl: MMU diffuser windows, "
       f"{diff_t}mm translucent in the front of each slot")

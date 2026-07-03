@@ -5,11 +5,11 @@ import cadquery as cq
 # ============================================================
 # PARAMETERS - Edit these to customize the model
 # ============================================================
-VERSION = "3.0"        # case rev - 3.0 matches the LED-ring frame growth
+VERSION = "3.1"        # case rev - matches the frame; v3 filenames as of 3.1
 
 # Overall dimensions - matches the Inky case frame footprint.
 # Panel grown +4mm per side (from 117.6x89.5) to match the LED-ring frame
-# (case_frame_v2.py v3.0). Screw holes, posts and base_width are unchanged -
+# (case_frame_v3.py v3.0). Screw holes, posts and base_width are unchanged -
 # they are driven by the (unchanged) screw/PCB positions, not the panel size,
 # so the mate to the frame is preserved. The end overhang just grows 10->14mm.
 panel_width = 125.6    # mm - full frame width   [was 117.6]
@@ -205,11 +205,11 @@ result = result.cut(notch_ext)
 # ============================================================
 # EXPORT
 # ============================================================
-cq.exporters.export(result, "case_riser_v2.stl", tolerance=0.01, angularTolerance=0.1)
+cq.exporters.export(result, "case_riser_v3.stl", tolerance=0.01, angularTolerance=0.1)
 
 tip_y = base_depth - panel_height * math.sin(math.radians(lean_angle_deg))
 tip_z = panel_height * math.cos(math.radians(lean_angle_deg))
-print(f"Exported case_riser_v2.stl (v{VERSION}): panel {panel_width}x{panel_height}x{panel_thickness}mm, "
+print(f"Exported case_riser_v3.stl (v{VERSION}): panel {panel_width}x{panel_height}x{panel_thickness}mm, "
       f"base_depth={base_depth}mm, lean_angle={lean_angle_deg} deg, "
       f"{len(vent_points)} vent holes")
 print(f"Panel top edge position: Y={tip_y:.2f}mm, Z={tip_z:.2f}mm (from base front edge / table)")

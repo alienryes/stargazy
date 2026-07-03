@@ -114,16 +114,16 @@ A two-part parametric stand (CadQuery) lives in [`case/`](./case). The **frame**
 
 The frame also carries an optional **addressable LED bezel ring** — 20 WS2812B LEDs (6 top, 6 bottom, 4 each side) behind a continuous slot per side, with a **translucent diffuser window ring printed into the frame** (2-material MMU) for an even glow; the LEDs sit 3 mm back so there are no hotspots, and the ring's filleted corners are a decorative inlay. The riser has a **ventilation grid** over the Pi. See [`case/leds.md`](./case/leds.md) for the strip, cut plan, and wiring to the Pi.
 
-![Frame preview](./case/case_frame_v2_preview.png)
-![Riser preview](./case/case_riser_v2_preview.png)
+![Frame preview](./case/case_frame_v3_preview.png)
+![Riser preview](./case/case_riser_v3_preview.png)
 
 **Parts**
 
 | File | Part | Print orientation |
 |---|---|---|
-| `case/case_frame_v2.py` / `.stl` | Front frame + PCB pocket + LED ring | Bezel (show face) **down** on the bed, pocket up — smooth face, no supports |
-| `case/case_frame_v2_windows.stl` | Diffuser window ring (co-print) | Add as a part of the frame; assign to the **translucent** MMU extruder |
-| `case/case_riser_v2.py` / `.stl` / `.3mf` | Tilting back panel + foot + vents | Flat **on its back**, posts/screw holes up — no supports despite the 15° lean |
+| `case/case_frame_v3.py` / `.stl` | Front frame + PCB pocket + LED ring | Bezel (show face) **down** on the bed, pocket up — smooth face, no supports |
+| `case/case_frame_v3_windows.stl` | Diffuser window ring (co-print) | Add as a part of the frame; assign to the **translucent** MMU extruder |
+| `case/case_riser_v3.py` / `.stl` | Tilting back panel + foot + vents | Flat **on its back**, posts/screw holes up — no supports despite the 15° lean |
 
 **Key dimensions**
 
@@ -148,8 +148,8 @@ The frame also carries an optional **addressable LED bezel ring** — 20 WS2812B
 
 ```bash
 cd case
-python case_frame_v2.py   # writes case_frame_v2.stl + case_frame_v2_windows.stl
-python case_riser_v2.py   # writes case_riser_v2.stl
+python case_frame_v3.py   # writes case_frame_v3.stl + case_frame_v3_windows.stl
+python case_riser_v3.py   # writes case_riser_v3.stl
 ```
 
 Requires `cadquery` (a local `case/.cadvenv` is used on the dev machine; see [cad-skill](https://github.com/flowful-ai/cad-skill)).
@@ -187,13 +187,12 @@ systemd/
   inky-stargazing.service
   inky-stargazing.timer
 case/                   3D-printed desktop stand (CadQuery)
-  case_frame_v2.py      Front frame + PCB pocket + LED ring (source)
-  case_frame_v2.stl     Frame mesh
-  case_frame_v2_windows.stl  Diffuser window ring, MMU translucent co-print
-  case_frame_v2_preview.png
-  case_riser_v2.py      Tilting back panel + foot + vent grid (source)
-  case_riser_v2.stl     Riser mesh
-  case_riser_v2.3mf     Riser, sliced project
-  case_riser_v2_preview.png
+  case_frame_v3.py      Front frame + PCB pocket + LED ring (source)
+  case_frame_v3.stl     Frame mesh
+  case_frame_v3_windows.stl  Diffuser window ring, MMU translucent co-print
+  case_frame_v3_preview.png
+  case_riser_v3.py      Tilting back panel + foot + vent grid (source)
+  case_riser_v3.stl     Riser mesh
+  case_riser_v3_preview.png
   leds.md               LED bezel ring — strip, cut plan, wiring
 ```
