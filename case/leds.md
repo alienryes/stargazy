@@ -33,7 +33,18 @@ straight segments, minding the data-flow arrow (DIN → DOUT):
 
 Chain them into **one continuous data path** around the ring. Join segments at
 the corners with short flexible wire links carrying 3 conductors (5V, GND, and
-DOUT → DIN of the next segment). Solder the **whole ring — four segments plus
+DOUT → DIN of the next segment).
+
+**Corner link length: cut ≈ 45 mm** (finishing ~40 mm installed), the same for
+all four corners. The link doesn't run straight — it follows the L-trench from
+the last LED pad, round the **outboard side of the corner screw**, into the next
+channel (~33–35 mm routed), plus a few mm each end for strip/tin and a little
+slack to seat without tension. Cut all three conductors the same, but **stagger
+the solder joints** (don't line them up) so the bundle stays under ~3 mm and
+tucks into the trench. Best confirmed on the printed frame: lay a segment in
+each channel and measure pad-to-pad round the corner before cutting all four.
+
+Solder the **whole ring — four segments plus
 corner links — as one loop first**, then fit it (see Fitting the strip): the
 frame's **corner trenches are open to the back** (they route round the outboard
 side of each corner screw), so the pre-soldered assembly lays straight in and
