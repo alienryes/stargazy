@@ -13,9 +13,11 @@ import cadquery as cq
 # Companion part: case_riser_v3.py (the tilting back panel + foot). The riser's
 # corner screw holes and PCB retention posts are sized to mate with this frame.
 
-VERSION = "3.2"        # 3.0 added the LED bezel ring; 3.1 opened the corner
+VERSION = "3.3"        # 3.0 added the LED bezel ring; 3.1 opened the corner
 #                        wire trenches to the back; 3.2 drops the unfittable
-#                        corner-adjacent snap tab at one end of each channel
+#                        corner-adjacent snap tab at one end of each channel;
+#                        3.3 widens the corner trenches (corner outer wall now
+#                        matches the sides' 1.7mm)
 
 # --- Outer shell ---
 # Frame grown +4mm per side (from 117.6x89.5) to host a 10mm-wide WS2812B LED
@@ -268,38 +270,38 @@ for sx, drop_ty in ((band_cx, tab_pos_lr[-1]), (-band_cx, tab_pos_lr[0])):
         frame = frame.union(_tab(sx - w + tab_proj / 2, ty, tab_proj, tab_len))
         frame = frame.union(_tab(sx + w - tab_proj / 2, ty, tab_proj, tab_len))
 
-# --- Corner wire trenches (v3.1): OPEN-TO-BACK L-shaped trenches connecting each
-#     side channel to the next, routed around the OUTBOARD side of the corner
-#     screw. Because they break through to the back (like the side channels), the
-#     whole strip + corner-jumper assembly can be soldered FIRST and then dropped
-#     in from behind. The earlier design ran an enclosed diagonal tunnel straight
-#     across the corner at strip level - it passed in front of the screw, but was
-#     bored (closed on all sides), so a pre-soldered jumper could not be pulled
-#     through it. The front stays solid (Z 0..slot_front_t) so the diffuser ring
-#     is untouched; the screw boss keeps full material on its front, inboard and
-#     pocket sides - only the outboard/outer quadrant is trenched. ---
-trench_w = 3.0           # mm - trench width (one silicone jumper, laid in open)
-trench_screw_clr = 1.0   # mm - min wall between the trench and the screw pilot hole
+# --- Corner wire trenches (v3.1, widened v3.3): OPEN-TO-BACK L-shaped trenches
+#     connecting each side channel to the next, routed around the OUTBOARD side of
+#     the corner screw. Because they break through to the back (like the side
+#     channels), the whole strip + corner-jumper assembly can be soldered FIRST
+#     and then dropped in from behind. The front stays solid (Z 0..slot_front_t)
+#     so the diffuser ring is untouched; the screw boss keeps full material on its
+#     front, inboard and pocket sides - only the outboard/outer quadrant is
+#     trenched.
+#
+#     v3.3: the trench OUTER edge is set flush with the straight channels' outer
+#     edge, so the corner outer wall matches the sides' 1.7mm (was ~4mm) - this
+#     also widens the trench to ~4.8mm (was 3.0mm) for thick silicone-insulated
+#     jumpers. Its INNER edge keeps a screw_clr wall to the corner screw pilot. ---
+screw_clr = 1.5          # mm - wall between the trench inner edge and the screw pilot hole
 trench_z0 = slot_front_t
 trench_z1 = frame_t      # open all the way through to the back face
-
-# Push the L's elbow outboard of the screw so trench_w/2 + hole radius +
-# trench_screw_clr of wall sits between the trench and the pilot on each leg.
-link_off = trench_w / 2 + screw_pilot_d / 2 + trench_screw_clr
-link_x = screw_x + link_off    # X of the vertical (L/R) leg, outboard of the screw
-link_y = screw_y + link_off    # Y of the horizontal (T/B) leg, outboard of the screw
 ch_overlap = 4.0         # mm - how far each leg reaches back into its channel
 
-# Keep-out checks - fail loudly rather than silently nick the screw or outer wall.
-assert link_y - trench_w / 2 - screw_pilot_d / 2 >= screw_y + trench_screw_clr - 1e-6, \
-    "horizontal corner trench too close to screw"
-assert link_x - trench_w / 2 - screw_pilot_d / 2 >= screw_x + trench_screw_clr - 1e-6, \
-    "vertical corner trench too close to screw"
-assert link_y + trench_w / 2 <= frame_h / 2 - 1.0, "corner trench breaks the outer wall (Y)"
-assert link_x + trench_w / 2 <= frame_w / 2 - 1.0, "corner trench breaks the outer wall (X)"
-# Each leg must sit inside its channel band so it merges with that open moat.
-assert abs(link_y - band_cy) <= led_ch_w / 2, "horizontal leg misses the T/B channel"
-assert abs(link_x - band_cx) <= led_ch_w / 2, "vertical leg misses the L/R channel"
+# Outer edge flush with the straight channel walls; inner edge set by screw clearance.
+ch_outer_x = band_cx + led_ch_w / 2    # = frame outer face - the side wall (1.7mm)
+ch_outer_y = band_cy + led_ch_w / 2
+in_x = screw_x + screw_pilot_d / 2 + screw_clr   # vertical-leg inner edge (X)
+in_y = screw_y + screw_pilot_d / 2 + screw_clr   # horizontal-leg inner edge (Y)
+tw_x = ch_outer_x - in_x               # vertical-leg width  (X)
+tw_y = ch_outer_y - in_y               # horizontal-leg width (Y)
+vx = (in_x + ch_outer_x) / 2           # vertical-leg centre X
+hy = (in_y + ch_outer_y) / 2           # horizontal-leg centre Y
+
+# Keep-out checks - fail loudly rather than silently pinch the wire or nick a screw.
+assert tw_x >= 3.0 and tw_y >= 3.0, "corner trench narrower than 3mm - reduce screw_clr"
+assert in_x >= band_cx - led_ch_w / 2, "vertical leg falls inboard of the L/R channel"
+assert in_y >= band_cy - led_ch_w / 2, "horizontal leg falls inboard of the T/B channel"
 
 
 def _trench(cx, cy, lx, ly):
@@ -311,11 +313,11 @@ def _trench(cx, cy, lx, ly):
 for sx in (1, -1):
     for sy in (1, -1):
         # Horizontal leg: from inside the top/bottom channel out to the elbow.
-        hx0, hx1 = sx * (tb_ch_half - ch_overlap), sx * link_x
-        frame = frame.cut(_trench((hx0 + hx1) / 2, sy * link_y, abs(hx1 - hx0), trench_w))
+        hx0, hx1 = sx * (tb_ch_half - ch_overlap), sx * ch_outer_x
+        frame = frame.cut(_trench((hx0 + hx1) / 2, sy * hy, abs(hx1 - hx0), tw_y))
         # Vertical leg: from the elbow down into the left/right channel.
-        vy0, vy1 = sy * (lr_ch_half - ch_overlap), sy * link_y
-        frame = frame.cut(_trench(sx * link_x, (vy0 + vy1) / 2, trench_w, abs(vy1 - vy0)))
+        vy0, vy1 = sy * (lr_ch_half - ch_overlap), sy * hy
+        frame = frame.cut(_trench(sx * vx, (vy0 + vy1) / 2, tw_x, abs(vy1 - vy0)))
 
 # ============================================================
 # EXPORT

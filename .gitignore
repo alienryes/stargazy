@@ -3,5 +3,5 @@ __pycache__/
 *.pyc
 *.png
 *.3mf
-build_frame.log
+*.log
 .venv/
