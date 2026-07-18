@@ -165,7 +165,24 @@ bends easily, is high strand-count, and won't shrink back when soldered:
 Keep the corner links short so they sit in the trenches. Voltage drop is
 negligible (~60 mV even at 1.2 A over the ~0.4 m perimeter).
 
-### Power (this build)
+### Power topology — OPEN DECISION (Pi 4 build)
+
+The Wago architecture below was designed for a Zero 2 W on a 2 A supply, where
+the ring's worst case genuinely threatened the budget. On the Pi 4 with a 3 A
+supply it may be over-engineering — worst case is Pi ~1.2 A + full-white ring
+~1.2 A = ~2.4 A, which fits. Two options, **to be decided once the GPIO
+splitter arrives** and the 5V pin routing can be seen in practice:
+
+| | Parts | Trade-off |
+|---|---|---|
+| **A: 5V off the splitter** | splitter only | Supply plugs into the Pi normally; strip takes 5V/GND/data from the splitter. No breakout, pigtail, Wagos or polarity metering. Isolation becomes a *software* guarantee (the `LED_BRIGHTNESS` cap), not a wiring one. |
+| **B: Wago isolation** (below) | + USB-C breakout (Pi Hut, £2.60 — CC resistors fitted by default) + USB-C **male pigtail** to feed the Pi | LED current physically cannot reach the Pi. More parts, more assembly, metering at both ends. |
+
+Note for B: the breakout is a *receptacle* and so is the Pi's power port, so a
+male pigtail is required to get from the Wagos back into the Pi. It needs no CC
+resistors — VBUS is injected directly, nothing negotiates.
+
+### Power (this build — option B)
 
 A single 5V adapter feeds both the Pi and the strip — **5V/3 A for the Pi 4**,
 or the **Stontronics 5V/2 A** for a Zero 2 W (see Budget below) — split at two
