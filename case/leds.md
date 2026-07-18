@@ -199,10 +199,15 @@ Budget, and **the supply must match the board**:
 | **Pi 4** | up to ~1.2 A typical, 3 A rated | <0.3 A | **5V / 3 A minimum — the Stontronics 2 A is NOT enough** |
 
 The Pi 4 is specified at 5V/3 A, so the 2 A adapter would risk brownouts under
-load (SD corruption, undervoltage throttling). This build uses a 5.1V/5 A USB-C
-supply instead — note that if it is a true **USB-PD** supply, its 5 A mode
-requires PD negotiation that a passive breakout won't perform, so budget for
-the **5V/3 A** USB-C fallback. That still clears the ~1.5 A total comfortably.
+load (SD corruption, undervoltage throttling). This build uses a **5.1V/5 A
+USB-PD** supply instead (label lists 5.1/9/12/15 V profiles — multiple fixed
+profiles means true PD). Its 5 A mode needs PD negotiation that a passive
+breakout cannot perform, so **budget 5V/3 A**, the USB-C default. That still
+clears the ~1.5 A total comfortably.
+
+A plain breakout with the CC resistors is sufficient — 5 V is the default
+profile, offered before any negotiation. A PD trigger/decoy board is only
+needed to request 9/12/15 V, which this build does not want.
 
 Full white on all 20 would be ~1.2 A on top, but the ring runs **blue/purple**
 and **capped in software**, so real draw is well under 0.3 A. The 221 is rated
