@@ -173,9 +173,16 @@ or the **Stontronics 5V/2 A** for a Zero 2 W (see Budget below) — split at two
 (and nothing is soldered to the Pi's power pads). There is room in the frame for
 the Wagos.
 
-1. Cut the adapter's plug off to expose bare 5V/GND.
-2. **Meter the polarity** of the bare wires (don't trust colours) — reversed 5V
-   kills the Pi. Insulate any unused conductors (D+/D-, shield).
+1. Get bare 5V/GND from the adapter:
+   - **USB-C supply (the Pi 4 build): do NOT cut the cable.** A USB-C source
+     will not enable VBUS until it sees 5.1 kΩ Rd pulldowns on the CC pins —
+     cutting the plug off removes that termination and you get nothing (and a
+     ruined supply). Use a **USB-C breakout board with the CC resistors
+     fitted** (~£4) and take 5V/GND from its screw terminals.
+   - **Micro-USB supply (Zero 2 W build):** cut the plug off to expose bare
+     5V/GND, then meter it as below.
+2. **Meter the polarity** before connecting anything (don't trust colours) —
+   reversed 5V kills the Pi. Insulate any unused conductors (D+/D-, shield).
 3. **5V Wago** (3-way): adapter 5V → Pi + strip 5V.
    **GND Wago** (3-way): adapter GND → Pi + strip GND.
 4. Feed the Pi from the Wagos via a pigtail back into its power port — **USB-C
@@ -189,11 +196,13 @@ Budget, and **the supply must match the board**:
 | Board | Pi draw | + ring (capped) | Supply needed |
 |---|---|---|---|
 | Zero 2 W | ~0.7 A | <0.3 A | 5V / 2 A — the Stontronics is fine |
-| **Pi 4** | up to ~1.2 A typical, 3 A rated | <0.3 A | **5V / 3 A — the Stontronics 2 A is NOT enough** |
+| **Pi 4** | up to ~1.2 A typical, 3 A rated | <0.3 A | **5V / 3 A minimum — the Stontronics 2 A is NOT enough** |
 
-The Pi 4 is specified at 5V/3 A. Reusing the 2 A adapter risks brownouts under
-load (SD corruption, undervoltage throttling) — swap it for the official 3 A
-supply before wiring the Pi 4 build. The ring's own draw is unchanged.
+The Pi 4 is specified at 5V/3 A, so the 2 A adapter would risk brownouts under
+load (SD corruption, undervoltage throttling). This build uses a 5.1V/5 A USB-C
+supply instead — note that if it is a true **USB-PD** supply, its 5 A mode
+requires PD negotiation that a passive breakout won't perform, so budget for
+the **5V/3 A** USB-C fallback. That still clears the ~1.5 A total comfortably.
 
 Full white on all 20 would be ~1.2 A on top, but the ring runs **blue/purple**
 and **capped in software**, so real draw is well under 0.3 A. The 221 is rated
