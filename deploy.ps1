@@ -1,6 +1,6 @@
 param(
     [string]$User = "operations",
-    [string]$PiHost = "192.168.1.82",
+    [string]$PiHost = "192.168.1.61",
     [string]$KeyFile = "$env:USERPROFILE\.ssh\id_rsa"
 )
 
@@ -38,6 +38,13 @@ if (Test-Path "config.toml") {
 Write-Host "--> Installing Python dependencies..."
 Invoke-Pi "pip3 install -r $REMOTE_DIR/requirements.txt --break-system-packages --prefer-binary"
 
+# Run once immediately — do this BEFORE the timer is live. The timer has
+# OnBootSec=30s + Persistent=true, so starting it soon after a boot fires an
+# immediate catch-up service run; if we ran display.py manually at the same time
+# the two inky processes would collide on the GPIO lines.
+Write-Host "--> Running display now..."
+Invoke-Pi "python3 $REMOTE_DIR/display.py"
+
 # Install and substitute user into systemd units
 Write-Host "--> Installing systemd units..."
 $svc = (Get-Content "systemd\inky-stargazing.service" -Raw) -replace "__USER__", $User
@@ -47,10 +54,6 @@ Invoke-Pi "sudo cp /tmp/inky-stargazing.service /tmp/inky-stargazing.timer /etc/
 Invoke-Pi "sudo systemctl daemon-reload"
 Invoke-Pi "sudo systemctl enable inky-stargazing.timer"
 Invoke-Pi "sudo systemctl restart inky-stargazing.timer"
-
-# Run once immediately
-Write-Host "--> Running display now..."
-Invoke-Pi "python3 $REMOTE_DIR/display.py"
 
 Write-Host ""
 Write-Host "==> Done."

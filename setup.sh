@@ -6,7 +6,7 @@ set -e
 USER="${1:-operations}"
 
 echo "==> Installing system packages..."
-apt-get install -y fonts-dejavu-core python3-spidev python3-rpi.gpio python3-pil python3-requests
+apt-get install -y fonts-dejavu-core python3-spidev python3-rpi.gpio python3-pil python3-requests python3-pip
 
 echo "==> Adding sudoers rule for $USER..."
 cat > /etc/sudoers.d/inky-stargazing <<EOF
