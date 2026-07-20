@@ -78,9 +78,11 @@ wipe/purge tower is added for the colour change.
 
 ## Wiring to the Pi
 
-Only the **data** line touches the Pi header — power and ground reach the strip
-from a Wago junction off the supply (see Power), so no LED current flows through
-the Pi and nothing is soldered to its power pads.
+The **data** line plus the strip's **5V and GND** all come from the GPIO
+splitter (see Power) — the ring is powered from the Pi's 5V rail via the
+splitter, and nothing is soldered to the Pi's pads. LED current does share the
+Pi's supply, so isolation is a *software* guarantee: the `LED_BRIGHTNESS` cap
+keeps the whole ring under ~0.3 A (see Power).
 
 **Why GPIO19 (pin 35, PWM1).** `rpi_ws281x` can drive the strip from PWM, PCM or
 SPI, but its SPI channel is **SPI0 MOSI (GPIO10) only** — and the Inky already
@@ -92,7 +94,7 @@ neighbours (pins 33/37) are free, so it is forgiving to land on.
 | Strip wire | Connect to |
 |---|---|
 | DIN (data) | GPIO19 — pin 35, PWM1 (add a 74AHCT125 level shifter if it glitches) |
-| +5V / GND | Wago junction off the 5V supply (not the Pi) — see Power |
+| +5V / GND | 5V and GND pins on the splitter's horizontal branch — see Power |
 
 ### Getting at the header (GPIO splitter)
 
@@ -110,12 +112,15 @@ strip) — the ring lifts out without desoldering anything.
 Before plugging anything in:
 
 1. **Meter the pin order on the horizontal branch.** These adapters sometimes
-   mirror or reverse numbering relative to the vertical header. Check a known
-   pin (3V3 on pin 1, GND on pin 6) against the vertical branch first — the same
-   discipline as metering the cut PSU lead.
-2. **Keep LED current off it.** Only the GPIO19 data lead and a ground reference
-   go through the adapter. The 5V/GND Wago injection (see Power) is unchanged —
-   the adapter's traces are not sized for the ring's current.
+   mirror or reverse numbering relative to the vertical header. Check known pins
+   (3V3 on pin 1, 5V on pins 2/4, GND on pin 6) against the vertical branch
+   first — **reversed 5V/GND kills the Pi.** This is the hard gate before
+   connecting the strip's power; do it with a working meter.
+2. **The strip's 5V/GND come off this branch (topology A).** LED current *does*
+   pass through the splitter, so keep the ring capped: at blue/purple, capped
+   brightness the whole ring is <0.3 A, which the adapter's traces carry easily.
+   Never drive sustained full white (~1.2 A) — that cap is the software
+   isolation guarantee doing the job the Wago used to (see Power).
 
 ### Pi 4 (this build)
 
@@ -159,53 +164,48 @@ bends easily, is high strand-count, and won't shrink back when soldered:
 | Run | Gauge |
 |---|---|
 | Corner jumpers (segment→segment; 5V/GND/data) | **26 AWG** — lays into the 3 mm corner trenches, solders to the small pads |
-| Tail 5V + GND (into the Wago) | **24 AWG** — 26 AWG is at/below the Wago 221's 0.14 mm² fine-stranded clamp floor |
+| Tail 5V + GND (to the splitter header) | **26 AWG** — fine at this current; crimp/solder to a DuPont header. (Use **24 AWG** for Option B: 26 AWG is at/below the Wago 221's 0.14 mm² fine-stranded clamp floor) |
 | Tail data (GPIO19) | 26 AWG |
 
 Keep the corner links short so they sit in the trenches. Voltage drop is
 negligible (~60 mV even at 1.2 A over the ~0.4 m perimeter).
 
-### Power topology — OPEN DECISION (Pi 4 build)
+### Power topology — DECIDED: option A (5V off the splitter)
 
-The Wago architecture below was designed for a Zero 2 W on a 2 A supply, where
-the ring's worst case genuinely threatened the budget. On the Pi 4 with a 3 A
-supply it may be over-engineering — worst case is Pi ~1.2 A + full-white ring
-~1.2 A = ~2.4 A, which fits. Two options, **to be decided once the GPIO
-splitter arrives** and the 5V pin routing can be seen in practice:
+**Decided 2026-07-20: option A.** The Wago architecture (Option B, below) was
+designed for a Zero 2 W on a 2 A supply, where the ring's worst case genuinely
+threatened the budget. On the Pi 4 with a 3 A supply that is over-engineering —
+worst case is Pi ~1.2 A + full-white ring ~1.2 A = ~2.4 A, which fits. The
+splitter has arrived and the Inky seats on its vertical branch as expected.
 
-| | Parts | Trade-off |
-|---|---|---|
-| **A: 5V off the splitter** | splitter only | Supply plugs into the Pi normally; strip takes 5V/GND/data from the splitter. No breakout, pigtail, Wagos or polarity metering. Isolation becomes a *software* guarantee (the `LED_BRIGHTNESS` cap), not a wiring one. |
-| **B: Wago isolation** (below) | + USB-C breakout (Pi Hut, £2.60 — CC resistors fitted by default) + USB-C **male pigtail** to feed the Pi | LED current physically cannot reach the Pi. More parts, more assembly, metering at both ends. |
+- Supply plugs into the **Pi's USB-C port normally** — nothing cut, no breakout,
+  no pigtail, no Wagos.
+- The strip takes **5V, GND and data all from the splitter's horizontal branch**
+  (5V pin 2/4, a GND pin, GPIO19 data on pin 35).
+- Isolation is a **software** guarantee: the `LED_BRIGHTNESS` cap (≤ 128, running
+  ~80) keeps the ring under ~0.3 A, so LED current through the Pi's 5V rail and
+  the splitter stays trivial. **Never sustained full white.**
+- **Gate:** meter the splitter's horizontal-branch pin order first (see Getting
+  at the header) — reversed 5V/GND kills the Pi.
 
-Note for B: the breakout is a *receptacle* and so is the Pi's power port, so a
-male pigtail is required to get from the Wagos back into the Pi. It needs no CC
-resistors — VBUS is injected directly, nothing negotiates.
+Option B (Wago isolation) is kept below as the rejected alternative — reach for
+it only if you ever want LED current physically off the Pi (e.g. running the
+ring bright).
 
-### Power (this build — option B)
+### Power wiring (option A, this build)
 
-A single 5V adapter feeds both the Pi and the strip — **5V/3 A for the Pi 4**,
-or the **Stontronics 5V/2 A** for a Zero 2 W (see Budget below) — split at two
-**Wago 221** lever connectors so the LED current never passes through the Pi
-(and nothing is soldered to the Pi's power pads). There is room in the frame for
-the Wagos.
+The 5V supply plugs straight into the Pi; the strip draws 5V/GND/data from the
+splitter. That is the whole of it — no cutting, breakout, pigtail or Wagos.
 
-1. Get bare 5V/GND from the adapter:
-   - **USB-C supply (the Pi 4 build): do NOT cut the cable.** A USB-C source
-     will not enable VBUS until it sees 5.1 kΩ Rd pulldowns on the CC pins —
-     cutting the plug off removes that termination and you get nothing (and a
-     ruined supply). Use a **USB-C breakout board with the CC resistors
-     fitted** (~£4) and take 5V/GND from its screw terminals.
-   - **Micro-USB supply (Zero 2 W build):** cut the plug off to expose bare
-     5V/GND, then meter it as below.
-2. **Meter the polarity** before connecting anything (don't trust colours) —
-   reversed 5V kills the Pi. Insulate any unused conductors (D+/D-, shield).
-3. **5V Wago** (3-way): adapter 5V → Pi + strip 5V.
-   **GND Wago** (3-way): adapter GND → Pi + strip GND.
-4. Feed the Pi from the Wagos via a pigtail back into its power port — **USB-C
-   for the Pi 4**, micro-USB for the Zero 2 W (keeps the Pi's input polyfuse in
-   circuit). Meter the pigtail's polarity too.
-5. Ground is common through the shared supply, so the GPIO19 → DIN data line has
+1. Plug the **5V supply into the Pi's USB-C port** as normal. (This build's
+   supply is a 5.1V/5 A USB-PD brick — it delivers the 5V default profile with
+   no negotiation, which is all the Pi 4 needs; see the budget note below.)
+2. **Meter the splitter's horizontal-branch pin order** (see Getting at the
+   header) before connecting anything — reversed 5V/GND kills the Pi.
+3. Strip **5V** → a 5V pin on the horizontal branch (pin 2 or 4).
+   Strip **GND** → a GND pin (6/9/14/20/25/30/34/39).
+   Strip **DIN** → **GPIO19, pin 35**.
+4. Ground is common through the shared header, so the GPIO19 → DIN data line has
    its reference.
 
 Budget, and **the supply must match the board**:
@@ -215,27 +215,45 @@ Budget, and **the supply must match the board**:
 | Zero 2 W | ~0.7 A | <0.3 A | 5V / 2 A — the Stontronics is fine |
 | **Pi 4** | up to ~1.2 A typical, 3 A rated | <0.3 A | **5V / 3 A minimum — the Stontronics 2 A is NOT enough** |
 
-The Pi 4 is specified at 5V/3 A, so the 2 A adapter would risk brownouts under
-load (SD corruption, undervoltage throttling). This build uses a **5.1V/5 A
-USB-PD** supply instead (label lists 5.1/9/12/15 V profiles — multiple fixed
-profiles means true PD). Its 5 A mode needs PD negotiation that a passive
-breakout cannot perform, so **budget 5V/3 A**, the USB-C default. That still
-clears the ~1.5 A total comfortably.
+The Pi 4 is specified at 5V/3 A, so a 2 A adapter would risk brownouts under load
+(SD corruption, undervoltage throttling). This build uses a **5.1V/5 A USB-PD**
+supply (label lists 5.1/9/12/15 V profiles — multiple fixed profiles means true
+PD). Its 5 A mode needs PD negotiation, but the Pi only ever draws the 5V default
+profile, so **budget 5V/3 A**. That clears the ~1.5 A typical (Pi + capped ring)
+comfortably, and even the ~2.4 A theoretical worst case fits.
 
-A plain breakout with the CC resistors is sufficient — 5 V is the default
-profile, offered before any negotiation. A PD trigger/decoy board is only
-needed to request 9/12/15 V, which this build does not want.
-
-Full white on all 20 would be ~1.2 A on top, but the ring runs **blue/purple**
-and **capped in software**, so real draw is well under 0.3 A. The 221 is rated
-32 A — hugely over-spec.
-
-- **Brightness cap ≤ 128 / 255** (`LED_BRIGHTNESS`, see below). Never drive
-  sustained full white on all 20 — both for the current budget and because the
-  heat would risk softening/warping the PLA case (glass transition ~60 °C).
-  Low-brightness blue/purple runs cool.
+- **Brightness cap ≤ 128 / 255** (`LED_BRIGHTNESS`, see below). Under topology A
+  this cap is the *only* thing keeping LED current off the Pi's rail modest, so
+  it matters more than ever: never drive sustained full white on all 20 — both
+  for the current budget and because the heat would risk softening/warping the
+  PLA case (glass transition ~60 °C). Low-brightness blue/purple runs cool and
+  draws <0.3 A.
 - GPIO19 data is 3.3V; WS2812B officially wants 5V logic. Short runs often work
-  direct — add the level shifter if the first few LEDs flicker.
+  direct — add the 74AHCT125 level shifter if the first few LEDs flicker.
+
+### Option B — Wago isolation (alternative, not used)
+
+Kept for reference. Physically isolates LED current from the Pi, at the cost of a
+USB-C breakout, a male pigtail and two Wago 221s. Reach for it only if you ever
+want to run the ring bright enough that its current shouldn't share the Pi's
+rail. A single 5V adapter feeds both, split at two **Wago 221** lever connectors:
+
+1. Get bare 5V/GND from the adapter:
+   - **USB-C supply: do NOT cut the cable.** A USB-C source will not enable VBUS
+     until it sees 5.1 kΩ Rd pulldowns on the CC pins — cutting the plug off
+     removes that termination and you get nothing (and a ruined supply). Use a
+     **USB-C breakout board with the CC resistors fitted** (Pi Hut, £2.60) and
+     take 5V/GND from its screw terminals.
+   - **Micro-USB supply (Zero 2 W):** cut the plug off to expose bare 5V/GND.
+2. **Meter the polarity** before connecting anything (don't trust colours) —
+   reversed 5V kills the Pi. Insulate any unused conductors (D+/D-, shield).
+3. **5V Wago** (3-way): adapter 5V → Pi + strip 5V.
+   **GND Wago** (3-way): adapter GND → Pi + strip GND.
+4. Feed the Pi from the Wagos via a **male pigtail** back into its power port
+   (the breakout and the Pi's port are both receptacles) — USB-C for the Pi 4,
+   micro-USB for the Zero 2 W (keeps the Pi's input polyfuse in circuit). The
+   pigtail needs no CC resistors — VBUS is injected directly, nothing
+   negotiates. Meter its polarity too. The 221 is rated 32 A, hugely over-spec.
 
 ## Pi software (not yet implemented)
 
