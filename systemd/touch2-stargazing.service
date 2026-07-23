@@ -1,13 +1,15 @@
 [Unit]
 Description=Stargazing Display
-After=network-online.target
+After=network-online.target fbcon-detach.service
 Wants=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 User=__USER__
 WorkingDirectory=/home/__USER__/touch2-stargazing
 ExecStart=/usr/bin/python3 /home/__USER__/touch2-stargazing/display.py
+Restart=always
+RestartSec=5
 StandardOutput=journal
 StandardError=journal
 

@@ -23,10 +23,10 @@ fi
 
 echo "==> Adding sudoers rule for $USER..."
 cat > /etc/sudoers.d/touch2-stargazing <<EOF
-$USER ALL=(ALL) NOPASSWD: /usr/bin/cp /tmp/touch2-stargazing.service /tmp/touch2-stargazing.timer /tmp/fbcon-detach.service /etc/systemd/system/
+$USER ALL=(ALL) NOPASSWD: /usr/bin/cp /tmp/touch2-stargazing.service /tmp/fbcon-detach.service /etc/systemd/system/
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable touch2-stargazing.timer
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart touch2-stargazing.timer
+$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable touch2-stargazing.service
+$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart touch2-stargazing.service
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable fbcon-detach.service
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start fbcon-detach.service
 EOF

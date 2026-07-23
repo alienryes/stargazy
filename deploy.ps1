@@ -39,25 +39,20 @@ Write-Host "--> Installing Python dependencies..."
 Invoke-Pi "pip3 install -r $REMOTE_DIR/requirements.txt --break-system-packages --prefer-binary"
 
 # Install systemd units (substitute the user into the service).
-# fbcon-detach frees /dev/fb0 from the console so the dashboard isn't overdrawn;
-# enable + start it BEFORE the one-off render so the framebuffer is already ours.
+# fbcon-detach frees /dev/fb0 from the console so the display isn't overdrawn.
 Write-Host "--> Installing systemd units..."
 $svc = (Get-Content "systemd\touch2-stargazing.service" -Raw) -replace "__USER__", $User
 $svc | ssh -i $KeyFile -o StrictHostKeyChecking=no $PI "cat > /tmp/touch2-stargazing.service"
-Copy-ToPi "systemd\touch2-stargazing.timer" "/tmp/touch2-stargazing.timer"
 Copy-ToPi "systemd\fbcon-detach.service" "/tmp/fbcon-detach.service"
-Invoke-Pi "sudo cp /tmp/touch2-stargazing.service /tmp/touch2-stargazing.timer /tmp/fbcon-detach.service /etc/systemd/system/"
+Invoke-Pi "sudo cp /tmp/touch2-stargazing.service /tmp/fbcon-detach.service /etc/systemd/system/"
+# Retire the old 2-hourly timer if present (superseded by the always-on service).
+Invoke-Pi "sudo systemctl disable --now touch2-stargazing.timer 2>/dev/null; sudo rm -f /etc/systemd/system/touch2-stargazing.timer"
 Invoke-Pi "sudo systemctl daemon-reload"
 Invoke-Pi "sudo systemctl enable fbcon-detach.service"
 Invoke-Pi "sudo systemctl start fbcon-detach.service"
-
-# Render once immediately so the panel updates without waiting for the timer.
-Write-Host "--> Running display now..."
-Invoke-Pi "python3 $REMOTE_DIR/display.py"
-
-Invoke-Pi "sudo systemctl enable touch2-stargazing.timer"
-Invoke-Pi "sudo systemctl restart touch2-stargazing.timer"
+Invoke-Pi "sudo systemctl enable touch2-stargazing.service"
+Invoke-Pi "sudo systemctl restart touch2-stargazing.service"
 
 Write-Host ""
 Write-Host "==> Done."
-Write-Host "    Timer fires every 2 h at :30 past. Check logs: journalctl -u touch2-stargazing"
+Write-Host "    Always-on animated display service running. Logs: journalctl -u touch2-stargazing -f"

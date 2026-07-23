@@ -9,7 +9,7 @@ A stargazing conditions display for the [Pimoroni Inky Impression 4"](https://sh
 - Moon phase geometry with next new/full moon dates
 - Tomorrow's forecast, sun times, weather (temp, dew, humidity, wind)
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
-- Refreshes every 2 hours via systemd timer; holds image without power between updates
+- Live, data-reactive animated night sky behind the dashboard; always-on systemd service
 
 ---
 
@@ -94,7 +94,7 @@ From Windows:
 .\deploy.ps1
 ```
 
-This copies files, installs `inky` via pip, installs the systemd timer, and runs the display immediately. The timer refreshes the display every 2 hours at :30 past.
+This copies files, installs the Python dependencies, installs the `fbcon-detach` and display services, and starts the always-on animated display.
 
 ---
 
@@ -147,7 +147,6 @@ config.example.toml     Template
 deploy.ps1              Windows → Pi deploy script
 setup.sh                One-time Pi setup (run with sudo)
 systemd/
-  touch2-stargazing.service
-  touch2-stargazing.timer
+  touch2-stargazing.service   (always-on animated display daemon)
   fbcon-detach.service
 ```

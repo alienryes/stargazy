@@ -1,3 +1,10 @@
 [ha]
 url = "http://192.168.1.167:8123"
 token = "your-long-lived-access-token-here"
+
+[display]
+# "animated" = live data-reactive night sky behind the dashboard (default);
+# "static"   = redraw only when the data changes (no animation).
+mode = "animated"
+fps = 20
+data_refresh_min = 15
