@@ -25,9 +25,9 @@ from pathlib import Path
 import numpy as np
 import requests
 import tomllib
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.2.1"
+FIRMWARE_VERSION = "2.3.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -241,7 +241,7 @@ def make_base(top, bot):
 
 # Forced vivid clear-sky mood for --demo (visual testing regardless of weather).
 DEMO_PARAMS = {"twilight": False, "gain": 1.0, "drift": 6.0, "meteors": True,
-               "met_min": 7.0, "met_max": 15.0}
+               "met_min": 7.0, "met_max": 15.0, "cloud": 30, "cloud_speed": 14.0}
 
 
 def sky_params(states):
@@ -268,6 +268,8 @@ def sky_params(states):
         "meteors": not no_dark,
         "met_min": met_min,
         "met_max": met_min + 8.0,
+        "cloud": cloud,                      # % -> number of drifting cloud sprites
+        "cloud_speed": 6.0 + wind * 1.2,     # px/sec
     }
 
 
@@ -316,6 +318,53 @@ def draw_meteor(draw, m):
         draw.line([(x1, y1), (x2, y2)], fill=c, width=2)
     hb = int(255 * fade)
     draw.ellipse([m["x"] - 2, m["y"] - 2, m["x"] + 2, m["y"] + 2], fill=(hb, hb, int(235 * fade)))
+
+
+# Drifting cloud sprites (phase 2). Pre-rendered blurred blobs, count scaled by
+# cloud cover; they drift across the sky and dim the stars they pass over.
+MAX_CLOUDS = 7
+CLOUD_COLOUR = (48, 53, 72)   # muted blue-grey, lighter than the navy sky
+CLOUD_SPRITES = None
+
+
+def make_cloud_sprite():
+    """One soft, translucent cloud: overlapping blobs on an alpha mask, blurred."""
+    w = random.randint(360, 540)
+    h = random.randint(150, 240)
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    for _ in range(random.randint(5, 8)):
+        cx = random.uniform(w * 0.2, w * 0.8)
+        cy = random.uniform(h * 0.35, h * 0.65)
+        rw = random.uniform(w * 0.12, w * 0.30)
+        rh = random.uniform(h * 0.18, h * 0.38)
+        md.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=random.randint(120, 200))
+    mask = mask.filter(ImageFilter.GaussianBlur(w * 0.07))
+    mask = mask.point(lambda p: int(p * 0.6))   # cap opacity so stars faintly show through
+    sprite = Image.new("RGBA", (w, h), CLOUD_COLOUR + (0,))
+    sprite.putalpha(mask)
+    return sprite
+
+
+def cloud_sprites():
+    global CLOUD_SPRITES
+    if CLOUD_SPRITES is None:
+        CLOUD_SPRITES = [make_cloud_sprite() for _ in range(5)]
+    return CLOUD_SPRITES
+
+
+def spawn_cloud():
+    sp = random.choice(cloud_sprites())
+    if random.random() < 0.5:
+        sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
+    return {"sprite": sp,
+            "x": random.uniform(-sp.width, W),
+            "y": random.randint(-40, int(H * 0.72))}
+
+
+def initial_clouds(params):
+    n = round(params.get("cloud", 0) / 100 * MAX_CLOUDS)
+    return [spawn_cloud() for _ in range(n)]
 
 
 def render_foreground(states):
@@ -506,12 +555,14 @@ def _bases():
     return NIGHT_BASE, TWILIGHT_BASE
 
 
-def compose(fg, params, t, meteors):
-    """One composited frame: animated sky + the RGBA dashboard overlay on top."""
+def compose(fg, params, t, meteors, clouds):
+    """One composited frame: sky + drifting clouds + meteors + dashboard on top."""
     night, twi = _bases()
     frame = (twi if params["twilight"] else night).copy()
     d = ImageDraw.Draw(frame)
     draw_stars(d, t, params)
+    for c in clouds:
+        frame.paste(c["sprite"], (int(c["x"]), c["y"]), c["sprite"])
     for m in meteors:
         draw_meteor(d, m)
     frame.paste(fg, (0, 0), fg)
@@ -562,7 +613,7 @@ def run_daemon(ha_url, token, animated, fps, refresh_min, demo=False):
             last = None
             while _RUNNING:
                 if state["fg"] is not last:
-                    frame = compose(state["fg"], state["params"], 0.0, [])
+                    frame = compose(state["fg"], state["params"], 0.0, [], initial_clouds(state["params"]))
                     fb.seek(0)
                     fb.write(to_fb_bytes(frame))
                     last = state["fg"]
@@ -573,11 +624,23 @@ def run_daemon(ha_url, token, animated, fps, refresh_min, demo=False):
         frame_dt = 1.0 / fps
         t0 = time.time()
         meteors = []
+        clouds = initial_clouds(state["params"])
         next_meteor = t0 + random.uniform(1.0, 3.0)
         while _RUNNING:
             now = time.time()
             t = now - t0
             params = state["params"]
+            # Clouds: match the count to cover, drift across, recycle off the right edge.
+            tgt = round(params["cloud"] / 100 * MAX_CLOUDS)
+            while len(clouds) > tgt:
+                clouds.pop()
+            while len(clouds) < tgt:
+                clouds.append(spawn_cloud())
+            for c in clouds:
+                c["x"] += params["cloud_speed"] * frame_dt
+                if c["x"] > W:
+                    c["x"] = -c["sprite"].width
+                    c["y"] = random.randint(-40, int(H * 0.72))
             if params["meteors"] and now >= next_meteor:
                 meteors.append(spawn_meteor())
                 next_meteor = now + random.uniform(params["met_min"], params["met_max"])
@@ -587,7 +650,7 @@ def run_daemon(ha_url, token, animated, fps, refresh_min, demo=False):
                 m["life"] += 1
                 if m["life"] >= m["max"] or m["y"] > H + 20 or m["x"] < -20:
                     meteors.remove(m)
-            frame = compose(state["fg"], params, t, meteors)
+            frame = compose(state["fg"], params, t, meteors, clouds)
             fb.seek(0)
             fb.write(to_fb_bytes(frame))
             dt = time.time() - now
@@ -616,8 +679,9 @@ def main():
     if args.save or args.once:
         log.info("Fetching HA states...")
         states = fetch_states(ha_url, token)
+        params = sky_params(states)
         fg = render_foreground(states)
-        frame = compose(fg, sky_params(states), 1.7, [])
+        frame = compose(fg, params, 1.7, [], initial_clouds(params))
         if args.save:
             frame.save(args.save)
             log.info("Saved %s", args.save)
