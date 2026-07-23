@@ -25,9 +25,9 @@ from pathlib import Path
 import numpy as np
 import requests
 import tomllib
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.3.0"
+FIRMWARE_VERSION = "2.3.1"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -334,12 +334,18 @@ def make_cloud_sprite():
     mask = Image.new("L", (w, h), 0)
     md = ImageDraw.Draw(mask)
     for _ in range(random.randint(5, 8)):
-        cx = random.uniform(w * 0.2, w * 0.8)
-        cy = random.uniform(h * 0.35, h * 0.65)
-        rw = random.uniform(w * 0.12, w * 0.30)
-        rh = random.uniform(h * 0.18, h * 0.38)
+        cx = random.uniform(w * 0.30, w * 0.70)   # keep blobs off the tile edges
+        cy = random.uniform(h * 0.38, h * 0.62)
+        rw = random.uniform(w * 0.10, w * 0.22)
+        rh = random.uniform(h * 0.14, h * 0.28)
         md.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=random.randint(120, 200))
-    mask = mask.filter(ImageFilter.GaussianBlur(w * 0.07))
+    mask = mask.filter(ImageFilter.GaussianBlur(w * 0.06))
+    # Feather the alpha to zero at the tile border so the sprite never shows a
+    # hard rectangular edge where it overlaps the sky.
+    env = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(env).rectangle([w * 0.14, h * 0.16, w * 0.86, h * 0.84], fill=255)
+    env = env.filter(ImageFilter.GaussianBlur(min(w, h) * 0.13))
+    mask = ImageChops.multiply(mask, env)
     mask = mask.point(lambda p: int(p * 0.6))   # cap opacity so stars faintly show through
     sprite = Image.new("RGBA", (w, h), CLOUD_COLOUR + (0,))
     sprite.putalpha(mask)
