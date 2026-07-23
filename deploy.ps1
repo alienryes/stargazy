@@ -1,6 +1,6 @@
 param(
     [string]$User = "operations",
-    [string]$PiHost = "192.168.1.61",
+    [string]$PiHost = "192.168.1.62",
     [string]$KeyFile = "$env:USERPROFILE\.ssh\id_rsa"
 )
 
@@ -38,20 +38,23 @@ if (Test-Path "config.toml") {
 Write-Host "--> Installing Python dependencies..."
 Invoke-Pi "pip3 install -r $REMOTE_DIR/requirements.txt --break-system-packages --prefer-binary"
 
-# Run once immediately — do this BEFORE the timer is live. The timer has
-# OnBootSec=30s + Persistent=true, so starting it soon after a boot fires an
-# immediate catch-up service run; if we ran display.py manually at the same time
-# the two inky processes would collide on the GPIO lines.
-Write-Host "--> Running display now..."
-Invoke-Pi "python3 $REMOTE_DIR/display.py"
-
-# Install and substitute user into systemd units
+# Install systemd units (substitute the user into the service).
+# fbcon-detach frees /dev/fb0 from the console so the dashboard isn't overdrawn;
+# enable + start it BEFORE the one-off render so the framebuffer is already ours.
 Write-Host "--> Installing systemd units..."
 $svc = (Get-Content "systemd\touch2-stargazing.service" -Raw) -replace "__USER__", $User
 $svc | ssh -i $KeyFile -o StrictHostKeyChecking=no $PI "cat > /tmp/touch2-stargazing.service"
 Copy-ToPi "systemd\touch2-stargazing.timer" "/tmp/touch2-stargazing.timer"
-Invoke-Pi "sudo cp /tmp/touch2-stargazing.service /tmp/touch2-stargazing.timer /etc/systemd/system/"
+Copy-ToPi "systemd\fbcon-detach.service" "/tmp/fbcon-detach.service"
+Invoke-Pi "sudo cp /tmp/touch2-stargazing.service /tmp/touch2-stargazing.timer /tmp/fbcon-detach.service /etc/systemd/system/"
 Invoke-Pi "sudo systemctl daemon-reload"
+Invoke-Pi "sudo systemctl enable fbcon-detach.service"
+Invoke-Pi "sudo systemctl start fbcon-detach.service"
+
+# Render once immediately so the panel updates without waiting for the timer.
+Write-Host "--> Running display now..."
+Invoke-Pi "python3 $REMOTE_DIR/display.py"
+
 Invoke-Pi "sudo systemctl enable touch2-stargazing.timer"
 Invoke-Pi "sudo systemctl restart touch2-stargazing.timer"
 

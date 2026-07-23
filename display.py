@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Stargazing conditions display for Pimoroni Inky Impression 4" (640×400, 7-colour)."""
+"""Stargazing conditions display for the Raspberry Pi Touch Display 2 (5", 720x1280).
+
+Renders a 1280x720 landscape RGB dashboard and writes it to the Linux framebuffer
+(/dev/fb0, RGB565) rotated 90 deg to the panel's native portrait. Data comes from
+the AstroWeather integration via the Home Assistant REST API.
+"""
 
 import argparse
 import logging
@@ -13,7 +18,7 @@ import requests
 import tomllib
 from PIL import Image, ImageDraw, ImageFont
 
-FIRMWARE_VERSION = "1.2.0"
+FIRMWARE_VERSION = "2.0.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -21,28 +26,31 @@ FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
-# Inky Impression palette colour indices
-BLACK, WHITE, GREEN, BLUE, RED, YELLOW, ORANGE = 0, 1, 2, 3, 4, 5, 6
+# Framebuffer geometry (Touch Display 2 native portrait). Landscape render is
+# rotated to this before packing to RGB565. Flip ROTATE if the panel is upside down.
+FB_DEV = "/dev/fb0"
+FB_W, FB_H = 720, 1280
+ROTATE = Image.ROTATE_90
 
-# Preview palette for --save mode (RGB values for each index)
-PREVIEW_PALETTE = [
-    0,   0,   0,    # 0 BLACK
-    255, 255, 255,  # 1 WHITE
-    0,   200, 0,    # 2 GREEN
-    30,  80,  220,  # 3 BLUE
-    220, 30,  30,   # 4 RED
-    240, 220, 0,    # 5 YELLOW
-    230, 120, 0,    # 6 ORANGE
-] + [0, 0, 0] * 249
+# ── Full-RGB palette (dark night-sky theme) ───────────────────────────────
+BG     = (10, 12, 28)      # near-black navy background
+WHITE  = (230, 232, 240)
+GREEN  = (46, 204, 96)
+BLUE   = (70, 130, 240)
+RED    = (224, 66, 66)
+YELLOW = (240, 212, 60)
+ORANGE = (238, 140, 44)
+DIM    = (90, 98, 120)     # divider lines / subtle rules
 
-W, H = 640, 400
+W, H = 1280, 720
 
-# Layout constants
-DIV_X    = 375                        # vertical divider: conditions | moon
-HLINE1   = 40                         # header bottom
-HLINE2   = 128                        # verdict bottom
-HLINE3   = 290                        # footer top
-RIGHT_CX = (DIV_X + W) // 2          # horizontal centre of right (moon) panel = 507
+# ── Layout constants (1280x720 landscape) ─────────────────────────────────
+MARGIN = 28
+HLINE1 = 80                 # header bottom
+HLINE2 = 252                # verdict bottom
+HLINE3 = 548                # footer top
+DIV_X  = 800                # vertical divider: conditions | moon
+RIGHT_CX = (DIV_X + W) // 2  # centre of right (moon) panel = 1040
 
 ENTITIES = [
     "sensor.astroweather_backyard_astronomical_night_duration",
@@ -82,11 +90,10 @@ PHASE_NAMES = {
 }
 
 # Seeded star positions in the header gap between "STARGAZING" and the timestamp.
-# x 235–490 avoids both text blocks; y 5–32 stays within the 40px header.
 _rng.seed(42)
 _STARS = [
-    (int(_rng.uniform(235, 490)), int(_rng.uniform(5, 32)), 2 if _rng.random() > 0.6 else 1)
-    for _ in range(14)
+    (int(_rng.uniform(430, 880)), int(_rng.uniform(10, 66)), 2 if _rng.random() > 0.55 else 1)
+    for _ in range(20)
 ]
 
 
@@ -141,7 +148,7 @@ def _font(name, size):
 
 
 def _verdict(score):
-    """(label, colour_index) for a deep-sky forecast score 0–100."""
+    """(label, colour) for a deep-sky forecast score 0-100."""
     if score >= 75:
         return "EXCELLENT", GREEN
     if score >= 50:
@@ -162,20 +169,20 @@ def _bar_colour(value, good, warn):
 
 
 def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
-    """Draw moon phase on a palette-mode image using parametric geometry."""
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=BLUE, outline=YELLOW, width=2)
+    """Draw moon phase using parametric geometry."""
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=BLUE, outline=YELLOW, width=3)
 
     if illumination < 1:
-        return  # new moon — dark circle only
+        return  # new moon -- dark circle only
 
     if illumination > 99:
-        draw.ellipse([cx - r + 2, cy - r + 2, cx + r - 2, cy + r - 2], fill=YELLOW)
+        draw.ellipse([cx - r + 3, cy - r + 3, cx + r - 3, cy + r - 3], fill=YELLOW)
         return
 
     phase_angle = math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * illumination / 100.0)))
     term_scale  = math.cos(phase_angle)
 
-    steps = 80
+    steps = 120
     pts   = []
     for i in range(steps + 1):
         t = math.pi / 2.0 - math.pi * i / steps
@@ -191,15 +198,14 @@ def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
 
 
 def render(states):
-    """Render the 640×400 display image. Returns a PIL Image in P mode."""
-    img  = Image.new("P", (W, H))
-    img.putpalette(PREVIEW_PALETTE)
+    """Render the 1280x720 landscape display image. Returns a PIL RGB Image."""
+    img  = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
-    f_large = _font("DejaVuSans-Bold.ttf", 52)
-    f_med   = _font("DejaVuSans-Bold.ttf", 22)
-    f_sm    = _font("DejaVuSans.ttf", 16)
-    f_xs    = _font("DejaVuSans.ttf", 13)
+    f_large = _font("DejaVuSans-Bold.ttf", 96)
+    f_med   = _font("DejaVuSans-Bold.ttf", 42)
+    f_sm    = _font("DejaVuSans.ttf", 30)
+    f_xs    = _font("DejaVuSans.ttf", 24)
 
     # ── Parse ─────────────────────────────────────────────────────────
     s = states
@@ -236,39 +242,34 @@ def render(states):
 
     waxing = any(k in moon_icon for k in ("waxing", "new", "first"))
 
-    # ── Background ────────────────────────────────────────────────────
-    draw.rectangle([0, 0, W, H], fill=BLACK)
-
     # ── Stars (precomputed, header zone) ──────────────────────────────
     for sx, sy, sr in _STARS:
         draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=WHITE)
 
-    # ── Header (y 0–40) ───────────────────────────────────────────────
-    draw.text((12, 10), "STARGAZING", fill=WHITE, font=f_med)
+    # ── Header (y 0-80) ───────────────────────────────────────────────
+    draw.text((MARGIN, 18), "STARGAZING", fill=WHITE, font=f_med)
     now_str = datetime.now().strftime("%a %d %b  %H:%M")
     ts_w    = int(draw.textlength(now_str, font=f_sm))
-    draw.text((W - ts_w - 10, 13), now_str, fill=WHITE, font=f_sm)
-    draw.line([(0, HLINE1), (W, HLINE1)], fill=WHITE, width=1)
+    draw.text((W - ts_w - MARGIN, 28), now_str, fill=WHITE, font=f_sm)
+    draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM, width=2)
 
-    # ── Verdict (y 44–126) ────────────────────────────────────────────
+    # ── Verdict (y 80-252) ────────────────────────────────────────────
     if no_dark:
         v_text   = "NO DARK SKY"
         v_colour = ORANGE
         v_sub    = f"Next dark night: {next_dark.strftime('%d %b') if next_dark else 'unknown'}"
     else:
         v_text, v_colour = _verdict(dsky_today)
-        v_sub = f"Deep sky: {dsky_today}%  –  {dsky_today_desc}"
+        v_sub = f"Deep sky: {dsky_today}%  -  {dsky_today_desc}"
 
-    draw.text((12, 46), v_text, fill=v_colour, font=f_large)
-    draw.text((12, 107), v_sub, fill=WHITE, font=f_sm)
-    draw.line([(0, HLINE2), (W, HLINE2)], fill=WHITE, width=1)
+    draw.text((MARGIN, 92), v_text, fill=v_colour, font=f_large)
+    draw.text((MARGIN, 202), v_sub, fill=WHITE, font=f_sm)
+    draw.line([(0, HLINE2), (W, HLINE2)], fill=DIM, width=2)
 
-    # ── Left panel (x 0–375, y 132–288) ──────────────────────────────
-    LP_CX = DIV_X // 2  # 187 — horizontal centre of left panel
+    # ── Left panel (x 0-800, y 252-548) ──────────────────────────────
+    LP_CX = DIV_X // 2  # 400 -- horizontal centre of left panel
 
     if no_dark:
-        # Condition bars are irrelevant without astronomical darkness.
-        # Show a countdown to next dark sky instead.
         if next_dark:
             days_until = max(0, (next_dark.date() - datetime.now().date()).days)
             if days_until == 0:
@@ -278,20 +279,20 @@ def render(states):
                 big_text = str(days_until)
                 sub_text = "days until dark sky"
             big_w = int(draw.textlength(big_text, font=f_large))
-            draw.text((LP_CX - big_w // 2, 148), big_text, fill=ORANGE, font=f_large)
+            draw.text((LP_CX - big_w // 2, 300), big_text, fill=ORANGE, font=f_large)
             sub_w = int(draw.textlength(sub_text, font=f_sm))
-            draw.text((LP_CX - sub_w // 2, 210), sub_text, fill=WHITE, font=f_sm)
+            draw.text((LP_CX - sub_w // 2, 410), sub_text, fill=WHITE, font=f_sm)
             dt_text = next_dark.strftime("%d %b %Y")
             dt_w = int(draw.textlength(dt_text, font=f_xs))
-            draw.text((LP_CX - dt_w // 2, 230), dt_text, fill=ORANGE, font=f_xs)
+            draw.text((LP_CX - dt_w // 2, 452), dt_text, fill=ORANGE, font=f_xs)
         else:
             msg = "No dark sky"
             msg_w = int(draw.textlength(msg, font=f_med))
-            draw.text((LP_CX - msg_w // 2, 195), msg, fill=ORANGE, font=f_med)
+            draw.text((LP_CX - msg_w // 2, 380), msg, fill=ORANGE, font=f_med)
     else:
-        LX, LBLW, BARW, BARH, GAP = 12, 105, 210, 14, 37
+        LX, LBLW, BARW, BARH, GAP = MARGIN, 200, 400, 30, 66
         BARX = LX + LBLW
-        VALX = BARX + BARW + 8
+        VALX = BARX + BARW + 16
 
         conditions = [
             ("Cloudless",    100 - cloud, _bar_colour(100 - cloud, 60, 40)),
@@ -300,57 +301,55 @@ def render(states):
             ("Calm",         calm,        _bar_colour(calm,         70, 50)),
         ]
         for i, (label, value, colour) in enumerate(conditions):
-            y = 138 + i * GAP
+            y = 272 + i * GAP
             draw.text((LX, y), label, fill=WHITE, font=f_sm)
-            # Coloured border > black trough > coloured fill — correct empty/full contrast.
-            draw.rectangle([BARX - 1, y + 2,  BARX + BARW + 1, y + BARH + 4], fill=BLUE)
-            draw.rectangle([BARX,     y + 3,  BARX + BARW,     y + BARH + 3], fill=BLACK)
-            filled = max(1, int(BARW * value / 100))
-            draw.rectangle([BARX, y + 3, BARX + filled, y + BARH + 3], fill=colour)
+            # Coloured border > background trough > coloured fill.
+            draw.rectangle([BARX - 2, y + 2, BARX + BARW + 2, y + BARH + 6], fill=BLUE)
+            draw.rectangle([BARX,     y + 4, BARX + BARW,     y + BARH + 4], fill=BG)
+            filled = max(2, int(BARW * value / 100))
+            draw.rectangle([BARX, y + 4, BARX + filled, y + BARH + 4], fill=colour)
             draw.text((VALX, y), f"{value}%", fill=WHITE, font=f_sm)
 
     # Vertical divider
-    draw.line([(DIV_X, HLINE2), (DIV_X, HLINE3)], fill=WHITE, width=1)
+    draw.line([(DIV_X, HLINE2), (DIV_X, HLINE3)], fill=DIM, width=2)
 
-    # ── Moon — right panel (x 380–640, y 132–288) ─────────────────────
-    # All text below the circle avoids the original overlap with phase labels.
-    MCX = RIGHT_CX  # 507
-    MR  = 58
-    MCY = 194       # circle: top=136, bottom=252
+    # ── Moon -- right panel (x 800-1280, y 252-548) ──────────────────
+    MCX = RIGHT_CX  # 1040
+    MR  = 110
+    MCY = 372       # circle: top=262, bottom=482
 
     _draw_moon(draw, MCX, MCY, MR, moon_phase, waxing)
 
-    # Phase name centred below circle
     phase_name = PHASE_NAMES.get(
         moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title()
     )
     pn_w = int(draw.textlength(phase_name, font=f_sm))
-    draw.text((MCX - pn_w // 2, MCY + MR + 4), phase_name, fill=YELLOW, font=f_sm)
+    draw.text((MCX - pn_w // 2, MCY + MR + 8), phase_name, fill=YELLOW, font=f_sm)
 
-    # Constellation centred below phase name
     if moon_const:
         mc_text = f"in {moon_const}"
         mc_w    = int(draw.textlength(mc_text, font=f_xs))
-        draw.text((MCX - mc_w // 2, MCY + MR + 22), mc_text, fill=WHITE, font=f_xs)
+        draw.text((MCX - mc_w // 2, MCY + MR + 44), mc_text, fill=WHITE, font=f_xs)
 
-    # ── Footer (y 292–400) ────────────────────────────────────────────
-    draw.line([(0, HLINE3), (W, HLINE3)], fill=WHITE, width=1)
+    # ── Footer (y 548-720) ────────────────────────────────────────────
+    draw.line([(0, HLINE3), (W, HLINE3)], fill=DIM, width=2)
 
-    # Row 1 — tomorrow forecast (left) + lifted index (right)
+    # Row 1 -- tomorrow forecast (left) + lifted index (right)
     t_colour = _verdict(dsky_tmrw)[1]
-    draw.text((12, 297), "Tomorrow:", fill=WHITE, font=f_sm)
-    draw.text((100, 297), f"{dsky_tmrw_desc}  ({dsky_tmrw}%)", fill=t_colour, font=f_sm)
+    draw.text((MARGIN, 560), "Tomorrow:", fill=WHITE, font=f_sm)
+    tm_w = int(draw.textlength("Tomorrow: ", font=f_sm))
+    draw.text((MARGIN + tm_w, 560), f"{dsky_tmrw_desc}  ({dsky_tmrw}%)", fill=t_colour, font=f_sm)
     if lifted and lifted not in ("unknown", ""):
         li_w = int(draw.textlength(lifted, font=f_xs))
-        draw.text((W - li_w - 8, 301), lifted, fill=WHITE, font=f_xs)
+        draw.text((W - li_w - MARGIN, 564), lifted, fill=WHITE, font=f_xs)
 
-    # Row 2 — sun times (left) + next new/full moon dates (right)
+    # Row 2 -- sun times (left) + next new/full moon dates (right)
     sun_parts = []
     if sunset:
         sun_parts.append(f"Sunset {sunset.strftime('%H:%M')}")
     if sunrise:
         sun_parts.append(f"Sunrise {sunrise.strftime('%H:%M')}")
-    draw.text((12, 319), "  ·  ".join(sun_parts), fill=WHITE, font=f_sm)
+    draw.text((MARGIN, 606), "  -  ".join(sun_parts), fill=WHITE, font=f_sm)
 
     moon_date_parts = []
     if next_new:
@@ -358,25 +357,42 @@ def render(states):
     if next_full:
         moon_date_parts.append(f"Full {next_full.strftime('%d %b')}")
     if moon_date_parts:
-        md_text = "  ·  ".join(moon_date_parts)
-        md_w    = int(draw.textlength(md_text, font=f_xs))
-        draw.text((W - md_w - 8, 323), md_text, fill=WHITE, font=f_xs)
+        md_text = "  -  ".join(moon_date_parts)
+        md_w    = int(draw.textlength(md_text, font=f_sm))
+        draw.text((W - md_w - MARGIN, 606), md_text, fill=WHITE, font=f_sm)
 
-    # Row 3 — weather
-    wx = f"{temp:.1f}°C  ·  Dew {dew:.1f}°  ·  {humidity}% RH  ·  {wind_dir} {wind_spd:.1f} m/s"
-    draw.text((12, 342), wx, fill=WHITE, font=f_sm)
+    # Row 3 -- weather
+    wx = f"{temp:.1f}C  -  Dew {dew:.1f}  -  {humidity}% RH  -  {wind_dir} {wind_spd:.1f} m/s"
+    draw.text((MARGIN, 652), wx, fill=WHITE, font=f_sm)
 
     # Version stamp
     ver   = f"v{FIRMWARE_VERSION}"
     ver_w = int(draw.textlength(ver, font=f_xs))
-    draw.text((W - ver_w - 6, H - 15), ver, fill=WHITE, font=f_xs)
+    draw.text((W - ver_w - MARGIN, H - 30), ver, fill=DIM, font=f_xs)
 
     return img
 
 
+def push_to_framebuffer(img):
+    """Rotate the landscape image to the panel's portrait framebuffer and write
+    it to /dev/fb0 as little-endian RGB565."""
+    import numpy as np
+
+    rot = img.transpose(ROTATE)
+    if rot.size != (FB_W, FB_H):
+        rot = rot.resize((FB_W, FB_H))
+    arr = np.asarray(rot.convert("RGB"), dtype=np.uint16)
+    r = (arr[:, :, 0] >> 3) << 11
+    g = (arr[:, :, 1] >> 2) << 5
+    b = arr[:, :, 2] >> 3
+    packed = (r | g | b).astype("<u2")
+    with open(FB_DEV, "wb") as f:
+        f.write(packed.tobytes())
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Inky Impression stargazing display")
-    parser.add_argument("--save", metavar="PATH", help="Save PNG preview instead of driving the display")
+    parser = argparse.ArgumentParser(description="Touch Display 2 stargazing display")
+    parser.add_argument("--save", metavar="PATH", help="Save PNG preview instead of driving the panel")
     args = parser.parse_args()
 
     config = load_config()
@@ -386,24 +402,20 @@ def main():
     log.info("Fetching HA states...")
     states = fetch_states(ha_url, token)
 
+    img = render(states)
+
     if args.save:
-        log.info("Rendering preview to %s", args.save)
-        img = render(states)
+        log.info("Saving preview to %s", args.save)
         img.save(args.save)
         log.info("Saved.")
         return
 
-    log.info("Rendering to Inky display...")
+    log.info("Writing to framebuffer %s...", FB_DEV)
     try:
-        from inky.inky_uc8159 import Inky
-        inky = Inky(resolution=(640, 400))
-    except ImportError:
-        log.error("inky library not available -- use --save <path.png> for development")
+        push_to_framebuffer(img)
+    except FileNotFoundError:
+        log.error("%s not found -- use --save <path.png> for development", FB_DEV)
         sys.exit(1)
-
-    img = render(states).convert("RGB")
-    inky.set_image(img)
-    inky.show()
     log.info("Done. v%s", FIRMWARE_VERSION)
 
 
