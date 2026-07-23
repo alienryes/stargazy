@@ -10,6 +10,7 @@ import argparse
 import logging
 import math
 import random as _rng
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ import requests
 import tomllib
 from PIL import Image, ImageDraw, ImageFont
 
-FIRMWARE_VERSION = "2.0.0"
+FIRMWARE_VERSION = "2.1.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -140,6 +141,18 @@ def _dt(s):
         return None
 
 
+# AstroWeather condition strings arrive as joined words ("Partlycloudy",
+# "Clearsky"); split before a known second component so they read naturally.
+_COMPOUND_RE = re.compile(
+    r"(?<=[a-z])(cloudy|clouds|sky|rain|snow|fog|mist|overcast|sunny)", re.IGNORECASE
+)
+
+
+def _phrase(s):
+    """'Partlycloudy night' -> 'Partly cloudy night'."""
+    return _COMPOUND_RE.sub(r" \1", s) if s else s
+
+
 def _font(name, size):
     try:
         return ImageFont.truetype(str(FONT_DIR / name), size)
@@ -214,9 +227,9 @@ def render(states):
     no_dark   = astro_dur < 3600
 
     dsky_today      = _i(s.get("sensor.astroweather_backyard_deepsky_forecast_today"))
-    dsky_today_desc = s.get("sensor.astroweather_backyard_deepsky_forecast_today_description", "")
+    dsky_today_desc = _phrase(s.get("sensor.astroweather_backyard_deepsky_forecast_today_description", ""))
     dsky_tmrw       = _i(s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow"))
-    dsky_tmrw_desc  = s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow_description", "")
+    dsky_tmrw_desc  = _phrase(s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow_description", ""))
 
     cloud  = _i(s.get("sensor.astroweather_backyard_cloud_cover"))
     seeing = _i(s.get("sensor.astroweather_backyard_seeing_percentage"))
@@ -315,8 +328,8 @@ def render(states):
 
     # ── Moon -- right panel (x 800-1280, y 252-548) ──────────────────
     MCX = RIGHT_CX  # 1040
-    MR  = 110
-    MCY = 372       # circle: top=262, bottom=482
+    MR  = 100
+    MCY = 364       # circle: top=264, bottom=464; leaves room for the labels below
 
     _draw_moon(draw, MCX, MCY, MR, moon_phase, waxing)
 
@@ -361,8 +374,8 @@ def render(states):
         md_w    = int(draw.textlength(md_text, font=f_sm))
         draw.text((W - md_w - MARGIN, 606), md_text, fill=WHITE, font=f_sm)
 
-    # Row 3 -- weather
-    wx = f"{temp:.1f}C  -  Dew {dew:.1f}  -  {humidity}% RH  -  {wind_dir} {wind_spd:.1f} m/s"
+    # Row 3 -- weather (consistent: Header value unit)
+    wx = f"Temp {temp:.1f}°C  -  Dew {dew:.1f}°C  -  RH {humidity}%  -  Wind {wind_dir} {wind_spd:.1f} m/s"
     draw.text((MARGIN, 652), wx, fill=WHITE, font=f_sm)
 
     # Version stamp
