@@ -1,5 +1,5 @@
 [Unit]
-Description=Inky Stargazing Display Timer
+Description=Stargazing Display Timer
 
 [Timer]
 OnBootSec=30s

@@ -1,6 +1,6 @@
 [project]
-name = "inky-stargazing-display"
-version = "1.0.0"
+name = "touch2-stargazing-display"
+version = "1.0.1"
 
 [tool.ruff]
 line-length = 100

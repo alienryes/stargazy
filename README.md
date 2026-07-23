@@ -1,4 +1,4 @@
-# 🌌 inky-stargazing-display
+# 🌌 touch2-stargazing-display
 
 A stargazing conditions display for the [Pimoroni Inky Impression 4"](https://shop.pimoroni.com/products/inky-impression-4) 7-colour ePaper display, running on a Raspberry Pi Zero 2W. Fetches live [AstroWeather](https://github.com/mawinkler/astroweather) data from Home Assistant and renders a colour-coded overnight forecast — no interaction required.
 
@@ -170,7 +170,7 @@ Requires `cadquery` (a local `case/.cadvenv` is used on the dev machine; see [ca
 **Check logs:**
 
 ```bash
-journalctl -u inky-stargazing
+journalctl -u touch2-stargazing
 ```
 
 ---
@@ -184,8 +184,8 @@ config.example.toml     Template
 deploy.ps1              Windows → Pi deploy script
 setup.sh                One-time Pi setup (run with sudo)
 systemd/
-  inky-stargazing.service
-  inky-stargazing.timer
+  touch2-stargazing.service
+  touch2-stargazing.timer
 case/                   3D-printed desktop stand (CadQuery)
   case_frame_v3.py      Front frame + PCB pocket + LED ring (source)
   case_frame_v3.stl     Frame mesh

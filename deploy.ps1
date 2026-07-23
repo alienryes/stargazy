@@ -5,7 +5,7 @@ param(
 )
 
 $PI = "$User@$PiHost"
-$REMOTE_DIR = "/home/$User/inky-stargazing"
+$REMOTE_DIR = "/home/$User/touch2-stargazing"
 
 function Invoke-Pi($cmd) {
     ssh -i $KeyFile -o StrictHostKeyChecking=no $PI $cmd
@@ -17,7 +17,7 @@ function Copy-ToPi($local, $remote) {
     if ($LASTEXITCODE -ne 0) { throw "scp failed: $local -> $remote" }
 }
 
-Write-Host "==> Deploying inky-stargazing-display to $PI"
+Write-Host "==> Deploying touch2-stargazing-display to $PI"
 
 # Create remote directory
 Invoke-Pi "mkdir -p $REMOTE_DIR"
@@ -47,14 +47,14 @@ Invoke-Pi "python3 $REMOTE_DIR/display.py"
 
 # Install and substitute user into systemd units
 Write-Host "--> Installing systemd units..."
-$svc = (Get-Content "systemd\inky-stargazing.service" -Raw) -replace "__USER__", $User
-$svc | ssh -i $KeyFile -o StrictHostKeyChecking=no $PI "cat > /tmp/inky-stargazing.service"
-Copy-ToPi "systemd\inky-stargazing.timer" "/tmp/inky-stargazing.timer"
-Invoke-Pi "sudo cp /tmp/inky-stargazing.service /tmp/inky-stargazing.timer /etc/systemd/system/"
+$svc = (Get-Content "systemd\touch2-stargazing.service" -Raw) -replace "__USER__", $User
+$svc | ssh -i $KeyFile -o StrictHostKeyChecking=no $PI "cat > /tmp/touch2-stargazing.service"
+Copy-ToPi "systemd\touch2-stargazing.timer" "/tmp/touch2-stargazing.timer"
+Invoke-Pi "sudo cp /tmp/touch2-stargazing.service /tmp/touch2-stargazing.timer /etc/systemd/system/"
 Invoke-Pi "sudo systemctl daemon-reload"
-Invoke-Pi "sudo systemctl enable inky-stargazing.timer"
-Invoke-Pi "sudo systemctl restart inky-stargazing.timer"
+Invoke-Pi "sudo systemctl enable touch2-stargazing.timer"
+Invoke-Pi "sudo systemctl restart touch2-stargazing.timer"
 
 Write-Host ""
 Write-Host "==> Done."
-Write-Host "    Timer fires every 2 h at :30 past. Check logs: journalctl -u inky-stargazing"
+Write-Host "    Timer fires every 2 h at :30 past. Check logs: journalctl -u touch2-stargazing"
