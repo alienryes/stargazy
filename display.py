@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.3.2"
+FIRMWARE_VERSION = "2.3.3"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -508,8 +508,9 @@ def render_foreground(states):
     tm_w = int(draw.textlength("Tomorrow: ", font=f_sm))
     draw.text((MARGIN + tm_w, 560), f"{dsky_tmrw_desc}  ({dsky_tmrw}%)", fill=t_colour, font=f_sm)
     if lifted and lifted not in ("unknown", ""):
-        li_w = int(draw.textlength(lifted, font=f_xs))
-        draw.text((W - li_w - MARGIN, 564), lifted, fill=WHITE, font=f_xs)
+        li_text = f"LI: {lifted}"
+        li_w = int(draw.textlength(li_text, font=f_xs))
+        draw.text((W - li_w - MARGIN, 564), li_text, fill=WHITE, font=f_xs)
 
     # AstroWeather's sun rise/set entities are civil twilight bounds (sun 6deg
     # below horizon), not the geometric sun crossing -- so label them dusk/dawn.
