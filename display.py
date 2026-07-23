@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageDraw, ImageFont
 
-FIRMWARE_VERSION = "2.2.0"
+FIRMWARE_VERSION = "2.2.1"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -240,7 +240,8 @@ def make_base(top, bot):
 
 
 # Forced vivid clear-sky mood for --demo (visual testing regardless of weather).
-DEMO_PARAMS = {"twilight": False, "gain": 1.0, "drift": 6.0, "meteors": True}
+DEMO_PARAMS = {"twilight": False, "gain": 1.0, "drift": 6.0, "meteors": True,
+               "met_min": 7.0, "met_max": 15.0}
 
 
 def sky_params(states):
@@ -253,15 +254,20 @@ def sky_params(states):
     no_dark = _f(states.get("sensor.astroweather_backyard_astronomical_night_duration")) < 3600
 
     clarity = max(0.0, min(1.0, (seeing + transp + calm) / 300.0))
-    gain = (0.30 + 0.70 * clarity) * (1.0 - 0.75 * cloud / 100.0)
-    gain = max(0.08, gain)
+    # Keep the sky clearly alive in all conditions; modulate within a visible range.
+    gain = (0.60 + 0.40 * clarity) * (1.0 - 0.35 * cloud / 100.0)
+    gain = max(0.45, min(1.0, gain))
     if no_dark:
-        gain = min(gain, 0.22)
+        gain = 0.40                          # twilight: dimmer, few stars
+    # Meteors whenever it's dark; rarer (longer gaps) when cloudy/poor.
+    met_min = 8.0 + 0.22 * cloud
     return {
         "twilight": no_dark,
         "gain": gain,
         "drift": 2.5 + wind * 0.7,           # px/sec
-        "meteors": (not no_dark) and clarity > 0.45 and cloud < 50,
+        "meteors": not no_dark,
+        "met_min": met_min,
+        "met_max": met_min + 8.0,
     }
 
 
@@ -574,7 +580,7 @@ def run_daemon(ha_url, token, animated, fps, refresh_min, demo=False):
             params = state["params"]
             if params["meteors"] and now >= next_meteor:
                 meteors.append(spawn_meteor())
-                next_meteor = now + random.uniform(7.0, 15.0)
+                next_meteor = now + random.uniform(params["met_min"], params["met_max"])
             for m in meteors[:]:
                 m["x"] += m["vx"]
                 m["y"] += m["vy"]

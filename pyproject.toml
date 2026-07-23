@@ -1,6 +1,6 @@
 [project]
 name = "touch2-stargazing-display"
-version = "2.2.0"
+version = "2.2.1"
 
 [tool.ruff]
 line-length = 100
