@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.3.1"
+FIRMWARE_VERSION = "2.3.2"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -511,11 +511,13 @@ def render_foreground(states):
         li_w = int(draw.textlength(lifted, font=f_xs))
         draw.text((W - li_w - MARGIN, 564), lifted, fill=WHITE, font=f_xs)
 
+    # AstroWeather's sun rise/set entities are civil twilight bounds (sun 6deg
+    # below horizon), not the geometric sun crossing -- so label them dusk/dawn.
     sun_parts = []
     if sunset:
-        sun_parts.append(f"Sunset {sunset.strftime('%H:%M')}")
+        sun_parts.append(f"Dusk {sunset.strftime('%H:%M')}")
     if sunrise:
-        sun_parts.append(f"Sunrise {sunrise.strftime('%H:%M')}")
+        sun_parts.append(f"Dawn {sunrise.strftime('%H:%M')}")
     draw.text((MARGIN, 606), "  -  ".join(sun_parts), fill=WHITE, font=f_sm)
 
     moon_date_parts = []
