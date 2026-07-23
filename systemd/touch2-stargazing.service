@@ -1,13 +1,13 @@
 [Unit]
-Description=Inky Stargazing Display
+Description=Stargazing Display
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=__USER__
-WorkingDirectory=/home/__USER__/inky-stargazing
-ExecStart=/usr/bin/python3 /home/__USER__/inky-stargazing/display.py
+WorkingDirectory=/home/__USER__/touch2-stargazing
+ExecStart=/usr/bin/python3 /home/__USER__/touch2-stargazing/display.py
 StandardOutput=journal
 StandardError=journal
 

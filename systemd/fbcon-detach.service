@@ -1,0 +1,15 @@
+[Unit]
+Description=Detach the framebuffer console so the display app owns /dev/fb0
+DefaultDependencies=no
+After=local-fs.target
+Before=touch2-stargazing.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Unbind any vtconsole bound to the framebuffer, so getty/kernel text never
+# draws over the dashboard. Runs as root; harmless if already unbound.
+ExecStart=/bin/sh -c 'for v in /sys/class/vtconsole/vtcon*; do grep -q "frame buffer" "$v/name" 2>/dev/null && echo 0 > "$v/bind"; done; true'
+
+[Install]
+WantedBy=multi-user.target
