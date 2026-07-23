@@ -2,4 +2,6 @@ config.toml
 __pycache__/
 *.pyc
 *.png
+*.3mf
+*.log
 .venv/
