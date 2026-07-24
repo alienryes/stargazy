@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.3.3"
+FIRMWARE_VERSION = "2.4.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -503,23 +503,12 @@ def render_foreground(states):
     # ── Footer ────────────────────────────────────────────────────────
     draw.line([(0, HLINE3), (W, HLINE3)], fill=DIM, width=2)
 
+    # Row 1 -- tomorrow's forecast (left) + next new/full moon dates (right,
+    # grouped under the moon card with the rest of the astronomical data).
     t_colour = _verdict(dsky_tmrw)[1]
     draw.text((MARGIN, 560), "Tomorrow:", fill=WHITE, font=f_sm)
     tm_w = int(draw.textlength("Tomorrow: ", font=f_sm))
     draw.text((MARGIN + tm_w, 560), f"{dsky_tmrw_desc}  ({dsky_tmrw}%)", fill=t_colour, font=f_sm)
-    if lifted and lifted not in ("unknown", ""):
-        li_text = f"LI: {lifted}"
-        li_w = int(draw.textlength(li_text, font=f_xs))
-        draw.text((W - li_w - MARGIN, 564), li_text, fill=WHITE, font=f_xs)
-
-    # AstroWeather's sun rise/set entities are civil twilight bounds (sun 6deg
-    # below horizon), not the geometric sun crossing -- so label them dusk/dawn.
-    sun_parts = []
-    if sunset:
-        sun_parts.append(f"Dusk {sunset.strftime('%H:%M')}")
-    if sunrise:
-        sun_parts.append(f"Dawn {sunrise.strftime('%H:%M')}")
-    draw.text((MARGIN, 606), "  -  ".join(sun_parts), fill=WHITE, font=f_sm)
 
     moon_date_parts = []
     if next_new:
@@ -529,8 +518,25 @@ def render_foreground(states):
     if moon_date_parts:
         md_text = "  -  ".join(moon_date_parts)
         md_w    = int(draw.textlength(md_text, font=f_sm))
-        draw.text((W - md_w - MARGIN, 606), md_text, fill=WHITE, font=f_sm)
+        draw.text((W - md_w - MARGIN, 560), md_text, fill=WHITE, font=f_sm)
 
+    # Row 2 -- lifted index (left, with the meteorology) + dusk/dawn (right).
+    if lifted and lifted not in ("unknown", ""):
+        draw.text((MARGIN, 606), f"LI: {lifted}", fill=WHITE, font=f_sm)
+
+    # AstroWeather's sun rise/set entities are civil twilight bounds (sun 6deg
+    # below horizon), not the geometric sun crossing -- so label them dusk/dawn.
+    sun_parts = []
+    if sunset:
+        sun_parts.append(f"Dusk {sunset.strftime('%H:%M')}")
+    if sunrise:
+        sun_parts.append(f"Dawn {sunrise.strftime('%H:%M')}")
+    if sun_parts:
+        sun_text = "  -  ".join(sun_parts)
+        sun_w    = int(draw.textlength(sun_text, font=f_sm))
+        draw.text((W - sun_w - MARGIN, 606), sun_text, fill=WHITE, font=f_sm)
+
+    # Row 3 -- weather
     wx = f"Temp {temp:.1f}°C  -  Dew {dew:.1f}°C  -  RH {humidity}%  -  Wind {wind_dir} {wind_spd:.1f} m/s"
     draw.text((MARGIN, 652), wx, fill=WHITE, font=f_sm)
 
