@@ -1,50 +1,70 @@
 # 🌌 touch2-stargazing-display
 
-A stargazing conditions display for the [Pimoroni Inky Impression 4"](https://shop.pimoroni.com/products/inky-impression-4) 7-colour ePaper display, running on a Raspberry Pi Zero 2W. Fetches live [AstroWeather](https://github.com/mawinkler/astroweather) data from Home Assistant and renders a colour-coded overnight forecast — no interaction required.
+A stargazing conditions display for the [Raspberry Pi Touch Display 2 (5")](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html), driven by a Raspberry Pi 4. It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) data from Home Assistant and renders a colour-coded overnight forecast over a live, data-reactive animated night sky — no interaction required.
+
+Rendered with Pillow at 1280×720 landscape and written straight to the Linux framebuffer (`/dev/fb0`, RGB565) — no X, no display server, no `inky` library.
 
 **Highlights**
 
 - Tonight's deep-sky verdict (EXCELLENT → NONE) in bold colour
 - Condition bars: cloudless %, seeing, transparency, calm
-- Moon phase geometry with next new/full moon dates
-- Tomorrow's forecast, sun times, weather (temp, dew, humidity, wind)
+- Moon phase geometry with constellation and next new/full moon dates
+- Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
-- Live, data-reactive animated night sky behind the dashboard; always-on systemd service
+- **Live animated night sky** behind the dashboard: twinkling starfield, drifting clouds and occasional meteors, all **reactive to the actual conditions**
 
 ---
 
 ## 📸 Display layout
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ STARGAZING                              Mon 14 Jun  22:30       │
-│─────────────────────────────────────────────────────────────────│
-│ NO DARK SKY                                MOON                 │
-│ Next dark night: 21 Jul               New Moon                  │
-│                                       In Taurus                 │
-│ Cloudless    [██░░░░░░░░]  30%        ◐ (phase graphic)        │
-│ Seeing       [███████░░░]  72%                                  │
-│ Transparency [████░░░░░░]  40%        New:  15 Jun              │
-│ Calm         [█████████░]  85%        Full: 29 Jun              │
-│─────────────────────────────────────────────────────────────────│
-│ Tomorrow: Cloudy (31%)    4 to 6, very stable                   │
-│ Sunset 22:13  ·  Sunrise 04:03                                  │
-│ 17.8°C  ·  Dew 10.9°  ·  64% RH  ·  E 8.6 m/s          v1.0.0│
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│ STARGAZING                                     Fri 24 Jul 21:58 │
+│───────────────────────────────────────────────────────────────│
+│ EXCELLENT                                                       │
+│ Deep sky: 94%  -  Clear sky night                               │
+│───────────────────────────────────────────────────────────────│
+│ Cloudless    [█░░░░░░░]  0%   │                                 │
+│ Seeing       [███░░░░░] 34%   │        ◑  Waxing Gibbous        │
+│ Transparency [██░░░░░░] 12%   │            in Scorpius          │
+│ Calm         [███████░] 89%   │                                 │
+│───────────────────────────────────────────────────────────────│
+│ Tomorrow: Cloudy (5%)               New 12 Aug  -  Full 29 Jul  │
+│ LI: Over 6, very stable             Dusk 21:50  -  Dawn 04:39   │
+│ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 6.5 m/s        │
+└───────────────────────────────────────────────────────────────┘
+        ...behind everything: a living sky — stars, clouds, meteors
 ```
+
+> **Dusk / Dawn**, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
+
+---
+
+## ✨ The animated sky
+
+The sky is a live layer composited behind the dashboard each frame (~20 fps); the dashboard itself is an RGBA overlay (transparent where the sky should show, opaque content on top). The animation **reflects the conditions** rather than just decorating:
+
+| Condition | Effect |
+|---|---|
+| Seeing / transparency / calm | Star brightness and twinkle (crisper when clear) |
+| Cloud cover | Number of soft drifting clouds (0 → 7), which dim the stars they pass |
+| Wind speed | Drift speed of stars and clouds |
+| No astronomical darkness | Sky washes to twilight blue; meteors suppressed |
+
+Meteors streak occasionally through the night sky (rarer when cloudy). Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
 
 ---
 
 ## 🛠️ Requirements
 
 **Hardware**
-- Raspberry Pi Zero 2W
-- Pimoroni Inky Impression 4" (640×400, 7-colour, UC8159 driver)
+- Raspberry Pi 4 (do **not** use a Pi 5 — `rpi_ws281x`/DSI quirks; a Pi 4 is proven here)
+- Raspberry Pi Touch Display 2, 5" variant (720×1280 DSI), connected via the DSI FFC
 
 **Software**
-- Raspberry Pi OS Lite 64-bit (Trixie / Bookworm)
+- Raspberry Pi OS Lite 64-bit (Trixie / Bookworm), headless (`multi-user.target`)
 - Python 3.11+
-- Home Assistant with [AstroWeather](https://github.com/mawinkler/astroweather) integration (backyard location configured)
+- Home Assistant with the [AstroWeather](https://github.com/mawinkler/astroweather) integration (backyard location configured)
 - HA long-lived access token
 
 ---
@@ -53,24 +73,19 @@ A stargazing conditions display for the [Pimoroni Inky Impression 4"](https://sh
 
 ### 1. Pi one-time setup
 
-Enable SPI and configure the device tree, then run the setup script:
-
-```bash
-sudo raspi-config nonint do_spi 0
-
-# Release the SPI CS pin so the inky library can claim it via gpiod
-echo "dtoverlay=spi0-0cs" | sudo tee -a /boot/firmware/config.txt
-sudo reboot
-```
-
-After reboot:
+The Touch Display 2 is auto-detected over DSI — no SPI or device-tree overlay needed. Just run the setup script:
 
 ```bash
 # Copy setup.sh to the Pi, then:
 sudo bash setup.sh operations
+sudo reboot   # required: setup.sh adds fbcon=map:2 to the kernel cmdline
 ```
 
-`setup.sh` installs `fonts-dejavu-core`, `python3-pil`, `python3-spidev`, `python3-rpi.gpio`, and a scoped sudoers rule for the deploy script.
+`setup.sh`:
+- installs `fonts-dejavu-core`, `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`
+- adds the user to the `video` group so it can write `/dev/fb0` without sudo
+- adds `fbcon=map:2` to `/boot/firmware/cmdline.txt` so the text console never draws over the display
+- installs a scoped sudoers rule for the deploy script
 
 ### 2. Create config
 
@@ -84,38 +99,45 @@ Edit `config.toml` with your HA URL and a long-lived access token (HA → Profil
 [ha]
 url = "http://192.168.1.x:8123"
 token = "your-token-here"
+
+[display]
+mode = "animated"     # or "static" (redraw only when the data changes)
+fps = 20
+data_refresh_min = 15
 ```
+
+The `[display]` section is optional; the values above are the defaults.
 
 ### 3. Deploy
 
-From Windows:
+From Windows (the deploy targets the Pi's wired IP, `192.168.1.62` by default — override with `-PiHost`):
 
 ```powershell
 .\deploy.ps1
 ```
 
-This copies files, installs the Python dependencies, installs the `fbcon-detach` and display services, and starts the always-on animated display.
+This copies the files, installs the Python dependencies, installs the `fbcon-detach` and display services, retires any legacy timer, and starts the always-on animated display.
 
 ---
 
-## 🖥️ Development preview
+## 🖥️ Running & preview
 
-Generate a PNG without a connected display:
+The always-on `touch2-stargazing.service` runs `display.py` as a daemon. For manual runs and development:
 
 ```bash
-python3 display.py --save preview.png
+python3 display.py            # daemon (mode from config; default animated)
+python3 display.py --once     # render one frame to the panel and exit
+python3 display.py --save preview.png   # save a single composited frame (no panel needed)
+python3 display.py --demo     # force a vivid clear-sky animation, ignoring the weather
 ```
+
+`--demo` is handy for checking the vivid end of the range without waiting for a clear night.
 
 ---
 
 ## 🧰 Case
 
-This project no longer ships a case. It originally ran on a **Pimoroni Inky
-Impression 4"** with a bespoke 3D-printed desktop stand (CadQuery frame + riser +
-WS2812B LED bezel ring). After moving to the self-lit **5" Raspberry Pi Touch
-Display 2** — which has off-the-shelf cases and needs no LED backlight — that
-design was retired and archived, with full history, at
-[`adminfor/inky-impression-case`](https://forgejo.home.neilsayer.co.uk/adminfor/inky-impression-case).
+This project no longer ships a case. It originally ran on a **Pimoroni Inky Impression 4"** with a bespoke 3D-printed desktop stand (CadQuery frame + riser + WS2812B LED bezel ring). After moving to the self-lit **5" Raspberry Pi Touch Display 2** — which has off-the-shelf cases and needs no LED backlight — that design was retired and archived, with full history, at [`adminfor/inky-impression-case`](https://forgejo.home.neilsayer.co.uk/adminfor/inky-impression-case).
 
 ---
 
@@ -123,30 +145,34 @@ design was retired and archived, with full history, at
 
 | Symptom | Fix |
 |---|---|
-| `No EEPROM detected` | Don't use `auto()` — the code uses explicit `Inky(resolution=(640, 400))` already |
-| `Resolution 600x400 not supported` | The 4" display is 640×400 in the driver, not 600×400 |
-| `Chip Select: currently claimed by spi0` | Add `dtoverlay=spi0-0cs` to `/boot/firmware/config.txt` and reboot |
-| Long busy-wait (~32 s) during `show()` | Normal — 7-colour ePaper full refresh takes ~30 seconds |
+| Blank panel, or console/login text over the dashboard | The text console is still bound to `/dev/fb0`. Ensure `fbcon=map:2` is in `/boot/firmware/cmdline.txt` and reboot; `fbcon-detach.service` also unbinds it at start |
+| `PermissionError` writing `/dev/fb0` | The user isn't in the `video` group — rerun `setup.sh`, or `sudo adduser <user> video` and re-login |
+| Sky looks static / no visible animation | Heavy cloud legitimately calms the sky. Confirm with `python3 display.py --demo`; check the computed mood with `python3 -c "import tomllib,display; c=tomllib.load(open('config.toml','rb')); print(display.sky_params(display.fetch_states(c['ha']['url'].rstrip('/'), c['ha']['token'])))"` |
+| Dashboard upside down / mirrored | Flip `ROTATE` in `display.py` between `Image.ROTATE_90` and `Image.ROTATE_270` |
+| `ModuleNotFoundError: numpy` | `sudo apt install python3-numpy` (or rerun `setup.sh`) |
 | `KeyError: 'ha'` in config | `config.toml` is missing the `[ha]` section header |
 | 401 Unauthorized from HA | Token in `config.toml` is wrong or expired |
 
-**Check logs:**
+**Check logs / CPU:**
 
 ```bash
-journalctl -u touch2-stargazing
+journalctl -u touch2-stargazing -f
+systemctl status touch2-stargazing
 ```
+
+The daemon uses roughly 80% of one Pi 4 core at 20 fps; lower `fps` in `config.toml` to reduce it.
 
 ---
 
 ## 📁 File structure
 
 ```
-display.py              Main script
+display.py              Main script (render + animation + framebuffer daemon)
 config.toml             Local config (gitignored)
-config.example.toml     Template
+config.example.toml     Template ([ha] + [display])
 deploy.ps1              Windows → Pi deploy script
 setup.sh                One-time Pi setup (run with sudo)
 systemd/
-  touch2-stargazing.service   (always-on animated display daemon)
-  fbcon-detach.service
+  touch2-stargazing.service   Always-on animated display daemon
+  fbcon-detach.service        Frees /dev/fb0 from the text console
 ```
