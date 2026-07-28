@@ -1,4 +1,5 @@
 config.toml
+case/reference/
 __pycache__/
 *.pyc
 *.png
