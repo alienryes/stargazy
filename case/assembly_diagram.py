@@ -35,9 +35,10 @@ FACE_Y0, FACE_Z0 = -51.01, 2.5
 STAND_X, LEG_W = 58.0, 8.0
 
 CASE_SCREWS = [(sx * 51.85, sy * 25.5) for sx in (1, -1) for sy in (1, -1)]
+# one chain now runs display standoff -> extender -> Pi -> standoff -> lid
 EXTENDERS = [(x, sy * 24.5) for x in (-37.7, 20.3) for sy in (1, -1)]
-LID_SCREWS = [(sx * 46.0, sy * 33.5) for sx in (1, -1) for sy in (1, -1)]
 STAND_HOLES = [(sx * 58.0, sy * 35.35) for sx in (1, -1) for sy in (1, -1)]
+LID_Z_OUTER = 30.4    # case_top z_outer
 
 # ── explosion offsets along Z (stands also move in X) ─────────────────────
 EX_DISPLAY, EX_SHELL, EX_BOTTOM = -95.0, -50.0, 0.0
@@ -92,7 +93,7 @@ PARTS = [
     ("Raspberry Pi 4", box(PI_W, PI_H, PI_T, PI_X0 + PI_W / 2,
                            PI_Y0 + PI_H / 2, PI_Z0),
      tr(z=EX_PI), (0.24, 0.52, 0.30)),
-    ("case_top", load("case_top.stl", tr(z=32) @ rot("y", 180)),
+    ("case_top", load("case_top.stl", tr(z=LID_Z_OUTER) @ rot("y", 180)),
      tr(z=EX_TOP), (0.93, 0.62, 0.24)),
     ("stand (x2)", load("stand.stl", tr(x=STAND_X - LEG_W / 2) @ _stand_perm),
      tr(x=EX_STAND_X), (0.93, 0.62, 0.24)),
@@ -216,9 +217,7 @@ F_LBL, F_TTL, F_SML = font(30), font(46), font(26)
 for x, y in CASE_SCREWS:
     dashed((x, y, EX_DISPLAY - 6), (x, y, EX_BOTTOM + 8))
 for x, y in EXTENDERS:
-    dashed((x, y, EX_DISPLAY - 6), (x, y, PI_Z0 + EX_PI + 6))
-for x, y in LID_SCREWS:
-    dashed((x, y, 23.0), (x, y, EX_TOP + 34))
+    dashed((x, y, EX_DISPLAY - 6), (x, y, EX_TOP + LID_Z_OUTER + 4))
 for x, y in STAND_HOLES:
     sgn = 1 if x > 0 else -1
     dashed((x, y, 2.5), (x + sgn * EX_STAND_X, y, 2.5))
@@ -228,19 +227,17 @@ for x, y in STAND_HOLES:
 # column's slots are handed out in order of the anchors' projected height, so
 # leaders within a column can never cross whatever the view angle.
 CALLOUTS = [
-    ("1", "case_top  -  M3x12 into towers",
-     (34, 34, EX_TOP + 32), "r"),
+    ("1", "case_top  -  4x M2.5x6 into the standoffs",
+     (30, 24, EX_TOP + LID_Z_OUTER), "r"),
     ("2", "40mm fan (optional)  -  M3 outside",
-     (-34, -34, EX_TOP + 2), "r"),
-    ("3", "Raspberry Pi 4  -  M2.5x6 to extenders",
+     (-16, -16, EX_TOP + LID_Z_OUTER), "r"),
+    ("3", "Raspberry Pi 4  -  held by the standoffs",
      (PI_X0 + PI_W / 2, PI_Y0 + PI_H / 2, PI_Z0 + EX_PI + 2), "r"),
-    # anchor on a NEAR tower top (camera sits at +X/-Y, so a far-wall anchor
-    # reads as going nowhere); the -X tower keeps the leader on its own side
-    ("4", "case_bottom  -  4x M3 inserts",
-     (-46, -33.5, 23.5), "l"),
+    ("4", "case_bottom  -  lid seats on this wall",
+     (-46, -29.5, 9.0), "l"),
     ("6", "M2.5 case screws  ->  display bosses",
      (51.85, -25.5, EX_SHELL + 2), "r"),
-    ("7", "M2.5 6+6 extenders  ->  standoffs",
+    ("7", "M2.5 6+6 extenders + 20mm standoffs",
      (-37.7, 24.5, EX_SHELL + 2), "r"),
     # on the leg's STRUT rib, ~4mm inboard of the outer edge - the middle of
     # the triangle is the lightening void, so a leader there ends in fresh air

@@ -3,97 +3,87 @@
 Remix of RonnyS's "Raspberry Pi Touch Display 2 Case" (Printables 1377047,
 CC-BY), re-worked for the 5" panel + Raspberry Pi 4.
 
-The lid closes the rear of the Pi compartment: its skirt seats on the
-case-bottom's perimeter wall (8mm plane) and its four internal corner bosses
-land on the lid towers (23mm plane); M3x16 cap screws pass through
-counterbores into the towers' heat-set inserts. Openings:
-  - +X skirt: USB / Ethernet aperture (connectors protrude slightly)
-  - -Y skirt: USB-C power / 2x micro-HDMI / audio aperture
-  - top face: fan grille (hole array) over the 40mm fan position
-  - -X / +Y skirts: passive vent slots
+The lid continues the case-bottom's wall profile upward: its skirt has the same
+footprint as that wall and seats on top of it, so the two form one continuous
+side. It is retained by four M2.5 screws that pass through the top face into
+M2.5 male-female standoffs, which in turn screw into the extenders through the
+Pi's own mounting holes (58 x 49). There are therefore NO lid towers and NO
+heat-set inserts - one screw chain does the whole stack.
 
-MODELLED IN PRINT ORIENTATION: top face down on the bed at Z=0, skirt
-rising +Z. In the assembly this part is ROTATED 180 deg ABOUT THE Y AXIS
-(assembly x = -print x, assembly z = 32 - print z, y unchanged). So
-side features are placed MIRRORED IN X here: the USB/Ethernet aperture
-(assembly +X) is modelled at -X; the passive vents (assembly -X) at +X.
-The -Y power aperture and symmetric features are unaffected.
-No supports: port/vent apertures are open-ended toward the skirt edge.
+Port apertures are the upper half of an opening whose lower half is the gap in
+the case-bottom's wall; the two must agree in X.
 
-Stack-up (assembly Z from the case-bottom plate top):
-  wall top 8.0 | tower top 23.0 | Pi PCB top ~5.1 | USB cans to ~21.1 |
-  fan top ~26 | lid underside 29.5 | lid outer face 32.0
+MODELLED IN ASSEMBLY COORDINATES (Z = 0 at the shell back plate's outer face,
++Z rearward) and flipped to print orientation only at export - the outer face
+ends up on the bed. Modelling in print orientation previously meant mirroring
+every side feature by hand, which is how the port apertures ended up on the
+wrong side once already.
+
+Stack: Pi PCB top 7.4 | standoff 20 -> lid inner face 27.4 | outer face 30.4
 """
 
 import cadquery as cq
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 # ============================================================
-# PARAMETERS - all mm.  Print orientation: top face at Z=0.
+# PARAMETERS - all mm, assembly coordinates.
 # ============================================================
-# --- Footprint / heights ---
-half_x = 53.0         # skirt outer; case-bottom X flanges stay exposed
-half_y = 40.5
-corner_r = 4.0
-top_t = 2.5
-height = 24.0         # total part height = assembly 8..32
-skirt_t = 2.5
+# --- Footprint: MUST match case_bottom's wall (it seats on it) ---
+out_x0, out_x1 = -48.5, 46.5    # = case_bottom wall_x0 / wall_x1
+out_hy = 32.0                   # = case_bottom wall_hy
+in_x0, in_x1 = -46.0, 44.0      # = case_bottom bay_x0 / bay_x1
+in_hy = 29.5                    # = case_bottom bay_hy
+out_r, in_r = 5.5, 3.0
 
-# --- Corner bosses -> case-bottom towers (M3 x 16 cap screws) ---
-tower_x = 46.0        # must match case_bottom.py
-tower_y = 33.5
-boss_d = 8.0
-boss_h = 6.5          # print Z 2.5..9  (assembly 23..29.5)
-screw_hole_d = 3.4    # M3 clearance
-cbore_d = 6.0         # cap head counterbore in the outer face
-cbore_depth = 3.0
+# --- Heights ---
+z_skirt = 10.5        # case_bottom wall top - the lid seats here
+standoff = 20.0       # M2.5 male-female standoff on top of the Pi
+pi_top = 7.4
+top_t = 3.0           # top face thickness (thick enough to counterbore)
 
-# --- +X aperture: USB / Ethernet ---
-usb_hy = 26.5         # half-span in Y
-usb_z0 = 10.0         # print Z (assembly: cans end ~21.1 -> print 10.9)
+# --- Lid screws -> standoffs (the Pi's own 58 x 49 pattern) ---
+ext_span_x, ext_span_y = 58.0, 49.0
+ext_off_x, ext_off_y = -8.7, 0.0    # measured; must match case_bottom
+screw_d = 2.9         # M2.5 clearance
+cbore_d = 5.2
+cbore_depth = 1.5
 
-# --- -Y aperture: USB-C / HDMI / audio ---
-# Pi board now spans x -41.2..43.8 (measured standoff offset), so the -Y ports
-# sit at: USB-C -30.0, HDMI0 -15.2, HDMI1 -1.7, audio 12.8
-pwr_x0, pwr_x1 = -36.0, 18.0
-pwr_z0 = 19.0         # print Z (assembly 8..13 covers ports at 5.1..11.6
-                      # together with the case-bottom wall gap below 8)
+# --- Port apertures (upper half; lower half is the case-bottom wall gap) ---
+usb_hy = 26.5         # +X face: USB / Ethernet, half-span in Y
+usb_z1 = 25.0         # top of the aperture (USB cans reach 23.4)
+pwr_x0, pwr_x1 = -36.0, 18.0    # -Y face: MUST match case_bottom gap_bottom_*
+pwr_z1 = 15.0         # micro-HDMI / USB-C reach ~13.5
 
-# --- Fan grille (40mm fan centred on the extender pattern = origin) ---
+# --- Fan grille + optional 40x40x10 fan on the inner face ---
 grille_hole_d = 4.0
 grille_pitch = 6.0
-grille_r = 17.0       # holes kept within this radius
-
-# --- Fan mounting (40x40x10, OPTIONAL) ---
-# The fan hangs straight off the lid's inner face (assembly Z 19.5..29.5),
-# clearing the Pi's GPIO header by 3.6mm. RonnyS's separate Pi-mounted plate
-# is not used here: on the 5" stack a plate + fan leaves only ~1.1mm of total
-# slack between the header and the lid, which is too tight for FDM.
-# Screws go in from OUTSIDE, through the lid, self-tapping into the fan frame.
-fan_span = 32.0       # 40mm fan screw pattern
-fan_screw_d = 3.4     # M3 clearance
-fan_cbore_d = 6.5     # head counterbore in the outer face
+grille_r = 17.0
+fan_span = 32.0
+fan_screw_d = 3.4
+fan_cbore_d = 6.5
 fan_cbore_depth = 2.0
 
-# --- Vent slots on the closed skirts ---
+# --- Passive vents in the -X and +Y skirts ---
 vent_w = 3.0
-vent_z0, vent_z1 = 8.0, 20.0   # print Z
+vent_z0, vent_z1 = 14.0, 25.0
 vent_pitch = 8.0
-vent_n_left = 5       # -X skirt (slots spread along Y)
-vent_n_top = 5        # +Y skirt (slots spread along X)
+vent_n = 5
 
 # ============================================================
 # DERIVED
 # ============================================================
-bosses = [(tower_x, tower_y), (-tower_x, tower_y),
-          (tower_x, -tower_y), (-tower_x, -tower_y)]
+z_inner = pi_top + standoff          # 27.4
+z_outer = z_inner + top_t            # 30.4
+height = z_outer - z_skirt           # 19.9
+
+ex, ey = ext_span_x / 2, ext_span_y / 2
+screws = [(ext_off_x + sx * ex, ext_off_y + sy * ey)
+          for sx in (1, -1) for sy in (1, -1)]
 
 fh = fan_span / 2
 fan_holes = [(fh, fh), (-fh, fh), (fh, -fh), (-fh, -fh)]
 
-# grille: a circular field of holes, minus any that the fan screw
-# counterbores would break into (the diagonal corners are the tight ones)
 _keepout = fan_cbore_d / 2 + grille_hole_d / 2 + 0.8
 grille_pts = []
 n = int(grille_r // grille_pitch) + 1
@@ -107,114 +97,109 @@ for i in range(-n, n + 1):
             continue
         grille_pts.append((gx, gy))
 
-vent_left_ys = [(i - (vent_n_left - 1) / 2) * vent_pitch
-                for i in range(vent_n_left)]
-vent_top_xs = [(i - (vent_n_top - 1) / 2) * vent_pitch
-               for i in range(vent_n_top)]
+vent_offs = [(i - (vent_n - 1) / 2) * vent_pitch for i in range(vent_n)]
 
 # guards
-for (bx, by) in bosses:
-    assert abs(bx) + boss_d / 2 < half_x - skirt_t + 0.6, "boss hits skirt X"
-    assert abs(by) + boss_d / 2 < half_y - skirt_t + 0.6, "boss hits skirt Y"
-assert usb_hy + 1 < half_y - skirt_t, "USB aperture reaches the corners"
-# fan screws must not break into the grille holes
-_gap = min(((fx - gx) ** 2 + (fy - gy) ** 2) ** 0.5
-           for fx, fy in fan_holes for gx, gy in grille_pts)
-assert _gap > fan_cbore_d / 2 + grille_hole_d / 2 + 0.8, \
-    "fan screw counterbore breaks into a grille hole"
+assert z_inner > 23.4 + 1.0, "lid inner face fouls the USB connector cans"
+assert usb_z1 > 23.4, "USB aperture is lower than the USB cans"
+assert pwr_z1 > 13.5, "power aperture is lower than the micro-HDMI ports"
+assert cbore_depth < top_t - 1.0, "counterbore leaves too little top face"
+for (sx, sy) in screws:
+    assert in_x0 + 4 < sx < in_x1 - 4 and abs(sy) < in_hy - 4, \
+        "lid screw falls outside the top face"
+# the fan hangs off the inner face; it must clear the Pi's GPIO header (15.9)
+assert z_inner - 10.0 > 15.9, "40mm fan would foul the GPIO header"
 
 # ============================================================
-# MODEL  (print orientation: outer top face down at Z=0)
+# MODEL  (assembly coordinates; flipped for printing at export)
 # ============================================================
 outer = (
     cq.Workplane("XY")
-    .box(2 * half_x, 2 * half_y, height, centered=(True, True, False))
-    .edges("|Z").fillet(corner_r)
+    .workplane(offset=z_skirt)
+    .box(out_x1 - out_x0, 2 * out_hy, height, centered=(True, True, False))
+    .edges("|Z").fillet(out_r)
+    .translate(((out_x0 + out_x1) / 2, 0, 0))
 )
 inner = (
     cq.Workplane("XY")
-    .workplane(offset=top_t)
-    .box(2 * (half_x - skirt_t), 2 * (half_y - skirt_t), height,
+    .workplane(offset=z_skirt - 1)
+    .box(in_x1 - in_x0, 2 * in_hy, z_inner - z_skirt + 1,
          centered=(True, True, False))
-    .edges("|Z").fillet(max(0.5, corner_r - skirt_t))
+    .edges("|Z").fillet(in_r)
+    .translate(((in_x0 + in_x1) / 2, 0, 0))
 )
 lid = outer.cut(inner)
 
-# corner bosses down to the towers, then screw holes + counterbores
-lid = lid.union(
+# +X aperture: USB / Ethernet. Open-ended downward to the skirt edge.
+lid = lid.cut(
     cq.Workplane("XY")
-    .workplane(offset=top_t)
-    .pushPoints(bosses)
-    .circle(boss_d / 2)
-    .extrude(boss_h)
-)
-for (cx, cy) in bosses:
-    lid = lid.cut(
-        cq.Workplane("XY").workplane(offset=-1)
-        .circle(screw_hole_d / 2).extrude(top_t + boss_h + 2)
-        .translate((cx, cy, 0))
-    )
-    lid = lid.cut(
-        cq.Workplane("XY").workplane(offset=-1)
-        .circle(cbore_d / 2).extrude(cbore_depth + 1)
-        .translate((cx, cy, 0))
-    )
-
-# USB / Ethernet aperture: assembly +X = print -X (Y-axis flip)
-lid = lid.cut(
-    cq.Workplane("XY").workplane(offset=usb_z0)
-    .box(skirt_t + 4, 2 * usb_hy, height, centered=(True, True, False))
-    .translate((-(half_x - skirt_t / 2), 0, 0))
+    .workplane(offset=z_skirt - 1)
+    .box(20.0, 2 * usb_hy, usb_z1 - z_skirt + 1, centered=(True, True, False))
+    .translate((in_x1 + 10.0, 0, 0))
 )
 
-# -Y aperture (USB-C / HDMI / audio); X-span mirrored for the flip
+# -Y aperture: USB-C / micro-HDMI / audio
 lid = lid.cut(
-    cq.Workplane("XY").workplane(offset=pwr_z0)
-    .box(pwr_x1 - pwr_x0, skirt_t + 4, height, centered=(True, True, False))
-    .translate((-(pwr_x0 + pwr_x1) / 2, -(half_y - skirt_t / 2), 0))
+    cq.Workplane("XY")
+    .workplane(offset=z_skirt - 1)
+    .box(pwr_x1 - pwr_x0, 20.0, pwr_z1 - z_skirt + 1,
+         centered=(True, True, False))
+    .translate(((pwr_x0 + pwr_x1) / 2, -(in_hy + 10.0), 0))
 )
 
 # fan grille through the top face
 for (gx, gy) in grille_pts:
     lid = lid.cut(
-        cq.Workplane("XY").workplane(offset=-1)
+        cq.Workplane("XY").workplane(offset=z_inner - 1)
         .circle(grille_hole_d / 2).extrude(top_t + 2)
         .translate((gx, gy, 0))
     )
 
-# fan screw holes + counterbores in the outer face (the bed side, Z=0)
+# fan screw holes, counterbored on the OUTER face
 for (fx, fy) in fan_holes:
     lid = lid.cut(
-        cq.Workplane("XY").workplane(offset=-1)
+        cq.Workplane("XY").workplane(offset=z_inner - 1)
         .circle(fan_screw_d / 2).extrude(top_t + 2)
         .translate((fx, fy, 0))
     )
     lid = lid.cut(
-        cq.Workplane("XY").workplane(offset=-1)
+        cq.Workplane("XY").workplane(offset=z_outer - fan_cbore_depth)
         .circle(fan_cbore_d / 2).extrude(fan_cbore_depth + 1)
         .translate((fx, fy, 0))
     )
 
-# vent slots: assembly -X = print +X skirt (along Y), and +Y skirt (along X)
-for vy in vent_left_ys:
+# lid screws -> standoffs, counterbored on the OUTER face
+for (sx, sy) in screws:
     lid = lid.cut(
-        cq.Workplane("XY").workplane(offset=vent_z0)
-        .box(skirt_t + 4, vent_w, vent_z1 - vent_z0,
-             centered=(True, True, False))
-        .translate((half_x - skirt_t / 2, vy, 0))
+        cq.Workplane("XY").workplane(offset=z_inner - 1)
+        .circle(screw_d / 2).extrude(top_t + 2)
+        .translate((sx, sy, 0))
     )
-for vx in vent_top_xs:
+    lid = lid.cut(
+        cq.Workplane("XY").workplane(offset=z_outer - cbore_depth)
+        .circle(cbore_d / 2).extrude(cbore_depth + 1)
+        .translate((sx, sy, 0))
+    )
+
+# passive vents: -X skirt (spread along Y) and +Y skirt (spread along X)
+for v in vent_offs:
     lid = lid.cut(
         cq.Workplane("XY").workplane(offset=vent_z0)
-        .box(vent_w, skirt_t + 4, vent_z1 - vent_z0,
-             centered=(True, True, False))
-        .translate((vx, half_y - skirt_t / 2, 0))
+        .box(20.0, vent_w, vent_z1 - vent_z0, centered=(True, True, False))
+        .translate((in_x0 - 10.0, v, 0))
+    )
+    lid = lid.cut(
+        cq.Workplane("XY").workplane(offset=vent_z0)
+        .box(vent_w, 20.0, vent_z1 - vent_z0, centered=(True, True, False))
+        .translate((v, in_hy + 10.0, 0))
     )
 
 # ============================================================
-# EXPORT
+# EXPORT  (flip to print orientation: outer face down on the bed)
 # ============================================================
-cq.exporters.export(lid, "case_top.stl", tolerance=0.01, angularTolerance=0.1)
-print(f"case_top v{VERSION}: {2*half_x:.0f} x {2*half_y:.0f} x {height:.0f}mm, "
-      f"{len(grille_pts)} grille holes, bosses at (+-{tower_x}, +-{tower_y}), "
-      f"fan screws at +-{fh:.0f} (clearance to grille {_gap:.1f}mm)")
+printable = lid.rotate((0, 0, 0), (0, 1, 0), 180).translate((0, 0, z_outer))
+cq.exporters.export(printable, "case_top.stl",
+                    tolerance=0.01, angularTolerance=0.1)
+print(f"case_top v{VERSION}: {out_x1-out_x0:.0f} x {2*out_hy:.0f} x "
+      f"{height:.1f}mm, seats at Z{z_skirt}, inner face Z{z_inner}, "
+      f"{len(grille_pts)} grille holes, screws on {ext_span_x}x{ext_span_y}")

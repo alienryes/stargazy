@@ -10,9 +10,10 @@ the mount plane ~3.5mm above this part's plate. Structure (RonnyS style):
   - central open BAY: extenders, Pi underside, DSI ribbon fold and JST
     jumper all live here; no pass-through holes needed
   - perimeter WALL around the bay with open gaps on the port edges
-    (USB/Ethernet out the +X short edge, USB-C/HDMI/audio out the -Y edge)
-  - 4 corner TOWERS with M3 heat-set insert bores - the ventilated lid
-    (case-top) bolts down onto these
+    (USB/Ethernet out the +X short edge, USB-C/HDMI/audio out the -Y edge).
+    The lid seats on this wall and continues its profile upward; there are
+    no lid towers - the lid is retained by M2.5 male-female standoffs that
+    screw into the extenders through the Pi's own mounting holes.
   - 103.7 x 51 clearance holes for the M2.5 case screws
     (stand -> here -> shell back -> display screw bosses)
   - stand pilot holes on the rear face (Y-leg kickstands, 2 screws each)
@@ -22,12 +23,12 @@ shell. Pi long edge along X; USB/Ethernet faces +X, power/HDMI faces -Y,
 DSI faces -X. The Pi BOARD is offset +10mm in X relative to its own hole
 pattern (holes sit 3.5mm from the DSI end, 23.5mm from the USB end).
 
-Print orientation: plate flat on the bed, wall/towers up. No supports.
+Print orientation: plate flat on the bed, wall up. No supports.
 """
 
 import cadquery as cq
 
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 
 # ============================================================
 # PARAMETERS - all mm.
@@ -72,8 +73,11 @@ wall_h = 8.0          # clears the Pi plane (~3.5 above plate) + lid seat
 # port gaps (wall omitted): USB/Ethernet on +X, power/HDMI/audio on -Y
 gap_right_hy = 29.5   # +X wall fully open: the Pi (y +-28) overhangs the bay
                       # edge here, so any wall would foul the PCB at Z 6..7.4
-gap_bottom_x0 = -27.0  # X-span of the -Y wall gap (USB-C..audio + margin)
-gap_bottom_x1 = 26.0
+# -Y wall gap: must span USB-C (-30) .. audio (12.8) with margin. MUST match
+# the lid's aperture - these two halves form one opening. Getting this wrong
+# is what buried the power socket on the first print.
+gap_bottom_x0 = -36.0
+gap_bottom_x1 = 18.0
 # --- DSI FFC (for clearance checks; see shell.py) ---
 # Display FFC at x ~= -35.2, i.e. ~2mm from the Pi's own DSI socket (-37.2) -
 # but note it sits UNDER the Pi board (which starts at -41.2), so the ribbon
@@ -82,14 +86,6 @@ gap_bottom_x1 = 26.0
 ffc_x = -35.2
 ffc_hw = 3.0
 ffc_hy = 9.0
-
-# --- Lid towers (M3 heat-set inserts, Ruthex RX-M3x5.7) ---
-tower_d = 8.0
-tower_h = 20.5        # towers rise toward the lid so M3x16 screws reach
-insert_bore_d = 4.0
-insert_depth = 6.0
-tower_x = 46.0
-tower_y = 33.5
 
 # --- Stand pilots (Y-leg kickstand, 2x M2.5 self-tap per leg) ---
 # On the X flanges, outside the lid skirt (which ends at +-53).
@@ -113,8 +109,6 @@ pi_hy = pi_h / 2                                  # +-28 (pattern-centred in Y)
 dmx, dmy = disp_span_x / 2, disp_span_y / 2       # 51.85, 25.5
 disp_mounts = [(dmx, dmy), (-dmx, dmy), (dmx, -dmy), (-dmx, -dmy)]
 
-towers = [(tower_x, tower_y), (-tower_x, tower_y),
-          (tower_x, -tower_y), (-tower_x, -tower_y)]
 stand_pts = [(sx, sy) for sx in (stand_x, -stand_x)
              for sy in (stand_span_y / 2, -stand_span_y / 2)]
 
@@ -128,13 +122,11 @@ for (px, py) in ext_pts:
     assert bay_x0 + 3 < px < bay_x1 - 3 and abs(py) < bay_hy - 3, \
         "extender falls outside the bay"
 assert bay_hy > pi_hy + 1.0, "wall would collide with the Pi long edges"
-for (tx, ty) in towers:
-    assert abs(ty) - tower_d / 2 > pi_hy + 1.0, "tower collides with the Pi"
-    d = min(((tx - cx) ** 2 + (ty - cy) ** 2) ** 0.5 for cx, cy in disp_mounts)
-    assert d > tower_d / 2 + disp_hole_d / 2 + 1.0, "tower fouls a case screw"
-    assert abs(tx) < half_x - tower_d / 2 and abs(ty) < half_y - tower_d / 2, \
-        "tower falls off the plate"
 assert dmx > wall_x1 + disp_hole_d / 2, "case screw under the wall"
+# the -Y wall gap and the lid's aperture form ONE opening: it must span every
+# port on that edge (USB-C at pi_x0+11.2 through audio at pi_x0+54)
+assert gap_bottom_x0 < pi_x0 + 11.2 - 4 and gap_bottom_x1 > pi_x0 + 54 + 4, \
+    "-Y wall gap does not span the power/HDMI/audio ports"
 # the bay must clear the FFC connector so the ribbon rises straight through
 assert bay_x0 < ffc_x - ffc_hw - 1.0, "bay edge fouls the FFC connector"
 assert ffc_hy < bay_hy, "FFC connector wider than the bay"
@@ -199,25 +191,6 @@ gap_b = (
 wall = wall.cut(gap_b)
 part = part.union(wall)
 
-# lid towers with M3 insert bores
-towers_solid = (
-    cq.Workplane("XY")
-    .workplane(offset=base_t)
-    .pushPoints(towers)
-    .circle(tower_d / 2)
-    .extrude(tower_h)
-)
-part = part.union(towers_solid)
-for (cx, cy) in towers:
-    bore = (
-        cq.Workplane("XY")
-        .workplane(offset=base_t + tower_h)
-        .circle(insert_bore_d / 2)
-        .extrude(-insert_depth)
-        .translate((cx, cy, 0))
-    )
-    part = part.cut(bore)
-
 # display-mount clearance holes
 for (cx, cy) in disp_mounts:
     part = part.cut(
@@ -239,5 +212,6 @@ for (cx, cy) in stand_pts:
 # ============================================================
 cq.exporters.export(part, "case_bottom.stl", tolerance=0.01, angularTolerance=0.1)
 print(f"case_bottom v{VERSION}: plate {2*half_x:.1f} x {2*half_y:.1f}, "
-      f"bay {bay_w:.0f} x {2*bay_hy:.0f}, wall h{wall_h}, "
-      f"towers at (+-{tower_x}, +-{tower_y})")
+      f"bay {bay_w:.0f} x {2*bay_hy:.0f}, wall h{wall_h} "
+      f"(outer x {wall_x0:.1f}..{wall_x1:.1f}, y +-{wall_hy:.1f}), "
+      f"-Y gap {gap_bottom_x0:.0f}..{gap_bottom_x1:.0f}")
