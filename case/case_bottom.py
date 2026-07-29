@@ -15,8 +15,12 @@ the mount plane ~3.5mm above this part's plate. Structure (RonnyS style):
     no lid towers - the lid is retained by M2.5 male-female standoffs that
     screw into the extenders through the Pi's own mounting holes.
   - 103.7 x 51 clearance holes for the M2.5 case screws
-    (stand -> here -> shell back -> display screw bosses)
-  - stand pilot holes on the rear face (Y-leg kickstands, 2 screws each)
+    (here -> shell back -> display screw bosses)
+  - cleat ribs on the rear face of each X flange: the easel legs SNAP on,
+    no screws. Two half-dovetail ribs capture each leg's lips and a detent
+    bump latches it. Nothing may protrude from the plate's FRONT face, which
+    clamps against the shell's back plate - so the whole interface lives on
+    the rear face, where it also prints without supports.
 
 Landscape: X = long axis, Y = short axis, centred on origin to match the
 shell. Pi long edge along X; USB/Ethernet faces +X, power/HDMI faces -Y,
@@ -28,7 +32,7 @@ Print orientation: plate flat on the bed, wall up. No supports.
 
 import cadquery as cq
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 
 # ============================================================
 # PARAMETERS - all mm.
@@ -54,11 +58,12 @@ pi_hole_inset = 3.5   # holes 3.5 from the DSI end and both long edges
 disp_span_x = 103.7
 disp_span_y = 51.0
 disp_hole_d = 2.9     # M2.5 clearance
+disp_head_d = 4.7     # M2.5 head OD - the legs must clear these, see below
 
 # --- Base plate ---
 base_t = 2.5
 base_r = 3.0
-half_x = 63.0         # X flanges reach past the lid skirt for the stand legs
+half_x = 64.5         # X flanges reach past the lid skirt for the stand legs
 half_y = 38.0
 
 # --- Central bay ---
@@ -87,11 +92,26 @@ ffc_x = -35.2
 ffc_hw = 3.0
 ffc_hy = 9.0
 
-# --- Stand pilots (Y-leg kickstand, 2x M2.5 self-tap per leg) ---
-# On the X flanges, outside the lid skirt (which ends at +-53).
-stand_pilot_d = 2.1
-stand_x = 58.0        # leg is 8mm wide -> x 54..62, clear of the lid skirt (53)
-stand_span_y = 70.7   # RonnyS leg hole spacing
+# --- Stand-leg cleat interface (MUST match stand.py) ---
+# The legs snap on. Two half-dovetail ribs per flange capture the leg's lips
+# against pull-off; the leg slides UP (+Y) to engage, which is the direction
+# the case's own weight drives it, so load seats the joint rather than
+# working it loose. A detent bump then latches the leg against sliding back
+# down when the case is lifted.
+#
+# cleat_x is set by the M2.5 case-screw HEADS at x = +-51.85: they stand off
+# this same rear face and reach to x 54.2, so a leg starting at x 54 would
+# rock on them. The flange therefore moved outboard (half_x 63 -> 64.5).
+cleat_x = 59.5        # rib centre in X; the leg is 8mm wide -> x 55.5..63.5
+cleat_len = 8.0       # rib length along X = leg width
+cleat_span_y = 56.0   # spacing of the ribs' -Y base edges (the load faces)
+rib_t = 3.0           # rib base thickness along Y
+rib_h = 3.5           # rib height off the rear face
+rib_flare = 2.0       # undercut at the top, toward -Y (30 deg from vertical:
+                      # steep enough to print, shallow enough that the leg
+                      # only lifts ~0.5mm off the face before the flares bite)
+detent_y = 0.0        # detent bump apex in Y
+detent_h = 1.2        # bump height; 45 deg faces both sides
 
 # ============================================================
 # DERIVED
@@ -109,8 +129,8 @@ pi_hy = pi_h / 2                                  # +-28 (pattern-centred in Y)
 dmx, dmy = disp_span_x / 2, disp_span_y / 2       # 51.85, 25.5
 disp_mounts = [(dmx, dmy), (-dmx, dmy), (dmx, -dmy), (-dmx, -dmy)]
 
-stand_pts = [(sx, sy) for sx in (stand_x, -stand_x)
-             for sy in (stand_span_y / 2, -stand_span_y / 2)]
+cleat_xs = (cleat_x, -cleat_x)
+cleat_ys = (cleat_span_y / 2, -cleat_span_y / 2)   # rib -Y base edge = load face
 
 bay_w = bay_x1 - bay_x0
 bay_cx = (bay_x0 + bay_x1) / 2
@@ -134,6 +154,16 @@ assert ffc_hy < bay_hy, "FFC connector wider than the bay"
 # so no wall may remain within the Pi's footprint
 assert gap_right_hy >= pi_hy, "+X wall fouls the Pi PCB corners"
 assert bay_hy > pi_hy, "side walls foul the Pi long edges"
+# the leg's mounting face lies on this rear face, so it must clear both the
+# case-screw heads standing off it and the lid skirt seated inboard of it
+assert cleat_x - cleat_len / 2 > dmx + disp_head_d / 2 + 0.5, \
+    "stand leg would rock on the case-screw heads"
+assert cleat_x - cleat_len / 2 > wall_x1 + 2.0, "stand leg fouls the lid skirt"
+assert cleat_x + cleat_len / 2 < half_x - 0.5, "cleat rib overhangs the flange"
+for _cy in cleat_ys:
+    assert abs(_cy) + rib_t + 2.0 < half_y, "cleat rib runs off the plate"
+assert -cleat_span_y / 2 - rib_flare < detent_y - detent_h and \
+       cleat_span_y / 2 > detent_y + detent_h, "detent bump collides with a rib"
 
 # ============================================================
 # MODEL  (plate on the bed at Z=0, wall/towers up +Z)
@@ -199,13 +229,37 @@ for (cx, cy) in disp_mounts:
         .translate((cx, cy, 0))
     )
 
-# stand pilot holes (through the plate; legs screw on from the rear)
-for (cx, cy) in stand_pts:
-    part = part.cut(
-        cq.Workplane("XY").workplane(offset=-1)
-        .circle(stand_pilot_d / 2).extrude(base_t + 2)
-        .translate((cx, cy, 0))
+# stand-leg cleat: two half-dovetail ribs + one detent bump per X flange.
+# Each profile is drawn in (Y, Z-above-the-rear-face) and extruded along X, so
+# every feature is prismatic in the print direction and the only overhang is
+# the ribs' own 19 deg undercut.
+def _flange_feature(pts, cx):
+    return (
+        cq.Workplane("YZ")
+        .polyline([(y, base_t + z) for (y, z) in pts]).close()
+        .extrude(cleat_len)
+        .translate((cx - cleat_len / 2, 0, 0))
     )
+
+
+def _rib_profile(cy):
+    return [(cy, 0.0), (cy + rib_t, 0.0), (cy + rib_t, rib_h),
+            (cy - rib_flare, rib_h)]
+
+
+# catch a workplane sign flip before it reaches the STL: the rib must grow
+# along +X from the flange, stand off the REAR face, and flare toward -Y.
+_bb = _flange_feature(_rib_profile(cleat_ys[0]), cleat_x).val().BoundingBox()
+assert abs(_bb.xmin - (cleat_x - cleat_len / 2)) < 1e-6, "rib extruded wrong in X"
+assert abs(_bb.zmax - (base_t + rib_h)) < 1e-6, "rib is not on the rear face"
+assert abs(_bb.ymin - (cleat_ys[0] - rib_flare)) < 1e-6, "flare points wrong in Y"
+
+for cx in cleat_xs:
+    for cy in cleat_ys:
+        part = part.union(_flange_feature(_rib_profile(cy), cx))
+    part = part.union(_flange_feature(
+        [(detent_y - detent_h, 0.0), (detent_y + detent_h, 0.0),
+         (detent_y, detent_h)], cx))
 
 # ============================================================
 # EXPORT
@@ -214,4 +268,5 @@ cq.exporters.export(part, "case_bottom.stl", tolerance=0.01, angularTolerance=0.
 print(f"case_bottom v{VERSION}: plate {2*half_x:.1f} x {2*half_y:.1f}, "
       f"bay {bay_w:.0f} x {2*bay_hy:.0f}, wall h{wall_h} "
       f"(outer x {wall_x0:.1f}..{wall_x1:.1f}, y +-{wall_hy:.1f}), "
-      f"-Y gap {gap_bottom_x0:.0f}..{gap_bottom_x1:.0f}")
+      f"-Y gap {gap_bottom_x0:.0f}..{gap_bottom_x1:.0f}, "
+      f"cleat ribs at x +-{cleat_x} y +-{cleat_span_y/2:.0f} h{rib_h}")

@@ -31,6 +31,13 @@ Differences from the original, beyond scale:
   a Pi-mounted plate plus fan does not fit the 5-inch stack's headroom.
   Note the fan clears the GPIO header by only 1.5 mm; check it on the real
   thing before relying on it.
+- **The legs snap on instead of screwing on.** The original bolts each leg
+  through the case-bottom with two self-tapping screws. One of those screws
+  lands inside the leg's own lightening void, where the foot rib blocks a
+  driver coming straight in, so it cannot be reached once the leg is in place.
+  Here the legs slide onto ribs and latch, which removes four screws and the
+  access problem together, and makes swapping to a different lean angle a
+  ten-second job.
 - The shell keeps **discrete pass-through holes** for the standoffs rather than
   one large rear opening. On the 5-inch panel the case-screw bosses (y ±25.5)
   and the display's own Pi standoffs (y ±28.5) fall in the same band, so an
@@ -46,9 +53,22 @@ stand legs stronger layer adhesion.
 | File | Qty | Size (mm) | ~Mass | Orientation |
 |---|---|---|---|---|
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
-| `case_bottom.stl` | 1 | 126 × 76 × 10.5 | 21 g | plate **flat**, wall up |
+| `case_bottom.stl` | 1 | 129 × 76 × 10.5 | 21 g | plate **flat**, wall up |
 | `case_top.stl` | 1 | 95 × 64 × 19.9 | 33 g | outer face **down** (as exported) |
-| `stand.stl` | **2** | 93 × 56.4 × 8 | 16 g ea | **flat** on the profile |
+| `stand_20.stl` | **2** | 93 × 56.4 × 8 | 14 g ea | **flat** on the profile |
+
+Pick one leg file and print two of it. The legs are interchangeable, so you can
+print a second pair at a different angle and swap them without touching the
+rest of the case:
+
+| File | Lean | Depth on the desk |
+|---|---|---|
+| `stand_15.stl` | 15° | 58 mm |
+| `stand_20.stl` | 20° | 56 mm |
+| `stand_30.stl` | 30° | 52 mm |
+
+The legs are the same part left and right — nothing is handed, and nothing is
+mirrored.
 
 Settings: 0.2 mm layer, 3 walls, 20 % infill, **no supports** — every part is
 oriented so nothing overhangs beyond 45°.
@@ -64,7 +84,6 @@ The tolerances assume PETG. For PLA, drop `fit_clear` in `shell.py` from 0.5 to
 | M2.5 × 20 male-female standoff | 4 | clamp the Pi **and** take the lid screws |
 | M2.5 × 6 screw | 4 | lid into the 20 mm standoffs |
 | M2.5 × 16 screw | 4 | case screws: case-bottom → shell → display |
-| M2.5 × 10 screw | 4 | stand legs onto the case-bottom flanges |
 | 40 × 40 × 10 mm 5 V fan | 1 | **optional** |
 | M3 self-tapping screw | 4 | fan, from outside through the lid — optional |
 
@@ -110,7 +129,32 @@ re-run that script after changing any part.
 6. Optional: screw the **fan** to the lid from the outside (32 × 32 pattern).
 7. Fit the **lid** — its skirt seats on the case-bottom's wall — and secure with
    four **M2.5 × 6** screws through the top face into the standoffs.
-8. Bolt a **stand leg** to each side flange with two M2.5 screws.
+8. Fit a **stand leg** to each side flange. Lay it on the flange about 5 mm
+   below its final position, so the three ribs sit in the leg's slots, then
+   **slide it up** until the tongue clicks. No screws.
+
+## The legs
+
+The legs take no fasteners. Each one slides onto three ribs moulded into the
+rear face of the case-bottom's side flange: two half-dovetails that capture the
+leg, and a bump that latches it.
+
+The leg slides **up** to engage, which is the same direction the case's own
+weight pushes it — so sitting on the desk seats the joint harder rather than
+working it loose. Two spread-apart dovetails stop the leg being pulled off the
+face or pivoting away at either end, and they wedge together to set the final
+position. The tongue then only has to stop the leg dropping back down when you
+pick the case up, which takes 0.16 N; it is good for about 16 N.
+
+**To remove a leg, push it firmly back down** — roughly the same effort it took
+to click on. There is no press-to-release tab, deliberately: once a leg is on,
+its tongue's back face is against the case, so a tab there would be
+unreachable. Sliding it off is the only action you can actually perform.
+
+Note the legs pass right over the four M2.5 case-screw heads, which stand off
+that same rear face. The flange is sized so they clear by 0.65 mm — if you
+substitute screws with heads wider than 4.7 mm, move `cleat_x` outboard in both
+`case_bottom.py` and `stand.py` or the legs will rock.
 
 ## Panel geometry
 
@@ -154,10 +198,17 @@ Useful knobs:
 
 | Parameter | File | Effect |
 |---|---|---|
-| `tilt` | `stand.py` | stand lean angle (default 20°) |
+| `tilts` | `stand.py` | which lean angles to export (default 15/20/30°) |
 | `fit_clear` | `shell.py` | display pocket clearance (PETG 0.5, PLA 0.4) |
 | `foot_len` | `stand.py` | stand depth — how far back the foot reaches |
+| `fit`, `slant_fit` | `stand.py` | how tight the legs snap on |
 | `grille_r`, `grille_pitch` | `case_top.py` | fan grille pattern |
+
+The cleat parameters (`cleat_x`, `cleat_span_y`, `rib_t`, `rib_h`, `rib_flare`,
+`detent_y`, `detent_h`) appear in **both** `case_bottom.py` and `stand.py` and
+must agree — they are two halves of one joint. `stand.py` re-derives the
+detent's flex force and strain from them on every run and refuses to build a
+tongue that would be limp, unassemblable, or overstrained.
 
 The scripts carry assertions for the clearances that matter (ribbon, Pi
 footprint versus the walls, screw ligaments, fan-screw versus grille), so a

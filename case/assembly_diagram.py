@@ -21,7 +21,7 @@ import pyrender
 import trimesh
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 W, H = 2200, 1560
 ELEV, AZIM = 30.0, 128.0             # 128 = -52 + 180 (view from the far side)
@@ -33,12 +33,14 @@ DISP_W, DISP_H, DISP_D = 143.4, 91.46, 15.9
 PI_W, PI_H, PI_T = 85.0, 56.0, 1.4
 PI_X0, PI_Y0, PI_Z0 = -41.2, -28.0, 6.0
 FACE_Y0, FACE_Z0 = -51.01, 2.5
-STAND_X, LEG_W = 58.0, 8.0
+STAND_X, LEG_W = 59.5, 8.0
+STAND_TILT = 20                      # which leg variant the diagram shows
 
 CASE_SCREWS = [(sx * 51.85, sy * 25.5) for sx in (1, -1) for sy in (1, -1)]
 # one chain now runs display standoff -> extender -> Pi -> standoff -> lid
 EXTENDERS = [(x, sy * 24.5) for x in (-37.7, 20.3) for sy in (1, -1)]
-STAND_HOLES = [(sx * 58.0, sy * 35.35) for sx in (1, -1) for sy in (1, -1)]
+# the legs take no screws: these mark the cleat ribs they slide onto
+CLEATS = [(sx * STAND_X, sy * 28.0) for sx in (1, -1) for sy in (1, -1)]
 LID_Z_OUTER = 30.4    # case_top z_outer
 
 # ── explosion offsets along Z (stands also move in X) ─────────────────────
@@ -107,9 +109,10 @@ PARTS = [
     ("Raspberry Pi 4", pi_part, tr(z=EX_PI), (0.24, 0.52, 0.30)),
     ("case_top", load("case_top.stl", tr(z=LID_Z_OUTER) @ rot("y", 180)),
      tr(z=EX_TOP), (0.93, 0.62, 0.24)),
-    ("stand (x2)", load("stand.stl", tr(x=STAND_X - LEG_W / 2) @ _stand_perm),
+    ("stand (x2)", load(f"stand_{STAND_TILT}.stl",
+                        tr(x=STAND_X - LEG_W / 2) @ _stand_perm),
      tr(x=EX_STAND_X), (0.93, 0.62, 0.24)),
-    ("stand", load("stand.stl",
+    ("stand", load(f"stand_{STAND_TILT}.stl",
                    tr(x=-STAND_X - LEG_W / 2) @ _stand_perm),
      tr(x=-EX_STAND_X), (0.93, 0.62, 0.24)),
 ]
@@ -230,7 +233,7 @@ for x, y in CASE_SCREWS:
     dashed((x, y, EX_DISPLAY - 6), (x, y, EX_BOTTOM + 8))
 for x, y in EXTENDERS:
     dashed((x, y, EX_DISPLAY - 6), (x, y, EX_TOP + LID_Z_OUTER + 4))
-for x, y in STAND_HOLES:
+for x, y in CLEATS:
     sgn = 1 if x > 0 else -1
     dashed((x, y, 2.5), (x + sgn * EX_STAND_X, y, 2.5))
 
@@ -253,7 +256,7 @@ CALLOUTS = [
      (-37.7, 24.5, EX_SHELL + 2), "r"),
     # on the leg's STRUT rib, ~4mm inboard of the outer edge - the middle of
     # the triangle is the lightening void, so a leader there ends in fresh air
-    ("5", "stand x2  -  2x M2.5x10",
+    ("5", "stand x2  -  slide up until they click",
      (-STAND_X - EX_STAND_X, 3.3, 27.5), "l"),
     ("8", "shell  -  display drops in front",
      (-64, 20, EX_SHELL - 8), "l"),
