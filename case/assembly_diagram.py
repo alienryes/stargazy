@@ -14,6 +14,7 @@ Assembly frame: Z = 0 at the shell back plate's OUTER face, +Z rearward
 """
 
 import math
+import os
 
 import numpy as np
 import pyrender
@@ -83,6 +84,19 @@ _stand_perm = np.array([[0, 0, 1, 0],
                         [0, 1, 0, FACE_Z0],
                         [0, 0, 0, 1]], dtype=float)
 
+# A detailed Pi 4B model makes a far clearer diagram than a bare slab, but it
+# is third-party and lives in the gitignored reference/ folder, so fall back to
+# a plain board for anyone who does not have it.
+# Its frame is X = long axis, Y = height, Z = short axis, PCB bottom at Y = 0;
+# rotating +90 about X and shifting to the board centre lands it exactly on the
+# designed position (x -41.2..43.8, y +-28, PCB bottom z 6.0).
+PI_STL = os.path.join("reference", "Raspberry Pi 4 Model B.stl")
+if os.path.exists(PI_STL):
+    pi_part = load(PI_STL, tr(1.3, 0.0, PI_Z0) @ rot("x", 90))
+else:
+    pi_part = box(PI_W, PI_H, PI_T, PI_X0 + PI_W / 2, PI_Y0 + PI_H / 2, PI_Z0)
+    print("note: reference Pi model not found - using a plain board")
+
 PARTS = [
     ("Touch Display 2 (5\")", box(DISP_W, DISP_H, DISP_D, 0, 0, -18.4),
      tr(z=EX_DISPLAY), (0.72, 0.24, 0.24)),
@@ -90,9 +104,7 @@ PARTS = [
      tr(z=EX_SHELL), (0.93, 0.62, 0.24)),
     ("case_bottom", load("case_bottom.stl", np.eye(4)),
      tr(z=EX_BOTTOM), (0.93, 0.62, 0.24)),
-    ("Raspberry Pi 4", box(PI_W, PI_H, PI_T, PI_X0 + PI_W / 2,
-                           PI_Y0 + PI_H / 2, PI_Z0),
-     tr(z=EX_PI), (0.24, 0.52, 0.30)),
+    ("Raspberry Pi 4", pi_part, tr(z=EX_PI), (0.24, 0.52, 0.30)),
     ("case_top", load("case_top.stl", tr(z=LID_Z_OUTER) @ rot("y", 180)),
      tr(z=EX_TOP), (0.93, 0.62, 0.24)),
     ("stand (x2)", load("stand.stl", tr(x=STAND_X - LEG_W / 2) @ _stand_perm),
