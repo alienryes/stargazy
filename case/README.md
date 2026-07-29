@@ -69,6 +69,12 @@ standoffs carry it, via the extenders.
 
 ## Assembly
 
+![Exploded assembly diagram](assembly.png)
+
+The numbered callouts match the steps below. The diagram is generated from the
+part STLs by `assembly_diagram.py`, so it cannot drift from the geometry —
+re-run that script after changing any part.
+
 1. Press the four **M3 inserts** into the case-bottom's corner towers.
 2. Drop the display into the **shell** from the front. It is retained by the
    sandwich, not screwed to the shell.

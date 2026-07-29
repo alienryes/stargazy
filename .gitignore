@@ -3,6 +3,7 @@ case/reference/
 __pycache__/
 *.pyc
 *.png
+!case/assembly.png
 *.3mf
 *.log
 .venv/
