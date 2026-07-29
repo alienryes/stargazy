@@ -16,6 +16,10 @@ stand, optional fan — re-drawn parametrically in CadQuery at 5-inch scale.
 
 This remix is released under **CC BY** as well. Credit RonnyS and this project.
 
+The Raspberry Pi 4B model shown in the assembly diagram is by
+**Pyro_Industries** — <https://www.printables.com/model/727545-raspberry-pi-4>,
+CC0. It is used for illustration only and is not redistributed here.
+
 Differences from the original, beyond scale:
 
 - **No lid towers and no heat-set inserts.** The original bolts its lid to four

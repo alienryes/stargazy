@@ -301,9 +301,13 @@ draw.text((48, 96),
           "Exploded view generated from the part STLs.  "
           "Dashed lines are fastener paths.",
           font=F_SML, fill=(96, 96, 104))
-draw.text((48, H - 54),
+draw.text((48, H - 88),
           "Remix of RonnyS 'Raspberry Pi Touch Display 2 Case' "
           "(printables.com/model/1377047), CC BY.",
+          font=F_SML, fill=(96, 96, 104))
+draw.text((48, H - 52),
+          "Raspberry Pi 4B model by Pyro_Industries "
+          "(printables.com/model/727545), CC0.",
           font=F_SML, fill=(96, 96, 104))
 
 img.save("assembly.png")
