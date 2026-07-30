@@ -107,10 +107,12 @@ PARTS = [
     ("Raspberry Pi 4", pi_part, tr(z=EX_PI), (0.24, 0.52, 0.30)),
     ("case_top", load("case_top.stl", tr(z=LID_Z_OUTER) @ rot("y", 180)),
      tr(z=EX_TOP), (0.93, 0.62, 0.24)),
-    ("stand (x2)", load(f"stand_{STAND_TILT}.stl",
+    # the stands are handed: each file's own leg-z 0 edge is its INBOARD one,
+    # so the -X part is placed from -strap_x1 rather than being mirrored here
+    ("stand (x2)", load(f"stand_{STAND_TILT}_usb.stl",
                         tr(x=STAND_X - LEG_W / 2) @ _stand_perm),
      tr(x=EX_STAND_X), (0.93, 0.62, 0.24)),
-    ("stand", load(f"stand_{STAND_TILT}.stl",
+    ("stand", load(f"stand_{STAND_TILT}_dsi.stl",
                    tr(x=-STAND_X - LEG_W / 2) @ _stand_perm),
      tr(x=-EX_STAND_X), (0.93, 0.62, 0.24)),
 ]

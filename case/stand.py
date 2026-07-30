@@ -45,7 +45,7 @@ import cadquery as cq
 from shapely.geometry import Polygon
 from shapely.geometry import box as shapely_box
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -56,7 +56,12 @@ tilts = (15.0, 20.0, 30.0)   # one stand exported per angle
 FACE_Z0 = 2.5         # case Z of the flange's rear face - the mounting plane
 strap_x0 = 49.0       # inboard edge in case X: clears the -X wall at -48.5
 strap_x1 = 63.0       # outboard edge = case_bottom half_x, flush with the plate
-disp_span_y = 51.0    # case-screw spacing along Y (103.7 x 51 pattern)
+disp_span_x = 103.7   # case-screw spacing along X (103.7 x 51 pattern)
+disp_span_y = 51.0    # case-screw spacing along Y
+# Outer face of case_bottom's perimeter wall on the -X side. That side runs the
+# full length of the plate, so it - not the +X side, whose wall is cut away
+# across the port gap - is what limits how far inboard the strap may reach.
+wall_x = 48.5
 
 # --- Screws: the display's own M2.5 case screws pass through the strap ---
 screw_d = 2.9         # M2.5 clearance
@@ -130,6 +135,13 @@ masses = [
 # ============================================================
 leg_w = strap_x1 - strap_x0
 screw_ys = (-disp_span_y / 2, disp_span_y / 2)
+# Position of the screw axis ACROSS the strap, in leg coordinates. This is NOT
+# the strap's mid-width: the screws sit at case X 51.85 while the strap spans
+# 49..63, so the axis is 2.85mm in from the inboard edge and 11.15mm from the
+# outboard one. v1.1.0 put the bores at leg_w/2 and the holes came out 4.15mm
+# outboard of the screws - the leg then had to be slid inboard to reach them,
+# which drove its edge into the -X wall. Derive it, never centre it.
+strap_z = disp_span_x / 2 - strap_x0
 # highest case_Y any material may occupy while inside the plug band
 port_keep_y = plug_y0 - port_margin
 
@@ -143,6 +155,8 @@ assert head_z < plug_z0, \
 assert strap_t_thin - cbore_depth >= 0.8, "counterbore floor too thin"
 assert cbore_d >= screw_head_d + 0.5, \
     "counterbore too tight for the screw head once the bore roof droops"
+assert strap_x0 >= wall_x + 0.5, "strap would sit on the case's -X wall"
+assert strap_z + screw_d / 2 < leg_w, "screw hole breaks out of the strap"
 
 
 def profile(tilt):
@@ -233,7 +247,8 @@ def check(pts, info, tilt):
         "strap step runs into the lower counterbore"
     assert info["x_screw_hi"] + cbore_d / 2 + 1.0 < info["x_top"], \
         "upper counterbore breaks out of the strap's end"
-    assert cbore_d / 2 + 1.0 < leg_w / 2, "counterbore breaks out of the strap's sides"
+    assert strap_z + cbore_d / 2 + 1.0 < leg_w, \
+        "counterbore breaks out of the strap's outboard edge"
     assert face_y0 + info["x_top"] <= 38.0, "strap runs off the case_bottom plate"
 
     # --- 4. desk clearance and tipping, in world coords ---
@@ -259,7 +274,7 @@ def check(pts, info, tilt):
 
 
 def _bore(x, dia, y0, y1):
-    """A cylinder along +y (out of the mounting face), centred in the width.
+    """A cylinder along +y (out of the mounting face), on the screw axis.
 
     On an XZ workplane a POSITIVE extrude runs toward -Y, so the length is
     negated to grow away from the case. The bounding box is asserted below
@@ -269,14 +284,36 @@ def _bore(x, dia, y0, y1):
         cq.Workplane("XZ")
         .circle(dia / 2)
         .extrude(-(y1 - y0))
-        .translate((x, y0, leg_w / 2))
+        .translate((x, y0, strap_z))
     )
+
+
+def _cbore(x, y0, y1):
+    """Counterbore, opened out through the strap's INBOARD edge.
+
+    The screw axis is only 2.85mm from that edge, so a plain circular
+    counterbore would leave a 0.15mm fin standing 2mm tall - it would simply
+    break off. Running the pocket out to the edge instead gives a clean slot;
+    the head still lands on the full 1mm floor, and the through-hole is what
+    locates the screw laterally in any case.
+    """
+    circle = _bore(x, cbore_d, y0, y1)
+    mouth = (
+        cq.Workplane("XZ")
+        .rect(cbore_d, strap_z + 1.0, centered=(True, False))
+        .extrude(-(y1 - y0))
+        .translate((x, y0, -1.0))
+    )
+    return circle.union(mouth)
 
 
 _bb = _bore(10.0, 4.0, 1.0, 5.0).val().BoundingBox()
 assert abs(_bb.ymin - 1.0) < 1e-6 and abs(_bb.ymax - 5.0) < 1e-6, \
     "bore extruded the wrong way in Y"
-assert abs(_bb.zmin - (leg_w / 2 - 2.0)) < 1e-6, "bore is not centred in the width"
+assert abs(_bb.zmin - (strap_z - 2.0)) < 1e-6, "bore is not on the screw axis"
+# and the same thing stated in CASE coordinates, which is where it went wrong
+assert abs((strap_x0 + strap_z) - disp_span_x / 2) < 1e-9, \
+    "screw hole does not land on the case screw"
 
 
 def build(tilt):
@@ -300,8 +337,7 @@ def build(tilt):
     # will droop a little - hence cbore_d carrying +0.2 over the head.
     for x in (info["x_screw_lo"], info["x_screw_hi"]):
         leg = leg.cut(_bore(x, screw_d, -1.0, strap_t_thin + 1.0))
-        leg = leg.cut(_bore(x, cbore_d, strap_t_thin - cbore_depth,
-                            strap_t_thin + 1.0))
+        leg = leg.cut(_cbore(x, strap_t_thin - cbore_depth, strap_t_thin + 1.0))
 
     bb = leg.val().BoundingBox()
     return leg, (f"tilt {tilt:.0f} deg: {bb.xlen:.1f} x {bb.ylen:.1f} x "
@@ -316,8 +352,20 @@ print(f"stand v{VERSION}: strap {strap_t_thin}mm across the port band "
       f"{strap_t_thick}mm past it; strut {foot_t}mm x {foot_len}mm; "
       f"width {leg_w}mm at case X {strap_x0}..{strap_x1}; "
       f"screw head tops at Z {head_z:.2f} vs plugs at {plug_z0}")
+# The two stands are HANDED. The screw axis sits 2.85mm from the strap's
+# inboard edge and 11.15mm from its outboard one, so the -X stand is a mirror
+# image - and an L-shaped profile has no mirror symmetry in either axis, so no
+# rotation can stand in for it. (v1.1.0 appeared to need only one part; that
+# was purely an artefact of the bores being wrongly centred.)
 for t in tilts:
     solid, line = build(t)
-    name = f"stand_{int(t)}.stl"
-    cq.exporters.export(solid, name, tolerance=0.01, angularTolerance=0.1)
-    print(f"  {name}: {line}")
+    mirrored = solid.mirror("XY").translate((0, 0, leg_w))
+
+    _m = mirrored.val().BoundingBox()
+    assert abs(_m.zmin) < 1e-6 and abs(_m.zmax - leg_w) < 1e-6, \
+        "mirrored stand did not land back in 0..leg_w"
+
+    for name, part in ((f"stand_{int(t)}_usb.stl", solid),
+                       (f"stand_{int(t)}_dsi.stl", mirrored)):
+        cq.exporters.export(part, name, tolerance=0.01, angularTolerance=0.1)
+    print(f"  stand_{int(t)}_usb/_dsi.stl: {line}")

@@ -55,20 +55,31 @@ the stands stronger layer adhesion.
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
 | `case_bottom.stl` | 1 | 126 × 76 × 10.5 | 21 g | plate **flat**, wall up |
 | `case_top.stl` | 1 | 95 × 64 × 19.9 | 33 g | outer face **down** (as exported) |
-| `stand_20.stl` | **2** | 82 × 42.3 × 14.0 | 11 g ea | **flat** on the profile |
+| `stand_20_usb.stl` | 1 | 82 × 42.3 × 14.0 | 11 g | **flat** on the profile |
+| `stand_20_dsi.stl` | 1 | 82 × 42.3 × 14.0 | 11 g | **flat** on the profile |
 
-Pick one stand file and print two of it:
+Pick one lean angle and print **both** files for it — one per side:
 
-| File | Lean | Stand size (mm) | Assembly depth on the desk |
+| Files | Lean | Stand size (mm) | Assembly depth on the desk |
 |---|---|---|---|
-| `stand_15.stl` | 15° | 82.2 × 43.5 × 14.0 | 68.5 mm |
-| `stand_20.stl` | 20° | 82.0 × 42.3 × 14.0 | 73.9 mm |
-| `stand_30.stl` | 30° | 82.6 × 39.0 × 14.0 | 83.1 mm |
+| `stand_15_usb` + `stand_15_dsi` | 15° | 82.2 × 43.5 × 14.0 | 68.5 mm |
+| `stand_20_usb` + `stand_20_dsi` | 20° | 82.0 × 42.3 × 14.0 | 73.9 mm |
+| `stand_30_usb` + `stand_30_dsi` | 30° | 82.6 × 39.0 × 14.0 | 83.1 mm |
 
-The stands are the same part left and right — nothing is handed, and nothing is
-mirrored. At every angle the foot stops **inside** the case's own silhouette
-(3.5 mm in at 15°, 21 mm at 30°), so the stand never sticks out behind the
-case; the depths above are set by the leaning case, not by the foot.
+**The stands are handed** — `_usb` goes on the USB/Ethernet side, `_dsi` on the
+ribbon side. They are mirror images, and an L-shaped profile has no mirror
+symmetry in either axis, so no amount of turning one round will substitute for
+the other. The screw holes sit 2.85 mm from the strap's inboard edge and
+11.15 mm from its outboard one; fit the wrong one and the holes simply miss the
+case screws by 8.3 mm, so the mistake is obvious rather than subtle.
+
+Why not one symmetric part? The screw is at case X 51.85 and the case's −X wall
+is at 48.5, so a symmetric strap could be at most 5.7 mm wide — narrower than
+the Ø5.4 counterbore, which would leave the strap as a 1 mm web at both screws.
+
+At every angle the foot stops **inside** the case's own silhouette (3.5 mm in at
+15°, 21 mm at 30°), so the stand never sticks out behind the case; the depths
+above are set by the leaning case, not by the foot.
 
 Settings: 0.2 mm layer, 3 walls, 20 % infill, **no supports** — every part is
 oriented so nothing overhangs beyond 45°.
@@ -121,9 +132,11 @@ re-run that script after changing any part.
 2. Screw the four **M2.5 6+6 extenders** through the shell's back plate into the
    display's built-in standoffs (58 × 49 pattern).
 3. Fit the **case-bottom** over the extenders, lay a **stand** on each side
-   flange with its strut pointing down and back, and run the four **case
-   screws** (103.7 × 51 pattern) through both into the display's screw bosses.
-   The stands are not handed. A driver reaches all four screws even with the
+   flange with its strut pointing down and back — `_usb` on the USB/Ethernet
+   side, `_dsi` on the other — and run the four **case screws** (103.7 × 51
+   pattern) through both into the display's screw bosses. Each stand's
+   counterbore slots open toward the **middle** of the case; if they face
+   outward you have the pair swapped. A driver reaches all four screws even with the
    Pi and lid fitted, provided the +X cables are unplugged, so you can change
    the lean angle later without taking the case apart.
 4. Plug the **DSI ribbon** into the display, then seat the Pi on the extenders.
@@ -161,7 +174,11 @@ tolerance lifts the toe slightly and the strap does have to take it.
 Screw heads sit in **Ø5.4 × 2 mm counterbores**, which puts the head top at
 Z 6.00 against the plugs at 6.65 even for a tall socket-cap head. The
 counterbore is 0.7 mm wider than the head because it is a horizontal bore in
-print orientation and its roof droops a little.
+print orientation and its roof droops a little. Each counterbore is **opened
+out through the strap's inboard edge**: the screw axis is only 2.85 mm from
+that edge, so a plain circular pocket would leave a 0.15 mm fin standing 2 mm
+tall, which would just break off. The head still lands on the full 1 mm floor,
+and the Ø2.9 through-hole is what locates the screw.
 
 Nothing here is compliant — no spring, no latch, no sustained strain — so
 unlike the snap-on design it replaces, there is no creep to design around and
