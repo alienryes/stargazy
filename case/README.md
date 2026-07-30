@@ -55,8 +55,8 @@ the stands stronger layer adhesion.
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
 | `case_bottom.stl` | 1 | 126 × 76 × 10.5 | 21 g | plate **flat**, wall up |
 | `case_top.stl` | 1 | 95 × 64 × 19.9 | 33 g | outer face **down** (as exported) |
-| `stand_20_usb.stl` | 1 | 82 × 42.3 × 14.0 | 11 g | **flat** on the profile |
-| `stand_20_dsi.stl` | 1 | 82 × 42.3 × 14.0 | 11 g | **flat** on the profile |
+| `stand_20_usb.stl` | 1 | 82 × 42.3 × 14.0 | 9 g | **flat** on the profile |
+| `stand_20_dsi.stl` | 1 | 82 × 42.3 × 14.0 | 9 g | **flat** on the profile |
 
 Pick one lean angle and print **both** files for it — one per side:
 
@@ -162,10 +162,15 @@ Z 2.5–11.5 while the USB and Ethernet **connector shells start at Z 6.65** —
 0.75 mm *below* the PCB's top face, not level with it — so the bottom of every
 plug fouled it. Here nothing crosses that band. The strap passes underneath it
 (3 mm thick, clearing the plugs by 1.15 mm) and the strut stays outboard of it
-in Y, by 4.9 mm at 15° and 20° and 2.9 mm at 30°.
+in Y, by 4.9 mm at every angle.
 
-The strap is **3 mm thick across the port band and 6 mm past it**, with a 45°
-chamfer between. It can afford to be thin because the strut's root is itself a
+Both members step in thickness, with the same 45° chamfer and the same 2:1
+ratio. The strap is **3 mm across the port band and 6 mm past it**; the strut
+is **9 mm at its root and 4.5 mm beyond 20 mm along the desk**. The strut's
+bending moment is largest where it meets the strap and zero at the tip, so the
+material out there was doing nothing — and thinning it also pulls the strut's
+inner edge away from the plug band, which is what used to limit the 30°
+variant to 2.9 mm of clearance. It can afford to be thin because the strut's root is itself a
 desk contact — the toe touches down right where the strut meets the strap — so
 the strut carries its load straight to the desk in compression and the strap
 sees almost no bending. The thick section exists for the case where a print
@@ -232,7 +237,7 @@ Useful knobs:
 | `tilts` | `stand.py` | which lean angles to export (default 15/20/30°) |
 | `fit_clear` | `shell.py` | display pocket clearance (PETG 0.5, PLA 0.4) |
 | `foot_len` | `stand.py` | stand depth — how far back the foot reaches |
-| `foot_t` | `stand.py` | strut thickness; also sets the 30° port clearance |
+| `foot_t`, `foot_t_thin`, `foot_step` | `stand.py` | strut thickness at the root, past the step, and where it steps |
 | `strap_t_thin` | `stand.py` | strap under the port band — raising it eats the 1.15 mm plug gap |
 | `grille_r`, `grille_pitch` | `case_top.py` | fan grille pattern |
 

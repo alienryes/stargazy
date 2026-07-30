@@ -45,7 +45,7 @@ import cadquery as cq
 from shapely.geometry import Polygon
 from shapely.geometry import box as shapely_box
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -95,7 +95,14 @@ join_fillet = 3.0
 
 # --- Strut ---
 foot_len = 45.0       # contact length along the desk, from the toe
-foot_t = 9.0          # strut thickness, measured off the desk plane
+foot_t = 9.0          # strut thickness at the root, measured off the desk plane
+# The strut steps down to a thinner section for its outer half, mirroring what
+# the strap does - same 45 deg chamfer, same 2:1 ratio. Its bending moment is
+# largest at the root and zero at the tip, so the material out there was doing
+# nothing. It also moves the strut's inner edge further from the Pi's plug
+# band, which is what limits the 30 deg variant.
+foot_t_thin = 4.5
+foot_step = 20.0      # distance along the desk, from the toe, where it thins
 
 # --- Desk plane ---
 desk_clear = 3.0      # the stands carry the case; it never rests on its own corner
@@ -176,6 +183,10 @@ def profile(tilt):
     d = (s, c)
     n = (c, -s)
 
+    def pt(u, off):
+        """Point u along the desk from the toe, off mm in off the desk face."""
+        return (u * d[0] + off * n[0], u * d[1] + off * n[1])
+
     x_screw_lo = screw_ys[0] - face_y0
     x_screw_hi = screw_ys[1] - face_y0
     x_top = x_screw_hi + strap_end
@@ -186,18 +197,18 @@ def profile(tilt):
     x_step = min(port_keep_y - face_y0,
                  x_screw_lo - cbore_d / 2 - 2.0)
 
-    # Strut: far end on the desk, then in by foot_t, then back to the strap.
-    p_toe = (0.0, 0.0)
-    p_tip = (foot_len * d[0], foot_len * d[1])
-    p_heel = (p_tip[0] + foot_t * n[0], p_tip[1] + foot_t * n[1])
-    # walk back along the strut's inner edge until it meets the thick strap
-    u = (p_heel[1] - strap_t_thick) / c
-    p_join = (p_heel[0] - u * d[0], strap_t_thick)
+    # Strut: out along the desk to the tip, in by the thin thickness, back
+    # along the thin inner edge, chamfer out to the full thickness, then back
+    # to where the inner edge meets the thick strap at y = strap_t_thick.
+    u_join = (strap_t_thick + foot_t * s) / c
+    p_join = pt(u_join, foot_t)
 
     pts = [
-        p_toe,
-        p_tip,
-        p_heel,
+        (0.0, 0.0),                                 # toe
+        pt(foot_len, 0.0),                          # tip, on the desk
+        pt(foot_len, foot_t_thin),                  # tip, inner face
+        pt(foot_step, foot_t_thin),                 # end of the thin section
+        pt(foot_step - step_chamfer, foot_t),       # start of the chamfer
         p_join,
         (x_step - step_chamfer, strap_t_thick),
         (x_step, strap_t_thin),
@@ -212,7 +223,7 @@ def profile(tilt):
 
     info = dict(face_y0=face_y0, x_step=x_step, x_top=x_top,
                 x_screw_lo=x_screw_lo, x_screw_hi=x_screw_hi,
-                p_join=p_join, r_join=r_join, s=s, c=c)
+                p_join=p_join, r_join=r_join, u_join=u_join, s=s, c=c)
     return pts, info
 
 
@@ -243,6 +254,12 @@ def check(pts, info, tilt):
         "chamfer eats back into the strut root - no flat thick strap left"
     assert info["r_join"] >= 1.0, \
         f"only room for a {info['r_join']:.2f}mm fillet at the strut root"
+    # the strut's own chamfer must start outboard of where it meets the strap,
+    # or the two transitions collide and the root loses its full section
+    assert foot_step - step_chamfer > info["u_join"] + 2.0, \
+        (f"strut chamfer starts at u {foot_step - step_chamfer:.2f}, too close "
+         f"to the strap junction at u {info['u_join']:.2f}")
+    assert foot_step + 2.0 < foot_len, "strut thins too near its tip"
     assert info["x_step"] < info["x_screw_lo"] - cbore_d / 2 - 1.0, \
         "strap step runs into the lower counterbore"
     assert info["x_screw_hi"] + cbore_d / 2 + 1.0 < info["x_top"], \
@@ -349,7 +366,8 @@ def build(tilt):
 # ============================================================
 print(f"stand v{VERSION}: strap {strap_t_thin}mm across the port band "
       f"(clears the plugs by {plug_z0 - FACE_Z0 - strap_t_thin:.2f}mm), "
-      f"{strap_t_thick}mm past it; strut {foot_t}mm x {foot_len}mm; "
+      f"{strap_t_thick}mm past it; strut {foot_len}mm long, {foot_t}mm at the "
+      f"root stepping to {foot_t_thin}mm past u{foot_step}; "
       f"width {leg_w}mm at case X {strap_x0}..{strap_x1}; "
       f"screw head tops at Z {head_z:.2f} vs plugs at {plug_z0}")
 # The two stands are HANDED. The screw axis sits 2.85mm from the strap's
