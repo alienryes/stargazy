@@ -189,6 +189,14 @@ Nothing here is compliant — no spring, no latch, no sustained strain — so
 unlike the snap-on design it replaces, there is no creep to design around and
 nothing whose grip depends on holding a 0.2 mm clearance.
 
+**Releasing an Ethernet cable needs a small screwdriver.** The Pi 4's RJ45 jack
+has its retention clip on the *underside*, and the strap passes 1.15 mm beneath
+it, so there is no room for a fingertip — lift the clip with a thin blade
+instead. Confirmed on hardware; easy enough, just not obvious. This is mostly
+inherent to the case rather than the stand: with the strap removed entirely the
+gap would only grow to 4.15 mm, because the case-bottom's own plate is at
+Z 2.50. Both USB and Ethernet cables otherwise plug in and seat normally.
+
 To change the lean angle, unplug the +X cables, undo the four case screws, swap
 both stands and do them back up. The Pi and lid can stay where they are.
 
