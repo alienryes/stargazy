@@ -144,20 +144,25 @@ weight pushes it — so sitting on the desk seats the joint harder rather than
 working it loose. Two spread-apart dovetails stop the leg being pulled off the
 face or pivoting away at either end.
 
-The bump is the leg's **positive locator in both directions**, not a speed
-bump. Its vertical face butts the end wall of the leg's relief — that is the
-up-stop, wall against wall, and the dovetail tapers are deliberately clearanced
-so they never wedge first. Its 50° ramp is what the tongue's tip drops behind,
-taking about 23 N to push back over. The bump is 2.46 mm wide in a 2.66 mm
-relief, so once seated the leg has 0.2 mm of travel and nothing else.
+**The taper is the clamp, and it is the whole retention mechanism.** Each rib's
+slant leans toward the bottom of the case as it rises, and the leg's lip bears
+on it from underneath, so pushing the leg up drives the lip along the slant and
+the reaction pulls the leg hard onto the flange. Push harder, grip harder. The
+friction that results is what stops it sliding back down — and the case's own
+weight pushes in the engaging direction anyway.
 
-Two honest limits. The joint is **located, not preloaded** — there is no spring
-pressing the parts together, so off the case an unloaded leg has ~0.3 mm of
-wobble before the dovetails bite. On the case, the weight takes that up. And
-the latch **ramps rather than clicks**: a slide-release latch cannot have a
-vertical retention face, because that self-locks (PETG on PETG goes solid past
-about 73°), so resistance necessarily builds from zero — reaching ~5 N after
-0.4 mm and the full ~23 N by 1.4 mm. It is firm, but it is not a click.
+A wedge is also the only feature here that shrugs off print tolerance: whatever
+slack your printer leaves, the leg just slides a fraction further until it
+grips. **The corollary is that nothing else may stop the slide.** The bump and
+tongue are therefore a *backstop only*, held slack by 1 mm at both ends so they
+can never become the up-stop. They exist to catch the leg if the wedge ever
+relaxes, not to hold it.
+
+`slant_fit` in `stand.py` (0.05 mm) is the grip. Smaller grips harder; negative
+is a light interference that the lip deflects over, which guarantees a clamp
+even on a loose printer. It lives entirely in the leg — the flange ribs do not
+change — so you can print legs at two or three values and pick by feel without
+reprinting anything else.
 
 **To remove a leg, push it firmly back down** — roughly the same effort it took
 to click on. There is no press-to-release tab, deliberately: once a leg is on,
