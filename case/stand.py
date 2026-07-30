@@ -11,32 +11,30 @@ angle between those two faces is (90 - tilt). The leg is a triangle - arm up
 the case back, foot along the desk, strut across - lightened by a triangular
 void.
 
-How the joint works, and why it is arranged this way:
+HOW THE JOINT HOLDS - the tongue is a permanently sprung leaf, not a latch:
 
-  - The leg slides UP (+case Y) to engage. That is the direction the case's own
-    weight drives it, so service load seats the joint deeper instead of working
-    it loose.
   - Two half-dovetail ribs, flaring toward -Y, each sweep a pocket in the arm.
-    Once the leg has slid up, the leg material left under each flare cannot
-    pass back through it, so the leg cannot be pulled off the face. Two of
-    them, spread apart, also stop the leg pivoting away at either end.
-  - THE TAPERS ARE THE CLAMP, and they are the whole retention mechanism. The
-    rib's slant leans toward -Y as it rises and the lip bears on it from
-    below, so pushing the leg up drives the lip along the slant and the
-    reaction pulls the leg ONTO the flange. Push harder, grip harder, and the
-    friction that results is what stops it sliding back down. A wedge is also
-    the only feature here that shrugs off print tolerance: whatever slack the
-    printer leaves, the leg slides a fraction further until it grips.
-    Consequence: NOTHING else may stop the slide. Three printed versions had
-    no tension in them because a hard up-stop landed 0.1mm before the taper
-    could touch, so it never clamped.
-  - The tongue and bump are a BACKSTOP, not the retention. They are slack by
-    1mm at both ends so they cannot become the up-stop; they only catch the
-    leg if the wedge ever relaxes.
-  - Release is by pushing the leg back down, hard. The detent's ramps are
-    symmetric because there is no way to reach the tongue's back face once
-    the leg is on - the case is behind it - so a press-to-release latch would
-    be unreachable. Sliding it off is the only usable release action.
+    The leg material left under each flare cannot pass back through it, so the
+    ribs capture the leg. Two of them, spread apart, also stop it pivoting away
+    at either end.
+  - The detent bump sits under the tongue AT ALL TIMES, including when fully
+    seated, holding it deflected by the bump's full height. The tongue
+    therefore pushes the leg AWAY from the flange, which presses each lip up
+    against the underside of its rib flare. That is the preload: it takes up
+    all the lift play, kills every rattle, and puts normal force on the slants
+    whose friction resists sliding back down.
+  - The up-stop falls out of the same contact. With the lips pressed against
+    the flares, sliding further up would drive lip into flare, so it simply
+    stops. Sliding DOWN opens the taper and is free, resisted only by friction
+    - about 6 N against the 0.16 N a dangling leg actually applies.
+  - The spring deflects 1.5 mm, roughly ten times the printer's tolerance, so
+    the preload varies but is NEVER ZERO. That is the whole point, and it is
+    what four earlier attempts lacked: they all located the leg precisely and
+    then relied on 0.05-0.3 mm clearances to generate grip, which FDM cannot
+    hold. Do not "improve" this by adding a hard stop that lifts the bump off
+    the tongue - that removes the only source of tension in the joint.
+  - Sustained deflection means creep, so the tongue is sized for a low steady
+    strain (see CREEP_LIMIT) rather than for maximum force.
 
 MODELLED IN PRINT ORIENTATION: profile flat on the bed (X = along the mounting
 face, Y = away from the case, Z = leg width). Every feature is prismatic in Z,
@@ -55,7 +53,7 @@ import math
 
 import cadquery as cq
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -67,43 +65,27 @@ cleat_span_y = 48.0   # spacing of the ribs' -Y base edges (the load faces)
 rib_t = 3.0           # rib base thickness along Y
 rib_h = 3.5           # rib height off the flange face
 rib_flare = 2.0       # rib undercut at the top, toward -Y
-detent_y = -4.0       # Y of the bump's vertical face (the up-stop)
-detent_h = 1.5        # bump height
-detent_top = 1.2      # flat top width
-detent_face = 50.0    # +Y retention ramp, degrees from horizontal
+detent_y = -4.0       # Y of the bump's vertical face
+detent_h = 1.5        # bump height - this IS the spring's deflection
+detent_top = 1.2      # flat top width; the tongue rides on this
+detent_face = 50.0    # +Y ramp, only needed here to know the bump's width
 FACE_Z0 = 2.5         # case Z of the flange's rear face
 
-# --- Fit (PETG; it prints slightly proud, so these are not bare nominals) ---
+# --- Fit ---
 fit = 0.3             # clearance on the pocket's flat faces
-# THE DOVETAIL TAPER IS THE CLAMP. The rib's slant leans toward -Y as it
-# rises and the leg's lip bears on it from underneath, so pushing the leg UP
-# drives the lip along the slant and the reaction pulls the leg ONTO the
-# flange: a self-clamping tapered slide. Push harder, grip harder.
-#
-# Keep this clearance small. A wedge is the one feature here that is immune to
-# print tolerance - whatever slack the printer leaves, the leg simply slides a
-# fraction further until it grips - but only if nothing else stops it first.
-# v0.12.0 had 0.15 here AND a hard up-stop 0.1mm before the wedge could touch,
-# which is why three printed versions had no tension in them at all.
-slant_fit = 0.05      # perpendicular clearance on the dovetail slant
+# The taper no longer has to generate grip, so this can be a comfortable
+# sliding clearance. It only sets how far the spring lifts the leg before the
+# lips meet the flares, i.e. how much travel the preload works through.
+slant_fit = 0.10      # perpendicular clearance on the dovetail slant
 travel = 5.0          # slide distance from offer-up to seated
 
-# --- Backstop tongue ---
-# Secondary only: the taper holds the leg, this just catches it if the wedge
-# ever relaxes. Deliberately SLACK so it can never become the up-stop and
-# rob the taper of its grip - that was the v0.12.0 mistake.
+# --- Sprung tongue ---
+# Longer and thicker than a latch would need: at equal force, scaling length
+# and thickness together cuts the sustained strain, which is what governs creep.
 tongue_t = 2.0        # tongue thickness (bends in the layer plane)
-tongue_len = 18.0
-tongue_gap = 2.2      # slot above the tongue; must exceed the deflection
-detent_gap = 1.0      # slack from the tongue's tip to the ramp when seated
-up_gap = 1.0          # slack at the relief's -Y wall, so the bump never butts
-
-# Material that must remain between the upper pocket's roof and the arm's
-# outline. The arm tapers to a point at its tip, so the depth available there
-# is set by the strut edge, NOT by arm_t: at cleat_span_y 56 the pocket ended
-# where the outline was only 4.43mm tall, leaving 0.63mm of plastic holding
-# the tip on - the slicer gave it a perimeter and no infill.
-min_ligament = 2.5
+tongue_len = 21.0
+tongue_gap = 2.0      # slot above the tongue; must exceed the deflection
+tongue_lead = 1.0     # how far the tip reaches past the bump when seated
 
 # --- Leg proportions ---
 arm_len = 93.0        # along the mounting face from the foot corner
@@ -126,6 +108,12 @@ case_corners = [
     (-32.0, 30.4),     # case_top, bottom rear (lid outer face)
 ]
 
+# --- Material, for the tongue and the ligament ---
+E_PETG = 2000.0       # MPa
+MU = 0.3              # PETG on PETG
+CREEP_LIMIT = 0.013   # sustained strain ceiling - the tongue never relaxes
+min_ligament = 2.5    # material left over the upper pocket, see below
+
 # --- Mass model, for the tipping check only (grams, at case (Y, Z)) ---
 masses = [
     (140.0, 0.0, -10.6),   # display module
@@ -135,42 +123,30 @@ masses = [
     (33.0, 0.0, 20.0),     # lid
 ]
 
-# --- Material, for the detent check ---
-E_PETG = 2000.0       # MPa
-MU = 0.3              # PETG on PETG
-STRAIN_LIMIT = 0.025  # PETG yields ~4.5%; stay well inside it
-
 # ============================================================
-# DETENT SIZING (tilt-independent)
+# SPRING SIZING (tilt-independent)
 # ============================================================
 detent_run = detent_h / math.tan(math.radians(detent_face))
 detent_span = detent_top + detent_run       # bump width, from its vertical face
-# The relief is sized to the bump, not chosen: the bump is trapped between the
-# relief's -Y wall (up-stop) and the tongue's tip (latch), with only up_gap +
-# detent_gap of play. An oversized relief is what made v0.11.0 feel dead.
-relief_len = up_gap + detent_span + detent_gap
 
-deflect = detent_h + 0.3
+# The bump bears on the middle of its flat top. Distance from there to the
+# tongue's root is the working cantilever length when seated.
+arm_eff = tongue_len - tongue_lead - detent_top / 2.0
 _I = leg_w * tongue_t ** 3 / 12.0
-snap_force = 3.0 * E_PETG * _I * deflect / tongue_len ** 3
-_ramp = math.tan(math.radians(detent_face))
-slide_force = snap_force * (MU + _ramp) / (1.0 - MU * _ramp)
-strain = 3.0 * tongue_t * deflect / (2.0 * tongue_len ** 2)
+preload = 3.0 * E_PETG * _I * detent_h / arm_eff ** 3
+strain = 3.0 * tongue_t * detent_h / (2.0 * arm_eff ** 2)
 
-# Travel past nominal at which the tapers wedge and start clamping. This must
-# happen FIRST - it is the whole retention mechanism - so both the bump's
-# vertical face and the tongue's tip are held well clear of it.
-wedge_travel = slant_fit * math.hypot(rib_flare, rib_h) / rib_h
-lift_play = slant_fit / (rib_flare / math.hypot(rib_flare, rib_h))
+# The preload presses the lips onto the flares; that normal force, plus the
+# tongue's own contact on the bump, is what resists sliding back down.
+_slant_ny = rib_flare / math.hypot(rib_flare, rib_h)
+hold_force = MU * (preload / _slant_ny + preload)
+lift_play = slant_fit / _slant_ny
 
-assert tongue_gap > deflect, "slot too shallow for the tongue to deflect"
-assert strain < STRAIN_LIMIT, f"tongue overstrained at {100*strain:.1f}%"
-assert 5.0 < slide_force < 40.0, "backstop is either limp or unassemblable"
-assert MU * _ramp < 1.0, "retention ramp self-locks: the leg could not come off"
-assert up_gap > wedge_travel + 0.5, \
-    "bump would butt before the taper clamps - the joint would have no grip"
-assert detent_gap > wedge_travel + 0.5, \
-    "tongue must drop behind the ramp before the taper clamps"
+assert tongue_gap > detent_h + 0.3, "slot too shallow for the tongue to deflect"
+assert strain < CREEP_LIMIT, \
+    f"tongue would creep: {100*strain:.2f}% sustained strain"
+assert preload > 3.0, "preload too light to take up the lift play"
+assert hold_force > 2.0, "not enough friction to hold a dangling leg"
 assert arm_t - (rib_h + fit) > 4.0, "pockets leave too little arm behind them"
 assert arm_t - (tongue_t + tongue_gap) > 4.0, "tongue slot undercuts the arm"
 assert travel > rib_flare + 1.0, "not enough travel to clear the undercut"
@@ -210,8 +186,8 @@ def _pocket(x_r):
 
     The rib travels from x_r + travel (offered up) to x_r (seated); the region
     it sweeps is the convex hull of both positions, dilated by the fit
-    clearances. The slanted -x wall is what captures the rib's flare, and its
-    wedge against the rib is what stops the slide.
+    clearances. The slanted -x wall is the captured face: the tongue's spring
+    presses the leg up until this wall bears on the rib's matching slant.
     """
     dx = slant_fit * math.hypot(rib_flare, rib_h) / rib_h
     top = rib_h + fit
@@ -235,7 +211,7 @@ def build_leg(tilt):
     x_lo = -cleat_span_y / 2 - face_y0
     x_hi = cleat_span_y / 2 - face_y0
     x_bump = detent_y - face_y0                   # the bump's vertical face
-    x_tip = x_bump + detent_span + detent_gap     # tongue's free end
+    x_tip = x_bump - tongue_lead                  # tongue's free end
     x_root = x_tip + tongue_len
 
     lo_end = x_lo + rib_t + travel + fit          # +x end of the lower pocket
@@ -248,10 +224,13 @@ def build_leg(tilt):
     strut_slope = foot_len * c / (arm_len - foot_len * s)
     ligament = (arm_len - hi_end) * strut_slope - (rib_h + fit)
 
-    assert x_tip - relief_len > lo_end + 2.0, "tongue relief clashes with a pocket"
+    assert x_tip > lo_end + 2.0, "tongue tip clashes with the lower pocket"
     assert x_root + 2.0 < hi_start, "tongue root clashes with the upper pocket"
+    # the bump must stay under the tongue over the WHOLE stroke, or the spring
+    # unloads part way and the leg goes slack
+    assert x_bump > x_tip, "bump is off the tongue's tip when seated"
     assert x_bump + travel + detent_span < x_root - 1.0, \
-        "bump misses the tongue when the leg is offered up"
+        "bump runs off the tongue's root when the leg is offered up"
     assert ligament >= min_ligament, \
         f"only {ligament:.2f}mm of arm over the upper pocket - the tip would " \
         f"hang off a sliver; pull cleat_span_y in"
@@ -282,15 +261,17 @@ def build_leg(tilt):
     leg = _cut(leg, _pocket(x_lo))
     leg = _cut(leg, _pocket(x_hi))
 
-    # detent: the relief the bump is trapped in, then the slot that frees the
-    # tongue. The tongue's tip faces -x, so the bump - which travels -x
-    # relative to the leg - rides under it and drops off its tip. The relief's
-    # -x wall then butts the bump's vertical face: that is the up-stop.
-    slot_top = tongue_t + tongue_gap
-    leg = _cut(leg, [(x_tip - relief_len, 0.0), (x_tip, 0.0),
-                     (x_tip, slot_top), (x_tip - relief_len, slot_top)])
+    # The tongue: a flush leaf, freed by the slot above it. There is NO relief
+    # under it - the bump rides on the tongue's underside for the whole stroke
+    # and never drops away, which is what keeps the spring loaded when seated.
     leg = _cut(leg, [(x_tip, tongue_t), (x_root, tongue_t),
-                     (x_root, slot_top), (x_tip, slot_top)])
+                     (x_root, tongue_t + tongue_gap),
+                     (x_tip, tongue_t + tongue_gap)])
+    # break the slot out through the tip so the leaf is a cantilever, not a
+    # bridge: a shallow notch from the tip up into the slot
+    leg = _cut(leg, [(x_tip - 1.6, 0.0), (x_tip, 0.0),
+                     (x_tip, tongue_t + tongue_gap),
+                     (x_tip - 1.6, tongue_t + tongue_gap)])
 
     # --- verify the desk plane and tipping margin numerically ---
     def world_h(cy, cz):
@@ -314,7 +295,8 @@ def build_leg(tilt):
     report = (f"tilt {tilt:.0f} deg: {bb.xlen:.1f} x {bb.ylen:.1f} x "
               f"{bb.zlen:.1f}mm, face_y0 {face_y0:.2f}, desk clear "
               f"{clear:.1f}, ribs at x {x_lo:.1f}/{x_hi:.1f}, tongue "
-              f"{x_tip:.1f}..{x_root:.1f}, arm over pocket {ligament:.2f}, "
+              f"{x_tip:.1f}..{x_root:.1f}, bump {x_bump:.1f}..{x_bump+travel:.1f} "
+              f"over the stroke, arm over pocket {ligament:.2f}, "
               f"tip margin {com_h - h_front:.1f}")
     return leg, report
 
@@ -322,10 +304,10 @@ def build_leg(tilt):
 # ============================================================
 # EXPORT
 # ============================================================
-print(f"stand v{VERSION}: taper clamps after {wedge_travel:.3f}mm of push "
-      f"(slant_fit {slant_fit}, lift play {lift_play:.2f}mm); backstop "
-      f"{slide_force:.1f}N at {100*strain:.2f}% strain, slack "
-      f"{detent_gap:.1f}/{up_gap:.1f}mm so it never robs the clamp")
+print(f"stand v{VERSION}: tongue sprung {detent_h}mm permanently -> "
+      f"{preload:.1f}N preload, {hold_force:.1f}N to slide off, "
+      f"{100*strain:.2f}% sustained strain "
+      f"({100*CREEP_LIMIT:.1f}% ceiling), takes up {lift_play:.2f}mm lift play")
 for t in tilts:
     solid, line = build_leg(t)
     name = f"stand_{int(t)}.stl"

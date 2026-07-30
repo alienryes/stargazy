@@ -130,8 +130,9 @@ re-run that script after changing any part.
 7. Fit the **lid** — its skirt seats on the case-bottom's wall — and secure with
    four **M2.5 × 6** screws through the top face into the standoffs.
 8. Fit a **stand leg** to each side flange. Lay it on the flange about 5 mm
-   below its final position, so the three ribs sit in the leg's slots, then
-   **slide it up** until the tongue clicks. No screws.
+   below its final position, so the three ribs sit in the leg's slots — the
+   tongue will already be springing against the bump — then **slide it up**
+   until it stops. No screws. It should feel sprung, with no slack.
 
 ## The legs
 
@@ -144,25 +145,32 @@ weight pushes it — so sitting on the desk seats the joint harder rather than
 working it loose. Two spread-apart dovetails stop the leg being pulled off the
 face or pivoting away at either end.
 
-**The taper is the clamp, and it is the whole retention mechanism.** Each rib's
-slant leans toward the bottom of the case as it rises, and the leg's lip bears
-on it from underneath, so pushing the leg up drives the lip along the slant and
-the reaction pulls the leg hard onto the flange. Push harder, grip harder. The
-friction that results is what stops it sliding back down — and the case's own
-weight pushes in the engaging direction anyway.
+**The tongue is a permanently sprung leaf, not a latch.** The bump sits under
+it at all times — including fully seated — holding it deflected by the bump's
+full 1.5 mm. The tongue therefore pushes the leg *away* from the flange, which
+presses each lip up against the underside of its rib flare. That is the
+preload: it takes up all the lift play, so there is no rattle, and it puts
+normal force on the dovetail slants whose friction resists sliding back down.
+About 6.6 N of spring gives roughly 6 N of hold, against the 0.16 N a dangling
+leg actually applies.
 
-A wedge is also the only feature here that shrugs off print tolerance: whatever
-slack your printer leaves, the leg just slides a fraction further until it
-grips. **The corollary is that nothing else may stop the slide.** The bump and
-tongue are therefore a *backstop only*, held slack by 1 mm at both ends so they
-can never become the up-stop. They exist to catch the leg if the wedge ever
-relaxes, not to hold it.
+The up-stop falls out of the same contact: with the lips pressed against the
+flares, sliding further up would drive lip into flare, so it simply stops.
+Sliding down opens the taper and is free, resisted only by that friction — so
+**to remove a leg, push it firmly down**.
 
-`slant_fit` in `stand.py` (0.05 mm) is the grip. Smaller grips harder; negative
-is a light interference that the lip deflects over, which guarantees a clamp
-even on a loose printer. It lives entirely in the leg — the flange ribs do not
-change — so you can print legs at two or three values and pick by feel without
-reprinting anything else.
+The reason it is built this way is tolerance. The spring deflects 1.5 mm, some
+ten times what an FDM printer holds on a feature this size, so the preload
+varies but is **never zero**. Earlier versions located the leg precisely and
+then relied on 0.05–0.3 mm clearances to generate grip; that cannot work on a
+printer whose tolerance is larger than the entire adjustment range, and four
+printed attempts had no tension in them at all. If you change anything here,
+**do not add a hard stop that lifts the bump clear of the tongue** — that
+removes the only source of tension in the joint.
+
+Because the tongue is under sustained load it will creep, so it is sized for a
+low steady strain (1.20 % against a 1.3 % ceiling) rather than maximum force,
+and `stand.py` refuses to build one that exceeds it.
 
 **To remove a leg, push it firmly back down** — roughly the same effort it took
 to click on. There is no press-to-release tab, deliberately: once a leg is on,
@@ -219,7 +227,8 @@ Useful knobs:
 | `tilts` | `stand.py` | which lean angles to export (default 15/20/30°) |
 | `fit_clear` | `shell.py` | display pocket clearance (PETG 0.5, PLA 0.4) |
 | `foot_len` | `stand.py` | stand depth — how far back the foot reaches |
-| `fit`, `slant_fit` | `stand.py` | how tight the legs snap on |
+| `detent_h` | both | leg preload — the tongue's deflection |
+| `tongue_t`, `tongue_len` | `stand.py` | leg preload force and its creep margin |
 | `grille_r`, `grille_pitch` | `case_top.py` | fan grille pattern |
 
 The cleat parameters (`cleat_x`, `cleat_span_y`, `rib_t`, `rib_h`, `rib_flare`,
