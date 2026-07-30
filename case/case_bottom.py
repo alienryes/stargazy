@@ -32,7 +32,7 @@ Print orientation: plate flat on the bed, wall up. No supports.
 
 import cadquery as cq
 
-VERSION = "0.10.0"
+VERSION = "0.11.0"
 
 # ============================================================
 # PARAMETERS - all mm.
@@ -104,7 +104,10 @@ ffc_hy = 9.0
 # rock on them. The flange therefore moved outboard (half_x 63 -> 64.5).
 cleat_x = 59.5        # rib centre in X; the leg is 8mm wide -> x 55.5..63.5
 cleat_len = 8.0       # rib length along X = leg width
-cleat_span_y = 56.0   # spacing of the ribs' -Y base edges (the load faces)
+# Span is capped by the LEG, not by this plate: near its tip the arm tapers to
+# a point, so an upper rib placed too far out leaves the pocket with almost no
+# material above it. stand.py asserts the resulting ligament.
+cleat_span_y = 48.0   # spacing of the ribs' -Y base edges (the load faces)
 rib_t = 3.0           # rib base thickness along Y
 rib_h = 3.5           # rib height off the rear face
 rib_flare = 2.0       # undercut at the top, toward -Y (30 deg from vertical:

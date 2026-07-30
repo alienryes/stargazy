@@ -50,7 +50,7 @@ import math
 
 import cadquery as cq
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -58,7 +58,7 @@ VERSION = "0.2.0"
 tilts = (15.0, 20.0, 30.0)   # one leg exported per angle
 
 # --- Interface to case_bottom.py (MUST match) ---
-cleat_span_y = 56.0   # spacing of the ribs' -Y base edges (the load faces)
+cleat_span_y = 48.0   # spacing of the ribs' -Y base edges (the load faces)
 rib_t = 3.0           # rib base thickness along Y
 rib_h = 3.5           # rib height off the flange face
 rib_flare = 2.0       # rib undercut at the top, toward -Y
@@ -77,6 +77,13 @@ tongue_len = 16.0
 tongue_gap = 2.0      # slot above the tongue; must exceed the deflection
 detent_gap = 0.2      # play along the slide once latched
 relief_len = 4.0      # full-depth pocket the bump sits in when seated
+
+# Material that must remain between the upper pocket's roof and the arm's
+# outline. The arm tapers to a point at its tip, so the depth available there
+# is set by the strut edge, NOT by arm_t: at cleat_span_y 56 the pocket ended
+# where the outline was only 4.43mm tall, leaving 0.63mm of plastic holding
+# the tip on - the slicer gave it a perimeter and no infill.
+min_ligament = 2.5
 
 # --- Leg proportions ---
 arm_len = 93.0        # along the mounting face from the foot corner
@@ -194,14 +201,22 @@ def build_leg(tilt):
     x_root = x_tip + tongue_len
 
     lo_end = x_lo + rib_t + travel + fit          # +x end of the lower pocket
+    hi_end = x_hi + rib_t + travel + fit          # +x end of the upper pocket
     hi_start = x_hi - slant_fit - rib_flare * (rib_h + fit) / rib_h
+
+    # How much plastic is left over the upper pocket. The arm's outline there
+    # is the strut edge running back from the tip, so the depth available
+    # shrinks toward the tip and has nothing to do with arm_t.
+    strut_slope = foot_len * c / (arm_len - foot_len * s)
+    ligament = (arm_len - hi_end) * strut_slope - (rib_h + fit)
 
     assert x_tip - relief_len > lo_end + 2.0, "tongue relief clashes with a pocket"
     assert x_root + 2.0 < hi_start, "tongue root clashes with the upper pocket"
     assert x_bump + travel + detent_h < x_root - 1.0, \
         "bump misses the tongue when the leg is offered up"
-    assert x_hi + rib_t + travel + fit + 2.0 < arm_len, \
-        "upper pocket runs off the end of the arm"
+    assert ligament >= min_ligament, \
+        f"only {ligament:.2f}mm of arm over the upper pocket - the tip would " \
+        f"hang off a sliver; pull cleat_span_y in"
 
     # Outer triangle: corner at the foot end, arm up the face, foot on the desk
     p_corner = (0.0, 0.0)
@@ -260,7 +275,8 @@ def build_leg(tilt):
     report = (f"tilt {tilt:.0f} deg: {bb.xlen:.1f} x {bb.ylen:.1f} x "
               f"{bb.zlen:.1f}mm, face_y0 {face_y0:.2f}, desk clear "
               f"{clear:.1f}, ribs at x {x_lo:.1f}/{x_hi:.1f}, tongue "
-              f"{x_tip:.1f}..{x_root:.1f}, tip margin {com_h - h_front:.1f}")
+              f"{x_tip:.1f}..{x_root:.1f}, arm over pocket {ligament:.2f}, "
+              f"tip margin {com_h - h_front:.1f}")
     return leg, report
 
 

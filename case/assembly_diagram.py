@@ -21,7 +21,7 @@ import pyrender
 import trimesh
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 W, H = 2200, 1560
 ELEV, AZIM = 30.0, 128.0             # 128 = -52 + 180 (view from the far side)
@@ -40,7 +40,7 @@ CASE_SCREWS = [(sx * 51.85, sy * 25.5) for sx in (1, -1) for sy in (1, -1)]
 # one chain now runs display standoff -> extender -> Pi -> standoff -> lid
 EXTENDERS = [(x, sy * 24.5) for x in (-37.7, 20.3) for sy in (1, -1)]
 # the legs take no screws: these mark the cleat ribs they slide onto
-CLEATS = [(sx * STAND_X, sy * 28.0) for sx in (1, -1) for sy in (1, -1)]
+CLEATS = [(sx * STAND_X, sy * 24.0) for sx in (1, -1) for sy in (1, -1)]
 LID_Z_OUTER = 30.4    # case_top z_outer
 
 # ── explosion offsets along Z (stands also move in X) ─────────────────────
