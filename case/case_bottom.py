@@ -34,7 +34,7 @@ import math
 
 import cadquery as cq
 
-VERSION = "0.12.0"
+VERSION = "0.13.0"
 
 # ============================================================
 # PARAMETERS - all mm.
@@ -112,9 +112,19 @@ cleat_len = 8.0       # rib length along X = leg width
 cleat_span_y = 48.0   # spacing of the ribs' -Y base edges (the load faces)
 rib_t = 3.0           # rib base thickness along Y
 rib_h = 3.5           # rib height off the rear face
-rib_flare = 2.0       # undercut at the top, toward -Y (30 deg from vertical:
-                      # steep enough to print, shallow enough that the leg
-                      # only lifts ~0.5mm off the face before the flares bite)
+# The undercut is a small, NEARLY FLAT ledge, not a dovetail slope, and that is
+# the whole reason this joint works. The leg's tongue is sprung and pushes the
+# leg away from the flange; this ledge is what reacts that force. A SLOPED face
+# resolves the uplift into a component along the slide that ejects the leg: with
+# the old 2.0mm / 60-deg flare that was 1.75x the spring force against 0.30x of
+# friction, so the spring drove the leg straight back out of engagement.
+# Self-locking needs sin(angle from horizontal) < mu, i.e. under about 17 deg.
+#
+# Depth is a balance: the leg's sliding clearance eats into the engagement, so
+# too shallow a ledge leaves almost nothing gripping, while a deeper one is a
+# longer near-horizontal overhang to print. 1.0mm droops a little but holds.
+rib_flare = 1.0       # undercut DEPTH toward -Y
+rib_ledge = 10.0      # undercut angle from horizontal - keep well under 17
 # The detent bump is the leg's POSITIVE LOCATOR in both slide directions, not
 # just a speed bump. Its -Y face is vertical and butts the -Y wall of the leg's
 # relief: that is the up-stop, and it is a wall-to-wall contact so it cannot
@@ -148,6 +158,9 @@ disp_mounts = [(dmx, dmy), (-dmx, dmy), (dmx, -dmy), (-dmx, -dmy)]
 
 cleat_xs = (cleat_x, -cleat_x)
 cleat_ys = (cleat_span_y / 2, -cleat_span_y / 2)   # rib -Y base edge = load face
+
+# how far the retaining ledge rises over its 0.6mm reach - near enough flat
+rib_ledge_rise = rib_flare * math.tan(math.radians(rib_ledge))
 
 # the bump's +Y ramp reaches this far past its flat top
 detent_run = detent_h / math.tan(math.radians(detent_face))
@@ -186,6 +199,10 @@ for _cy in cleat_ys:
 assert -cleat_span_y / 2 - rib_flare < detent_y and \
        cleat_span_y / 2 > detent_y + detent_span, "detent bump collides with a rib"
 assert detent_face < 70.0, "retention ramp too steep to cam back out"
+# the sprung tongue pushes the leg off the flange; if this ledge is too steep
+# it converts that into a force along the slide and ejects the leg
+assert math.sin(math.radians(rib_ledge)) < 0.7 * 0.3, \
+    "retaining ledge too steep: the leg's own spring would push it out"
 
 # ============================================================
 # MODEL  (plate on the bed at Z=0, wall/towers up +Z)
@@ -265,8 +282,9 @@ def _flange_feature(pts, cx):
 
 
 def _rib_profile(cy):
+    """Rectangular rib with a shallow retaining ledge on its -Y top corner."""
     return [(cy, 0.0), (cy + rib_t, 0.0), (cy + rib_t, rib_h),
-            (cy - rib_flare, rib_h)]
+            (cy - rib_flare, rib_h), (cy, rib_h - rib_ledge_rise)]
 
 
 def _bump_profile():

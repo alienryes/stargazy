@@ -53,7 +53,7 @@ import math
 
 import cadquery as cq
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -64,7 +64,8 @@ tilts = (15.0, 20.0, 30.0)   # one leg exported per angle
 cleat_span_y = 48.0   # spacing of the ribs' -Y base edges (the load faces)
 rib_t = 3.0           # rib base thickness along Y
 rib_h = 3.5           # rib height off the flange face
-rib_flare = 2.0       # rib undercut at the top, toward -Y
+rib_flare = 1.0       # rib undercut DEPTH toward -Y
+rib_ledge = 10.0      # undercut angle from horizontal (self-locking, see below)
 detent_y = -4.0       # Y of the bump's vertical face
 detent_h = 1.5        # bump height - this IS the spring's deflection
 detent_top = 1.2      # flat top width; the tongue rides on this
@@ -73,10 +74,17 @@ FACE_Z0 = 2.5         # case Z of the flange's rear face
 
 # --- Fit ---
 fit = 0.3             # clearance on the pocket's flat faces
-# The taper no longer has to generate grip, so this can be a comfortable
-# sliding clearance. It only sets how far the spring lifts the leg before the
-# lips meet the flares, i.e. how much travel the preload works through.
-slant_fit = 0.10      # perpendicular clearance on the dovetail slant
+# Sliding clearance on the pocket's -x wall. Keep it small: it is subtracted
+# directly from the ledge's grip, since the lip can only reach as far under the
+# ledge as this clearance allows.
+side_clear = 0.15
+# How far the spring may lift the leg before its lips meet the ledges. This is
+# now dimensioned DIRECTLY rather than falling out of a slant clearance: the
+# undercut is only 0.6mm deep, so a lift clearance anywhere near that would let
+# the lip clear the ledge entirely.
+# 0.20 rather than tighter because the ledge is a printed micro-overhang and
+# will droop slightly into this gap.
+lift_clear = 0.20
 travel = 5.0          # slide distance from offer-up to seated
 
 # --- Sprung tongue ---
@@ -136,17 +144,27 @@ _I = leg_w * tongue_t ** 3 / 12.0
 preload = 3.0 * E_PETG * _I * detent_h / arm_eff ** 3
 strain = 3.0 * tongue_t * detent_h / (2.0 * arm_eff ** 2)
 
-# The preload presses the lips onto the flares; that normal force, plus the
-# tongue's own contact on the bump, is what resists sliding back down.
-_slant_ny = rib_flare / math.hypot(rib_flare, rib_h)
-hold_force = MU * (preload / _slant_ny + preload)
-lift_play = slant_fit / _slant_ny
+# The preload presses the lips up against the retaining ledges. A ledge at
+# angle `rib_ledge` from horizontal turns that uplift F into F*tan(ledge) along
+# the slide, resisted by mu*F/cos(ledge) of friction - so the joint only holds
+# itself together if sin(ledge) < mu. At 60 deg (the old dovetail) it was
+# 1.75F against 0.30F and the spring ejected the leg; at 10 deg it is 0.18F
+# against 0.31F and it locks.
+rib_ledge_rise = rib_flare * math.tan(math.radians(rib_ledge))
+_eject = math.tan(math.radians(rib_ledge))
+_grip = MU / math.cos(math.radians(rib_ledge))
+hold_force = MU * preload + preload * (_grip - _eject)
+lift_play = lift_clear
 
 assert tongue_gap > detent_h + 0.3, "slot too shallow for the tongue to deflect"
 assert strain < CREEP_LIMIT, \
     f"tongue would creep: {100*strain:.2f}% sustained strain"
 assert preload > 3.0, "preload too light to take up the lift play"
 assert hold_force > 2.0, "not enough friction to hold a dangling leg"
+assert math.sin(math.radians(rib_ledge)) < 0.7 * MU, \
+    "retaining ledge too steep: the leg's own spring would eject it"
+assert lift_clear < 0.5 * rib_flare, \
+    "lift play comparable to the undercut depth - the lips would clear it"
 assert arm_t - (rib_h + fit) > 4.0, "pockets leave too little arm behind them"
 assert arm_t - (tongue_t + tongue_gap) > 4.0, "tongue slot undercuts the arm"
 assert travel > rib_flare + 1.0, "not enough travel to clear the undercut"
@@ -182,20 +200,23 @@ def _cut(part, pts):
 
 
 def _pocket(x_r):
-    """Swept clearance for one half-dovetail rib whose load face is at x_r.
+    """Clearance for one rib whose load face is at x_r.
 
-    The rib travels from x_r + travel (offered up) to x_r (seated); the region
-    it sweeps is the convex hull of both positions, dilated by the fit
-    clearances. The slanted -x wall is the captured face: the tongue's spring
-    presses the leg up until this wall bears on the rib's matching slant.
+    The rib travels from x_r + travel (offered up) to x_r (seated), so the
+    pocket is that swept region plus clearances. Its -x side reproduces the
+    rib's retaining ledge, sitting lift_clear below it: that overlap is what
+    the tongue's spring pulls the leg up against, and because the ledge is
+    nearly flat the reaction is almost pure lift with no ejecting component.
     """
-    dx = slant_fit * math.hypot(rib_flare, rib_h) / rib_h
+    right = x_r + rib_t + travel + fit
     top = rib_h + fit
     return [
-        (x_r - dx, 0.0),
-        (x_r + rib_t + travel + fit, 0.0),
-        (x_r + rib_t + travel + fit, top),
-        (x_r - dx - rib_flare * top / rib_h, top),
+        (x_r - side_clear, 0.0),
+        (right, 0.0),
+        (right, top),
+        (x_r - rib_flare - side_clear, top),
+        (x_r - rib_flare - side_clear, rib_h - lift_clear),
+        (x_r - side_clear, rib_h - rib_ledge_rise - lift_clear),
     ]
 
 
@@ -216,7 +237,7 @@ def build_leg(tilt):
 
     lo_end = x_lo + rib_t + travel + fit          # +x end of the lower pocket
     hi_end = x_hi + rib_t + travel + fit          # +x end of the upper pocket
-    hi_start = x_hi - slant_fit - rib_flare * (rib_h + fit) / rib_h
+    hi_start = x_hi - side_clear - rib_flare
 
     # How much plastic is left over the upper pocket. The arm's outline there
     # is the strut edge running back from the tip, so the depth available
@@ -306,8 +327,10 @@ def build_leg(tilt):
 # ============================================================
 print(f"stand v{VERSION}: tongue sprung {detent_h}mm permanently -> "
       f"{preload:.1f}N preload, {hold_force:.1f}N to slide off, "
-      f"{100*strain:.2f}% sustained strain "
-      f"({100*CREEP_LIMIT:.1f}% ceiling), takes up {lift_play:.2f}mm lift play")
+      f"{100*strain:.2f}% sustained strain ({100*CREEP_LIMIT:.1f}% ceiling); "
+      f"ledge {rib_flare}mm at {rib_ledge:.0f} deg grips "
+      f"{rib_flare - side_clear:.2f}mm, ejects {_eject:.2f}F vs "
+      f"{_grip:.2f}F of friction, lift play {lift_play:.2f}mm")
 for t in tilts:
     solid, line = build_leg(t)
     name = f"stand_{int(t)}.stl"
