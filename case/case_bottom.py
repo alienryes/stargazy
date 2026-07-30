@@ -125,6 +125,10 @@ rib_h = 3.5           # rib height off the rear face
 # longer near-horizontal overhang to print. 1.0mm droops a little but holds.
 rib_flare = 1.0       # undercut DEPTH toward -Y
 rib_ledge = 10.0      # undercut angle from horizontal - keep well under 17
+# The lip needs its OWN thickness. Left to the angle alone it came out
+# 1.0*tan(10) = 0.18mm thick - under a single 0.2mm layer, so it printed as a
+# flake that would tear off under load. This makes it a step, not a wedge.
+rib_lip = 1.2         # lip thickness above the retaining face (6 layers)
 # The detent bump is the leg's POSITIVE LOCATOR in both slide directions, not
 # just a speed bump. Its -Y face is vertical and butts the -Y wall of the leg's
 # relief: that is the up-stop, and it is a wall-to-wall contact so it cannot
@@ -203,6 +207,8 @@ assert detent_face < 70.0, "retention ramp too steep to cam back out"
 # it converts that into a force along the slide and ejects the leg
 assert math.sin(math.radians(rib_ledge)) < 0.7 * 0.3, \
     "retaining ledge too steep: the leg's own spring would push it out"
+assert rib_lip >= 1.0, "retaining lip thinner than a few layers - it will snap"
+assert rib_h - rib_lip - rib_ledge_rise > 1.5, "no rib wall left below the lip"
 
 # ============================================================
 # MODEL  (plate on the bed at Z=0, wall/towers up +Z)
@@ -282,9 +288,16 @@ def _flange_feature(pts, cx):
 
 
 def _rib_profile(cy):
-    """Rectangular rib with a shallow retaining ledge on its -Y top corner."""
+    """Rectangular rib with a retaining LIP on its -Y top corner.
+
+    The lip is a block rib_lip thick whose underside is the near-flat
+    retaining face; it is not a tapered wedge, which would come out thinner
+    than one layer.
+    """
     return [(cy, 0.0), (cy + rib_t, 0.0), (cy + rib_t, rib_h),
-            (cy - rib_flare, rib_h), (cy, rib_h - rib_ledge_rise)]
+            (cy - rib_flare, rib_h),
+            (cy - rib_flare, rib_h - rib_lip),
+            (cy, rib_h - rib_lip - rib_ledge_rise)]
 
 
 def _bump_profile():

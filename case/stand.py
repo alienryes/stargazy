@@ -66,6 +66,7 @@ rib_t = 3.0           # rib base thickness along Y
 rib_h = 3.5           # rib height off the flange face
 rib_flare = 1.0       # rib undercut DEPTH toward -Y
 rib_ledge = 10.0      # undercut angle from horizontal (self-locking, see below)
+rib_lip = 1.2         # thickness of the rib's retaining lip
 detent_y = -4.0       # Y of the bump's vertical face
 detent_h = 1.5        # bump height - this IS the spring's deflection
 detent_top = 1.2      # flat top width; the tongue rides on this
@@ -165,6 +166,9 @@ assert math.sin(math.radians(rib_ledge)) < 0.7 * MU, \
     "retaining ledge too steep: the leg's own spring would eject it"
 assert lift_clear < 0.5 * rib_flare, \
     "lift play comparable to the undercut depth - the lips would clear it"
+# the leg's own lip, below the pocket's retaining face, must be a real block
+assert rib_h - rib_lip - rib_ledge_rise - lift_clear > 1.0, \
+    "the leg's lip would be thinner than a couple of layers"
 assert arm_t - (rib_h + fit) > 4.0, "pockets leave too little arm behind them"
 assert arm_t - (tongue_t + tongue_gap) > 4.0, "tongue slot undercuts the arm"
 assert travel > rib_flare + 1.0, "not enough travel to clear the undercut"
@@ -215,8 +219,8 @@ def _pocket(x_r):
         (right, 0.0),
         (right, top),
         (x_r - rib_flare - side_clear, top),
-        (x_r - rib_flare - side_clear, rib_h - lift_clear),
-        (x_r - side_clear, rib_h - rib_ledge_rise - lift_clear),
+        (x_r - rib_flare - side_clear, rib_h - rib_lip - lift_clear),
+        (x_r - side_clear, rib_h - rib_lip - rib_ledge_rise - lift_clear),
     ]
 
 
@@ -328,9 +332,10 @@ def build_leg(tilt):
 print(f"stand v{VERSION}: tongue sprung {detent_h}mm permanently -> "
       f"{preload:.1f}N preload, {hold_force:.1f}N to slide off, "
       f"{100*strain:.2f}% sustained strain ({100*CREEP_LIMIT:.1f}% ceiling); "
-      f"ledge {rib_flare}mm at {rib_ledge:.0f} deg grips "
-      f"{rib_flare - side_clear:.2f}mm, ejects {_eject:.2f}F vs "
-      f"{_grip:.2f}F of friction, lift play {lift_play:.2f}mm")
+      f"lip {rib_lip}mm thick grips {rib_flare - side_clear:.2f}mm at "
+      f"{rib_ledge:.0f} deg, ejects {_eject:.2f}F vs {_grip:.2f}F of "
+      f"friction; leg lip {rib_h - rib_lip - rib_ledge_rise - lift_clear:.2f}mm, "
+      f"lift play {lift_play:.2f}mm")
 for t in tilts:
     solid, line = build_leg(t)
     name = f"stand_{int(t)}.stl"
