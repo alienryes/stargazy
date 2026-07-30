@@ -50,7 +50,7 @@ import math
 
 import cadquery as cq
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -62,21 +62,23 @@ cleat_span_y = 48.0   # spacing of the ribs' -Y base edges (the load faces)
 rib_t = 3.0           # rib base thickness along Y
 rib_h = 3.5           # rib height off the flange face
 rib_flare = 2.0       # rib undercut at the top, toward -Y
-detent_y = 0.0        # detent bump apex in case Y
-detent_h = 1.2        # bump height
+detent_y = -4.0       # Y of the bump's vertical face (the up-stop)
+detent_h = 1.5        # bump height
+detent_top = 1.2      # flat top width
+detent_face = 50.0    # +Y retention ramp, degrees from horizontal
 FACE_Z0 = 2.5         # case Z of the flange's rear face
 
 # --- Fit (PETG; it prints slightly proud, so these are not bare nominals) ---
 fit = 0.3             # clearance on the pocket's flat faces
-slant_fit = 0.25      # perpendicular clearance on the dovetail slant
+slant_fit = 0.15      # perpendicular clearance on the dovetail slant
 travel = 5.0          # slide distance from offer-up to seated
 
 # --- Detent tongue ---
-tongue_t = 1.8        # tongue thickness (bends in the layer plane)
-tongue_len = 16.0
-tongue_gap = 2.0      # slot above the tongue; must exceed the deflection
-detent_gap = 0.2      # play along the slide once latched
-relief_len = 4.0      # full-depth pocket the bump sits in when seated
+tongue_t = 2.0        # tongue thickness (bends in the layer plane)
+tongue_len = 18.0
+tongue_gap = 2.2      # slot above the tongue; must exceed the deflection
+detent_gap = 0.1      # gap from the tongue's tip to the ramp once latched
+up_gap = 0.1          # gap at the up-stop (relief's -Y wall to the bump)
 
 # Material that must remain between the upper pocket's roof and the arm's
 # outline. The arm tapers to a point at its tip, so the depth available there
@@ -123,16 +125,29 @@ STRAIN_LIMIT = 0.025  # PETG yields ~4.5%; stay well inside it
 # ============================================================
 # DETENT SIZING (tilt-independent)
 # ============================================================
+detent_run = detent_h / math.tan(math.radians(detent_face))
+detent_span = detent_top + detent_run       # bump width, from its vertical face
+# The relief is sized to the bump, not chosen: the bump is trapped between the
+# relief's -Y wall (up-stop) and the tongue's tip (latch), with only up_gap +
+# detent_gap of play. An oversized relief is what made v0.11.0 feel dead.
+relief_len = up_gap + detent_span + detent_gap
+
 deflect = detent_h + 0.3
 _I = leg_w * tongue_t ** 3 / 12.0
 snap_force = 3.0 * E_PETG * _I * deflect / tongue_len ** 3
-slide_force = snap_force * (MU + 1.0) / (1.0 - MU)      # 45 deg ramps
+_ramp = math.tan(math.radians(detent_face))
+slide_force = snap_force * (MU + _ramp) / (1.0 - MU * _ramp)
 strain = 3.0 * tongue_t * deflect / (2.0 * tongue_len ** 2)
+
+# the dovetail slants must NOT wedge before the up-stop lands, or the leg stops
+# short and the tongue never drops behind the ramp
+wedge_travel = slant_fit * math.hypot(rib_flare, rib_h) / rib_h
 
 assert tongue_gap > deflect, "slot too shallow for the tongue to deflect"
 assert strain < STRAIN_LIMIT, f"tongue overstrained at {100*strain:.1f}%"
 assert 5.0 < slide_force < 40.0, "detent is either limp or unassemblable"
-assert relief_len > detent_h + detent_gap + 1.0, "bump has nowhere to seat"
+assert MU * _ramp < 1.0, "retention ramp self-locks: the leg could not come off"
+assert wedge_travel > up_gap + 0.05, "tapers wedge before the bump seats"
 assert arm_t - (rib_h + fit) > 4.0, "pockets leave too little arm behind them"
 assert arm_t - (tongue_t + tongue_gap) > 4.0, "tongue slot undercuts the arm"
 assert travel > rib_flare + 1.0, "not enough travel to clear the undercut"
@@ -196,8 +211,8 @@ def build_leg(tilt):
     # Interface positions in leg coordinates
     x_lo = -cleat_span_y / 2 - face_y0
     x_hi = cleat_span_y / 2 - face_y0
-    x_bump = detent_y - face_y0
-    x_tip = x_bump + detent_h + detent_gap        # tongue's free end
+    x_bump = detent_y - face_y0                   # the bump's vertical face
+    x_tip = x_bump + detent_span + detent_gap     # tongue's free end
     x_root = x_tip + tongue_len
 
     lo_end = x_lo + rib_t + travel + fit          # +x end of the lower pocket
@@ -212,7 +227,7 @@ def build_leg(tilt):
 
     assert x_tip - relief_len > lo_end + 2.0, "tongue relief clashes with a pocket"
     assert x_root + 2.0 < hi_start, "tongue root clashes with the upper pocket"
-    assert x_bump + travel + detent_h < x_root - 1.0, \
+    assert x_bump + travel + detent_span < x_root - 1.0, \
         "bump misses the tongue when the leg is offered up"
     assert ligament >= min_ligament, \
         f"only {ligament:.2f}mm of arm over the upper pocket - the tip would " \
@@ -244,9 +259,10 @@ def build_leg(tilt):
     leg = _cut(leg, _pocket(x_lo))
     leg = _cut(leg, _pocket(x_hi))
 
-    # detent: full-depth relief the bump seats in, then the slot that frees
-    # the tongue. The tongue's tip faces -x, so the bump - which travels -x
-    # relative to the leg - rides under it and drops off its tip.
+    # detent: the relief the bump is trapped in, then the slot that frees the
+    # tongue. The tongue's tip faces -x, so the bump - which travels -x
+    # relative to the leg - rides under it and drops off its tip. The relief's
+    # -x wall then butts the bump's vertical face: that is the up-stop.
     slot_top = tongue_t + tongue_gap
     leg = _cut(leg, [(x_tip - relief_len, 0.0), (x_tip, 0.0),
                      (x_tip, slot_top), (x_tip - relief_len, slot_top)])
@@ -284,8 +300,11 @@ def build_leg(tilt):
 # EXPORT
 # ============================================================
 print(f"stand v{VERSION}: detent {snap_force:.1f}N flex / "
-      f"{slide_force:.1f}N slide, strain {100*strain:.2f}% "
-      f"({STRAIN_LIMIT/strain:.1f}x margin)")
+      f"{slide_force:.1f}N slide off a {detent_face:.0f} deg ramp, "
+      f"strain {100*strain:.2f}% ({STRAIN_LIMIT/strain:.1f}x margin), "
+      f"bump {detent_span:.2f} trapped in a {relief_len:.2f} relief "
+      f"({up_gap + detent_gap:.1f}mm total play), "
+      f"up-stop at {up_gap:.2f} vs taper wedge at {wedge_travel:.2f}")
 for t in tilts:
     solid, line = build_leg(t)
     name = f"stand_{int(t)}.stl"

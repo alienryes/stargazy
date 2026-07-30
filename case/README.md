@@ -142,9 +142,22 @@ leg, and a bump that latches it.
 The leg slides **up** to engage, which is the same direction the case's own
 weight pushes it — so sitting on the desk seats the joint harder rather than
 working it loose. Two spread-apart dovetails stop the leg being pulled off the
-face or pivoting away at either end, and they wedge together to set the final
-position. The tongue then only has to stop the leg dropping back down when you
-pick the case up, which takes 0.16 N; it is good for about 16 N.
+face or pivoting away at either end.
+
+The bump is the leg's **positive locator in both directions**, not a speed
+bump. Its vertical face butts the end wall of the leg's relief — that is the
+up-stop, wall against wall, and the dovetail tapers are deliberately clearanced
+so they never wedge first. Its 50° ramp is what the tongue's tip drops behind,
+taking about 23 N to push back over. The bump is 2.46 mm wide in a 2.66 mm
+relief, so once seated the leg has 0.2 mm of travel and nothing else.
+
+Two honest limits. The joint is **located, not preloaded** — there is no spring
+pressing the parts together, so off the case an unloaded leg has ~0.3 mm of
+wobble before the dovetails bite. On the case, the weight takes that up. And
+the latch **ramps rather than clicks**: a slide-release latch cannot have a
+vertical retention face, because that self-locks (PETG on PETG goes solid past
+about 73°), so resistance necessarily builds from zero — reaching ~5 N after
+0.4 mm and the full ~23 N by 1.4 mm. It is firm, but it is not a click.
 
 **To remove a leg, push it firmly back down** — roughly the same effort it took
 to click on. There is no press-to-release tab, deliberately: once a leg is on,

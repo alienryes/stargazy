@@ -30,9 +30,11 @@ pattern (holes sit 3.5mm from the DSI end, 23.5mm from the USB end).
 Print orientation: plate flat on the bed, wall up. No supports.
 """
 
+import math
+
 import cadquery as cq
 
-VERSION = "0.11.0"
+VERSION = "0.12.0"
 
 # ============================================================
 # PARAMETERS - all mm.
@@ -113,8 +115,20 @@ rib_h = 3.5           # rib height off the rear face
 rib_flare = 2.0       # undercut at the top, toward -Y (30 deg from vertical:
                       # steep enough to print, shallow enough that the leg
                       # only lifts ~0.5mm off the face before the flares bite)
-detent_y = 0.0        # detent bump apex in Y
-detent_h = 1.2        # bump height; 45 deg faces both sides
+# The detent bump is the leg's POSITIVE LOCATOR in both slide directions, not
+# just a speed bump. Its -Y face is vertical and butts the -Y wall of the leg's
+# relief: that is the up-stop, and it is a wall-to-wall contact so it cannot
+# ride up. Its +Y face is a 50 deg ramp that the tongue's tip drops behind:
+# that is the latch, and 50 deg is as steep as it can be while still camming
+# back out (PETG on PETG self-locks past ~73 deg).
+#
+# v0.11.0 had a symmetric 45 deg triangle floating in an oversized relief, so
+# at rest NOTHING touched and the tongue's tip met the ramp at zero engagement
+# depth. It felt, correctly, like no detent at all.
+detent_y = -4.0       # Y of the bump's vertical face (the up-stop)
+detent_h = 1.5        # bump height off the rear face
+detent_top = 1.2      # flat top - wide enough to print reliably
+detent_face = 50.0    # +Y retention ramp, degrees from horizontal
 
 # ============================================================
 # DERIVED
@@ -134,6 +148,10 @@ disp_mounts = [(dmx, dmy), (-dmx, dmy), (dmx, -dmy), (-dmx, -dmy)]
 
 cleat_xs = (cleat_x, -cleat_x)
 cleat_ys = (cleat_span_y / 2, -cleat_span_y / 2)   # rib -Y base edge = load face
+
+# the bump's +Y ramp reaches this far past its flat top
+detent_run = detent_h / math.tan(math.radians(detent_face))
+detent_span = detent_top + detent_run             # total width, from detent_y
 
 bay_w = bay_x1 - bay_x0
 bay_cx = (bay_x0 + bay_x1) / 2
@@ -165,8 +183,9 @@ assert cleat_x - cleat_len / 2 > wall_x1 + 2.0, "stand leg fouls the lid skirt"
 assert cleat_x + cleat_len / 2 < half_x - 0.5, "cleat rib overhangs the flange"
 for _cy in cleat_ys:
     assert abs(_cy) + rib_t + 2.0 < half_y, "cleat rib runs off the plate"
-assert -cleat_span_y / 2 - rib_flare < detent_y - detent_h and \
-       cleat_span_y / 2 > detent_y + detent_h, "detent bump collides with a rib"
+assert -cleat_span_y / 2 - rib_flare < detent_y and \
+       cleat_span_y / 2 > detent_y + detent_span, "detent bump collides with a rib"
+assert detent_face < 70.0, "retention ramp too steep to cam back out"
 
 # ============================================================
 # MODEL  (plate on the bed at Z=0, wall/towers up +Z)
@@ -250,6 +269,13 @@ def _rib_profile(cy):
             (cy - rib_flare, rib_h)]
 
 
+def _bump_profile():
+    """Vertical -Y face (up-stop), flat top, 50 deg +Y ramp (latch)."""
+    return [(detent_y, 0.0), (detent_y, detent_h),
+            (detent_y + detent_top, detent_h),
+            (detent_y + detent_span, 0.0)]
+
+
 # catch a workplane sign flip before it reaches the STL: the rib must grow
 # along +X from the flange, stand off the REAR face, and flare toward -Y.
 _bb = _flange_feature(_rib_profile(cleat_ys[0]), cleat_x).val().BoundingBox()
@@ -260,9 +286,7 @@ assert abs(_bb.ymin - (cleat_ys[0] - rib_flare)) < 1e-6, "flare points wrong in 
 for cx in cleat_xs:
     for cy in cleat_ys:
         part = part.union(_flange_feature(_rib_profile(cy), cx))
-    part = part.union(_flange_feature(
-        [(detent_y - detent_h, 0.0), (detent_y + detent_h, 0.0),
-         (detent_y, detent_h)], cx))
+    part = part.union(_flange_feature(_bump_profile(), cx))
 
 # ============================================================
 # EXPORT
