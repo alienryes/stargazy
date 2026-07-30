@@ -45,7 +45,7 @@ import cadquery as cq
 from shapely.geometry import Polygon
 from shapely.geometry import box as shapely_box
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -55,7 +55,7 @@ tilts = (15.0, 20.0, 30.0)   # one stand exported per angle
 # --- Interface to case_bottom.py (MUST match) ---
 FACE_Z0 = 2.5         # case Z of the flange's rear face - the mounting plane
 strap_x0 = 49.0       # inboard edge in case X: clears the -X wall at -48.5
-strap_x1 = 64.5       # outboard edge = case_bottom half_x, flush with the plate
+strap_x1 = 63.0       # outboard edge = case_bottom half_x, flush with the plate
 disp_span_y = 51.0    # case-screw spacing along Y (103.7 x 51 pattern)
 
 # --- Screws: the display's own M2.5 case screws pass through the strap ---

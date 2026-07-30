@@ -31,7 +31,7 @@ Print orientation: plate flat on the bed, wall up. No supports.
 
 import cadquery as cq
 
-VERSION = "0.14.0"
+VERSION = "0.15.0"
 
 # ============================================================
 # PARAMETERS - all mm.
@@ -62,9 +62,11 @@ disp_hole_d = 2.9     # M2.5 clearance
 base_t = 2.5
 base_r = 3.0
 # The X flanges reach past the lid skirt so the desk stands have somewhere to
-# sit; stand.py's strap spans case X 49.0..64.5 and takes half_x as its
-# outboard edge.
-half_x = 64.5
+# sit; stand.py's strap spans case X 49.0..63.0 and takes half_x as its
+# outboard edge. This was briefly 64.5, to push the old snap-on legs clear of
+# the case-screw heads they used to straddle; the bolt-on stands sit ON those
+# screws, so it is back to 63.0 and plates printed before the stand work fit.
+half_x = 63.0
 half_y = 38.0
 
 # --- Central bay ---

@@ -53,17 +53,17 @@ the stands stronger layer adhesion.
 | File | Qty | Size (mm) | ~Mass | Orientation |
 |---|---|---|---|---|
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
-| `case_bottom.stl` | 1 | 129 × 76 × 10.5 | 21 g | plate **flat**, wall up |
+| `case_bottom.stl` | 1 | 126 × 76 × 10.5 | 21 g | plate **flat**, wall up |
 | `case_top.stl` | 1 | 95 × 64 × 19.9 | 33 g | outer face **down** (as exported) |
-| `stand_20.stl` | **2** | 82 × 42.3 × 15.5 | 12 g ea | **flat** on the profile |
+| `stand_20.stl` | **2** | 82 × 42.3 × 14.0 | 11 g ea | **flat** on the profile |
 
 Pick one stand file and print two of it:
 
 | File | Lean | Stand size (mm) | Assembly depth on the desk |
 |---|---|---|---|
-| `stand_15.stl` | 15° | 82.2 × 43.5 × 15.5 | 68.5 mm |
-| `stand_20.stl` | 20° | 82.0 × 42.3 × 15.5 | 73.9 mm |
-| `stand_30.stl` | 30° | 82.6 × 39.0 × 15.5 | 83.1 mm |
+| `stand_15.stl` | 15° | 82.2 × 43.5 × 14.0 | 68.5 mm |
+| `stand_20.stl` | 20° | 82.0 × 42.3 × 14.0 | 73.9 mm |
+| `stand_30.stl` | 30° | 82.6 × 39.0 × 14.0 | 83.1 mm |
 
 The stands are the same part left and right — nothing is handed, and nothing is
 mirrored. At every angle the foot stops **inside** the case's own silhouette

@@ -21,7 +21,7 @@ import pyrender
 import trimesh
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 
 W, H = 2200, 1560
 ELEV, AZIM = 30.0, 128.0             # 128 = -52 + 180 (view from the far side)
@@ -33,7 +33,7 @@ DISP_W, DISP_H, DISP_D = 143.4, 91.46, 15.9
 PI_W, PI_H, PI_T = 85.0, 56.0, 1.4
 PI_X0, PI_Y0, PI_Z0 = -41.2, -28.0, 6.0
 FACE_Y0, FACE_Z0 = -51.01, 2.5
-STAND_X, LEG_W = 56.75, 15.5          # strap centre in X, and its width
+STAND_X, LEG_W = 56.0, 14.0           # strap centre in X, and its width
 STAND_TILT = 20                      # which stand variant the diagram shows
 
 CASE_SCREWS = [(sx * 51.85, sy * 25.5) for sx in (1, -1) for sy in (1, -1)]
