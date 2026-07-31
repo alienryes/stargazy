@@ -174,6 +174,7 @@ grille holes still vent.
 | M2.5 × 16 screw | 4 | case screws: stand → case-bottom → shell → display |
 | 40 × 40 × 10 mm 5 V fan | 1 | **optional** |
 | M3 self-tapping screw | 4 | fan, from outside through the lid — optional |
+| **Right-angle USB-C power lead** | 1 | see below — a straight one will foul the desk |
 
 **No heat-set inserts and no soldering iron** — everything threads into a
 standoff. Screw lengths are calculated from the stack-up; confirm the
@@ -284,6 +285,29 @@ instead. Confirmed on hardware; easy enough, just not obvious. This is mostly
 inherent to the case rather than the stand: with the strap removed entirely the
 gap would only grow to 4.15 mm, because the case-bottom's own plate is at
 Z 2.50. Both USB and Ethernet cables otherwise plug in and seat normally.
+
+**Use a right-angle USB-C power lead.** The power socket faces down toward the
+desk, and the case is deliberately low, so there is not much room beneath it:
+
+| Lean | Room from the socket face to the desk |
+|---|---|
+| 15° | 17.4 mm |
+| 20° | **16.6 mm** |
+| 30° | 15.7 mm |
+
+A straight plug's overmould plus the bend the lead needs before it can run flat
+is typically longer than that, so it lands on the desk and lifts the case off
+its stands. A right-angle lead turns immediately and clears easily. Note that
+leaning **further back makes this worse, not better** — the socket gets closer
+to the desk, not further from it.
+
+This is the one place the 5-inch scale bites that the 7-inch original does not:
+RonnyS's case is tall enough to swallow a straight plug. The alternative fix is
+to lengthen the stands' straps, which raises the whole case — about 19 mm of
+extension to gain 20 mm of room. That would actually *improve* the front tipping
+margin (the toe moves down and forward faster than the centre of mass rises,
+taking it from 12.0 to 18.2 mm at 20°), so it is a viable route if you would
+rather not be tied to a particular lead. It is not the shipped geometry.
 
 To change the lean angle, unplug the +X cables, undo the four case screws, swap
 both stands and do them back up. The Pi and lid can stay where they are.
