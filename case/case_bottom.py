@@ -102,11 +102,14 @@ sill_clear = 0.35     # +X sill to the lowest connector underside. Fine here
                       # because nothing passes over that sill: the connectors
                       # protrude past the wall's outer face, so the plug body
                       # never reaches it.
-bot_sill_clear = 1.5  # -Y sill to the lowest socket underside. Deliberately
+bot_sill_clear = 2.0  # -Y sill to the lowest socket underside. Deliberately
                       # much larger: these connectors stop at the wall's inner
                       # face, so a PLUG passes over this sill, and an overmould
                       # hangs below its socket by an amount nothing here
                       # measures. This is the least certain number in the part.
+                      # One flat sill spans the whole opening, so this is the
+                      # margin under the LOWEST socket - the USB-C on both
+                      # boards - and every other port gets at least as much.
 port_margin = 1.7     # around the whole -Y port group
 min_divider = 1.8     # thinnest acceptable divider or end wall
 

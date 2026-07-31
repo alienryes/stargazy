@@ -340,12 +340,19 @@ Useful knobs:
 | `port_clear`, `min_divider` | both | clearance around each connector, and the thinnest divider allowed |
 | `bot_sill_clear` | `case_bottom.py` | how far the power/HDMI sill sits below the sockets |
 
-**`bot_sill_clear` is the least certain number in the case.** It is set to
-1.5 mm — the sill top lands at Z 5.85, against the lowest socket underside at
-7.35 — because nothing here measures how far a plug's overmould hangs below its
-socket. If a cable of yours will not seat on that edge, raise this value and
-re-print the case-bottom. The USB/Ethernet sill needs no such margin (0.35 mm),
-since no plug ever reaches it.
+**`bot_sill_clear` is the least certain number in the case.** Nothing here
+measures how far a plug's overmould hangs below its socket, so it is set to a
+deliberately generous **2.0 mm**, putting the sill top at Z 5.35 on a Pi 4 and
+6.00 on a Pi 5.
+
+One flat sill spans the whole opening, so this is the margin under the **lowest**
+socket — the **USB-C** on both boards, which is the one to check first if
+anything fouls. Every other port on that edge gets at least as much: on a Pi 4
+the micro-HDMIs and the audio jack clear the sill by 2.65 mm. If a cable of
+yours still will not seat, raise this value and re-print the case-bottom.
+
+The USB/Ethernet sill needs no such margin (0.35 mm), since no plug ever reaches
+it.
 
 Port geometry is not edited directly: it comes from the measured tables in
 `pi_models.py`. Correct a connector there and both parts follow.
