@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.5.0"
+FIRMWARE_VERSION = "2.5.1"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -49,7 +49,7 @@ WHITE    = (230, 232, 240)   # data text
 ICE      = (165, 243, 252)   # #A5F3FC — best conditions
 ELECTRIC = (56, 189, 248)    # #38BDF8 — good conditions, bar fills
 AMBER    = (245, 158, 11)    # #F59E0B — moon, and fair/caution
-ROSE     = (251, 113, 133)   # #FB7185 — poor conditions
+ROSE     = (244, 63, 94)     # #F43F5E — poor conditions
 STEEL    = (29, 94, 128)     # muted electric — bar trough frame
 MOON_DARK = (27, 36, 64)     # unlit lunar disc, just above the sky navy
 DIM      = (90, 98, 120)     # divider lines / subtle rules
