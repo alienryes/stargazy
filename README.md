@@ -110,7 +110,7 @@ The `[display]` section is optional; the values above are the defaults.
 
 ### 3. Deploy
 
-From Windows (the deploy targets the Pi's wired IP, `192.168.1.62` by default — override with `-PiHost`):
+From Windows (the deploy resolves the Pi by mDNS as `astro-pi.local`, so it works on either the wired or the wireless interface — if mDNS is unavailable, pass an explicit address with `-PiHost`):
 
 ```powershell
 .\deploy.ps1
