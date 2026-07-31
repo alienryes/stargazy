@@ -42,7 +42,7 @@ import sys
 import cadquery as cq
 import pi_models as pm
 
-VERSION = "0.16.0"
+VERSION = "0.17.0"
 
 # Which board this plate is cut for; "python case_bottom.py pi5" for the other.
 # The board outline and the 58 x 49 mount pattern are identical, so only the
@@ -98,7 +98,15 @@ wall_h = 8.0          # clears the Pi plane (~3.5 above plate) + lid seat
 
 # --- Port openings (all derived from the measured table in pi_models.py) ---
 port_clear = 0.6      # each side of a connector, in the wall plane
-sill_clear = 0.35     # between the sill top and the lowest connector underside
+sill_clear = 0.35     # +X sill to the lowest connector underside. Fine here
+                      # because nothing passes over that sill: the connectors
+                      # protrude past the wall's outer face, so the plug body
+                      # never reaches it.
+bot_sill_clear = 1.5  # -Y sill to the lowest socket underside. Deliberately
+                      # much larger: these connectors stop at the wall's inner
+                      # face, so a PLUG passes over this sill, and an overmould
+                      # hangs below its socket by an amount nothing here
+                      # measures. This is the least certain number in the part.
 port_margin = 1.7     # around the whole -Y port group
 min_divider = 1.8     # thinnest acceptable divider or end wall
 
@@ -161,6 +169,10 @@ sill_z = pm.side_sill_z(PI_MODEL) - sill_clear    # top of the +X sill
 bot_x0, bot_x1 = pm.bottom_span(PI_MODEL)
 gap_bottom_x0 = bot_x0 - port_margin
 gap_bottom_x1 = bot_x1 + port_margin
+# The -Y edge gets a sill but NOT dividers. Its connectors stop at the wall's
+# inner face rather than poking through it, so plug overmoulds - not sockets -
+# set the spacing there, and the two micro-HDMI sockets are only 13.5mm apart.
+bot_sill_z = pm.bottom_sill_z(PI_MODEL) - bot_sill_clear
 
 # the material left standing between +X openings: the two dividers, plus an
 # end wall at each end of the port band
@@ -182,9 +194,11 @@ assert bay_hy > pi_hy + 1.0, "wall would collide with the Pi long edges"
 assert dmx > wall_x1 + disp_hole_d / 2, "case screw under the wall"
 # the -Y wall gap and the lid's aperture form ONE opening: both are derived
 # from bottom_span() so they cannot drift apart, but check the ports anyway
-for (name, x0, x1, _z0, _z1, _reach) in pm.bottom_ports(PI_MODEL):
+for (name, x0, x1, z0, _z1, _reach) in pm.bottom_external(PI_MODEL):
     assert gap_bottom_x0 < x0 and gap_bottom_x1 > x1, \
         f"-Y wall gap does not clear the {name} port"
+    assert bot_sill_z < z0, f"-Y sill fouls the underside of {name}"
+assert bot_sill_z > base_t + 2.0, "no room for a sill under the -Y ports"
 # the bay must clear the FFC connector so the ribbon rises straight through
 assert bay_x0 < ffc_x - ffc_hw - 1.0, "bay edge fouls the FFC connector"
 assert ffc_hy < bay_hy, "FFC connector wider than the bay"
@@ -269,11 +283,11 @@ for (_name, y0, y1, _z0, _z1, _reach, _under) in side_ports:
         .translate((bay_x1 + wall_t / 2, (y0 + y1) / 2, 0))
     )
 
-# -Y gap (USB-C / micro-HDMI / audio or MIPI): one opening for the whole group
+# -Y opening: one span for the whole power/HDMI group, over a sill
 wall = wall.cut(
     cq.Workplane("XY")
-    .workplane(offset=base_t - 1)
-    .box(gap_bottom_x1 - gap_bottom_x0, wall_t + 4, wall_h + 2,
+    .workplane(offset=bot_sill_z)
+    .box(gap_bottom_x1 - gap_bottom_x0, wall_t + 4, wall_top - bot_sill_z + 2,
          centered=(True, True, False))
     .translate(((gap_bottom_x0 + gap_bottom_x1) / 2, -(bay_hy + wall_t / 2), 0))
 )
@@ -305,7 +319,7 @@ print(f"  plate {2*half_x:.1f} x {2*half_y:.1f}, bay {bay_w:.0f} x {2*bay_hy:.0f
       f"wall h{wall_h} (outer x {wall_x0:.1f}..{wall_x1:.1f}, y +-{wall_hy:.1f})")
 print(f"  +X sill top z{sill_z:.2f}, openings/dividers: "
       + ", ".join(f"{b - a:.2f}" for a, b in side_solids) + "mm of wall left")
-print(f"  -Y gap {gap_bottom_x0:.2f}..{gap_bottom_x1:.2f} "
-      f"(ports {bot_x0:.2f}..{bot_x1:.2f})")
+print(f"  -Y gap {gap_bottom_x0:.2f}..{gap_bottom_x1:.2f} over a sill to "
+      f"z{bot_sill_z:.2f} (ports {bot_x0:.2f}..{bot_x1:.2f})")
 print(f"  spigots Ø{spigot_d} x {spigot_h} at "
       + ", ".join(f"({px:.0f},{py:+.1f})" for px, py in spigots))

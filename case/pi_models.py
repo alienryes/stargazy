@@ -51,11 +51,11 @@ PI_MODELS = {
             ("eth", 9.80, 25.70, 8.00, 21.50, 47.05, 8.00),
         ],
         "bottom": [
-            ("usb_c", -34.47, -25.53, 8.43, 11.16, -29.50),
-            ("hdmi0", -18.45, -11.95, 8.82, 10.90, -29.80),
-            ("hdmi1", -4.95, 1.55, 8.82, 10.90, -29.80),
+            ("usb_c", -34.47, -25.53, 7.35, 11.16, -29.50),
+            ("hdmi0", -18.45, -11.95, 8.00, 10.90, -29.80),
+            ("hdmi1", -4.95, 1.55, 8.00, 10.90, -29.80),
             ("csi", 3.80, 6.80, 8.00, 13.48, -28.00),
-            ("audio", 9.30, 16.30, 8.44, 14.00, -30.40),
+            ("audio", 9.30, 16.30, 8.00, 14.00, -30.40),
         ],
     },
     "pi5": {
@@ -73,9 +73,9 @@ PI_MODELS = {
             ("usb2", 11.55, 26.45, 8.00, 23.82, 47.69, 8.00),
         ],
         "bottom": [
-            ("usb_c", -34.47, -25.53, 8.43, 11.16, -29.19),
-            ("hdmi0", -18.65, -12.15, 8.82, 10.90, -29.00),
-            ("hdmi1", -5.25, 1.25, 8.82, 10.90, -29.00),
+            ("usb_c", -34.47, -25.53, 8.00, 11.16, -29.19),
+            ("hdmi0", -18.65, -12.15, 8.00, 10.90, -29.00),
+            ("hdmi1", -5.25, 1.25, 8.00, 10.90, -29.00),
             # The Pi 5's two 22-pin MIPI CAM/DISP connectors are on THIS edge,
             # not on the -X short edge where the Pi 4 keeps its DSI socket.
             # The display ribbon route differs completely between the models.
@@ -100,10 +100,35 @@ def side_span(model):
     return min(e[1] for e in p), max(e[2] for e in p)
 
 
+def bottom_external(model):
+    """The -Y ports that actually need an opening.
+
+    A port needs one only if it passes the board edge, which is what a plug has
+    to reach through. The Pi 4's CSI connector and the Pi 5's two MIPI
+    connectors sit flush with the edge and face upward, so wall in front of them
+    blocks nothing.
+    """
+    return [e for e in bottom_ports(model) if e[5] < -BOARD_HY - 0.05]
+
+
 def bottom_span(model):
-    """(x0, x1) covering every -Y port."""
-    p = bottom_ports(model)
+    """(x0, x1) covering every -Y port that needs an opening."""
+    p = bottom_external(model)
     return min(e[1] for e in p), max(e[2] for e in p)
+
+
+def bottom_sill_z(model):
+    """Highest a sill may rise under the -Y ports.
+
+    Unlike the +X edge, these connectors stop at or just inside the wall's inner
+    face, so a PLUG passes through the opening rather than the socket poking out
+    of it. That is why this edge gets a sill but no dividers: the overmoulds set
+    the spacing, and two micro-HDMI plugs are already tight on a bare Pi 4 with
+    their sockets 13.5mm apart. The sill itself is safe - it sits below every
+    socket, and the reference's equivalent wall stops higher still (z 8.5 over a
+    3.0 plate) with real cables in use.
+    """
+    return min(e[3] for e in bottom_external(model))
 
 
 def side_gaps(model):

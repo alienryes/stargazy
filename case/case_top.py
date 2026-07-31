@@ -35,7 +35,7 @@ import sys
 import cadquery as cq
 import pi_models as pm
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 # Which board this lid is cut for; "python case_top.py pi5" for the other.
 PI_MODEL = sys.argv[1] if len(sys.argv) > 1 else "pi4"
@@ -144,7 +144,7 @@ side_solids = [(edges[i], edges[i + 1]) for i in range(0, len(edges), 2)]
 bot_x0, bot_x1 = pm.bottom_span(PI_MODEL)
 pwr_x0 = bot_x0 - port_margin
 pwr_x1 = bot_x1 + port_margin
-pwr_z1 = max(e[4] for e in pm.bottom_ports(PI_MODEL)) + port_clear_z
+pwr_z1 = max(e[4] for e in pm.bottom_external(PI_MODEL)) + port_clear_z
 
 socket_d = spigot_d + 2 * spigot_fit
 socket_depth = spigot_h + 0.6
@@ -160,7 +160,7 @@ for (_name, _y0, _y1, _z0, z1, _reach, _under), (_a, _b, top) in zip(side_ports,
 for (a, b) in side_solids:
     assert b - a >= min_divider, \
         f"+X divider/end wall only {b - a:.2f}mm wide (min {min_divider})"
-assert pwr_z1 > max(e[4] for e in pm.bottom_ports(PI_MODEL)), \
+assert pwr_z1 > max(e[4] for e in pm.bottom_external(PI_MODEL)), \
     "-Y aperture is lower than the ports on that edge"
 assert pwr_z1 > z_skirt, "-Y aperture does not reach the skirt seat"
 assert cbore_depth < top_t - 1.0, "counterbore leaves too little top face"

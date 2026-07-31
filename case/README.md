@@ -47,6 +47,13 @@ Differences from the original, beyond scale:
   connector gets its own window instead of one long slot. The sill is the
   original's idiom (its +X wall stops at Z 9.1 against a 12.4 wall top); the
   dividers are not — RonnyS leaves that edge as a single span.
+- **The power/HDMI edge gets the sill but no dividers**, and that asymmetry is
+  deliberate. On the USB/Ethernet edge the connectors protrude past the wall's
+  outer face (to x 47.79 against 46.5), so a plug never touches the case and the
+  sockets alone set the spacing. On the power/HDMI edge they stop at the wall's
+  *inner* face, so the plug's overmould passes through the opening — and the two
+  micro-HDMI sockets are only 13.5 mm apart, which is already tight for two
+  cables on a bare Pi 4. Anything between them would likely stop both going in.
 - The fan is **hung off the lid** instead of a separate Pi-mounted bracket —
   a Pi-mounted plate plus fan does not fit the 5-inch stack's headroom.
   Measured against the board models, the fan clears the GPIO header by only
@@ -331,6 +338,14 @@ Useful knobs:
 | `grille_r`, `grille_pitch` | `case_top.py` | fan grille pattern |
 | `spigot_fit` | `case_top.py` | lid socket clearance — how much play before the spigots bite |
 | `port_clear`, `min_divider` | both | clearance around each connector, and the thinnest divider allowed |
+| `bot_sill_clear` | `case_bottom.py` | how far the power/HDMI sill sits below the sockets |
+
+**`bot_sill_clear` is the least certain number in the case.** It is set to
+1.5 mm — the sill top lands at Z 5.85, against the lowest socket underside at
+7.35 — because nothing here measures how far a plug's overmould hangs below its
+socket. If a cable of yours will not seat on that edge, raise this value and
+re-print the case-bottom. The USB/Ethernet sill needs no such margin (0.35 mm),
+since no plug ever reaches it.
 
 Port geometry is not edited directly: it comes from the measured tables in
 `pi_models.py`. Correct a connector there and both parts follow.
