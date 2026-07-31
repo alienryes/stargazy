@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.4.0"
+FIRMWARE_VERSION = "2.4.1"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -419,9 +419,8 @@ def render_foreground(states):
 
     # ── Header ────────────────────────────────────────────────────────
     draw.text((MARGIN, 18), "STARGAZING", fill=WHITE, font=f_med)
-    now_str = datetime.now().strftime("%a %d %b  %H:%M")
-    ts_w    = int(draw.textlength(now_str, font=f_sm))
-    draw.text((W - ts_w - MARGIN, 28), now_str, fill=WHITE, font=f_sm)
+    # The clock is NOT drawn here: this overlay is cached between data refreshes,
+    # so a timestamp baked in would sit frozen for refresh_min. See draw_clock().
     draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM, width=2)
 
     # ── Verdict ───────────────────────────────────────────────────────
@@ -570,6 +569,19 @@ def _bases():
     return NIGHT_BASE, TWILIGHT_BASE
 
 
+def draw_clock(draw):
+    """Stamp the header date and time onto a composed frame.
+
+    Drawn per frame rather than into the cached dashboard overlay, so the minute
+    advances live and the date rolls over at midnight. It is one short text draw
+    over transparent sky, which the 20 fps loop does not notice.
+    """
+    f_sm    = _font("DejaVuSans.ttf", 30)
+    now_str = datetime.now().strftime("%a %d %b  %H:%M")
+    ts_w    = int(draw.textlength(now_str, font=f_sm))
+    draw.text((W - ts_w - MARGIN, 28), now_str, fill=WHITE, font=f_sm)
+
+
 def compose(fg, params, t, meteors, clouds):
     """One composited frame: sky + drifting clouds + meteors + dashboard on top."""
     night, twi = _bases()
@@ -581,6 +593,7 @@ def compose(fg, params, t, meteors, clouds):
     for m in meteors:
         draw_meteor(d, m)
     frame.paste(fg, (0, 0), fg)
+    draw_clock(d)
     return frame
 
 
