@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.4.1"
+FIRMWARE_VERSION = "2.5.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -42,14 +42,17 @@ FB_W, FB_H = 720, 1280
 ROTATE = Image.ROTATE_90
 
 # ── Palette ───────────────────────────────────────────────────────────────
-BG     = (10, 12, 28)      # opaque fills (bar troughs) — matches the night sky
-WHITE  = (230, 232, 240)
-GREEN  = (46, 204, 96)
-BLUE   = (70, 130, 240)
-RED    = (224, 66, 66)
-YELLOW = (240, 212, 60)
-ORANGE = (238, 140, 44)
-DIM    = (90, 98, 120)     # divider lines / subtle rules
+# Conditions run on a cool-to-warm ramp: a clear night reads cold and blue, a
+# washed-out one warm. Amber is reserved for the moon and for cautions.
+BG       = (10, 12, 28)      # opaque fills (bar troughs) — matches the night sky
+WHITE    = (230, 232, 240)   # data text
+ICE      = (165, 243, 252)   # #A5F3FC — best conditions
+ELECTRIC = (56, 189, 248)    # #38BDF8 — good conditions, bar fills
+AMBER    = (245, 158, 11)    # #F59E0B — moon, and fair/caution
+ROSE     = (251, 113, 133)   # #FB7185 — poor conditions
+STEEL    = (29, 94, 128)     # muted electric — bar trough frame
+MOON_DARK = (27, 36, 64)     # unlit lunar disc, just above the sky navy
+DIM      = (90, 98, 120)     # divider lines / subtle rules
 STAR_COLOUR = (232, 234, 248)
 
 W, H = 1280, 720
@@ -181,33 +184,33 @@ def _font(name, size):
 def _verdict(score):
     """(label, colour) for a deep-sky forecast score 0-100."""
     if score >= 75:
-        return "EXCELLENT", GREEN
+        return "EXCELLENT", ICE
     if score >= 50:
-        return "GOOD", YELLOW
+        return "GOOD", ELECTRIC
     if score >= 25:
-        return "FAIR", ORANGE
+        return "FAIR", AMBER
     if score > 0:
-        return "POOR", RED
-    return "NONE", RED
+        return "POOR", ROSE
+    return "NONE", ROSE
 
 
 def _bar_colour(value, good, warn):
     if value >= good:
-        return GREEN
+        return ELECTRIC
     if value >= warn:
-        return YELLOW
-    return RED
+        return AMBER
+    return ROSE
 
 
 def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
     """Draw moon phase using parametric geometry."""
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=BLUE, outline=YELLOW, width=3)
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=MOON_DARK, outline=AMBER, width=3)
 
     if illumination < 1:
         return  # new moon -- dark circle only
 
     if illumination > 99:
-        draw.ellipse([cx - r + 3, cy - r + 3, cx + r - 3, cy + r - 3], fill=YELLOW)
+        draw.ellipse([cx - r + 3, cy - r + 3, cx + r - 3, cy + r - 3], fill=AMBER)
         return
 
     phase_angle = math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * illumination / 100.0)))
@@ -225,7 +228,7 @@ def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
     if not waxing:
         pts = [(2 * cx - px, py) for px, py in pts]
 
-    draw.polygon(pts, fill=YELLOW)
+    draw.polygon(pts, fill=AMBER)
 
 
 # ── Animated sky ──────────────────────────────────────────────────────────
@@ -426,7 +429,7 @@ def render_foreground(states):
     # ── Verdict ───────────────────────────────────────────────────────
     if no_dark:
         v_text   = "NO DARK SKY"
-        v_colour = ORANGE
+        v_colour = AMBER
         v_sub    = f"Next dark night: {next_dark.strftime('%d %b') if next_dark else 'unknown'}"
     else:
         v_text, v_colour = _verdict(dsky_today)
@@ -449,16 +452,16 @@ def render_foreground(states):
                 big_text = str(days_until)
                 sub_text = "days until dark sky"
             big_w = int(draw.textlength(big_text, font=f_large))
-            draw.text((LP_CX - big_w // 2, 300), big_text, fill=ORANGE, font=f_large)
+            draw.text((LP_CX - big_w // 2, 300), big_text, fill=AMBER, font=f_large)
             sub_w = int(draw.textlength(sub_text, font=f_sm))
             draw.text((LP_CX - sub_w // 2, 410), sub_text, fill=WHITE, font=f_sm)
             dt_text = next_dark.strftime("%d %b %Y")
             dt_w = int(draw.textlength(dt_text, font=f_xs))
-            draw.text((LP_CX - dt_w // 2, 452), dt_text, fill=ORANGE, font=f_xs)
+            draw.text((LP_CX - dt_w // 2, 452), dt_text, fill=AMBER, font=f_xs)
         else:
             msg = "No dark sky"
             msg_w = int(draw.textlength(msg, font=f_med))
-            draw.text((LP_CX - msg_w // 2, 380), msg, fill=ORANGE, font=f_med)
+            draw.text((LP_CX - msg_w // 2, 380), msg, fill=AMBER, font=f_med)
     else:
         LX, LBLW, BARW, BARH, GAP = MARGIN, 200, 400, 30, 66
         BARX = LX + LBLW
@@ -474,7 +477,7 @@ def render_foreground(states):
             y = 272 + i * GAP
             draw.text((LX, y), label, fill=WHITE, font=f_sm)
             # Coloured border > opaque trough > coloured fill (opaque over the sky).
-            draw.rectangle([BARX - 2, y + 2, BARX + BARW + 2, y + BARH + 6], fill=BLUE)
+            draw.rectangle([BARX - 2, y + 2, BARX + BARW + 2, y + BARH + 6], fill=STEEL)
             draw.rectangle([BARX,     y + 4, BARX + BARW,     y + BARH + 4], fill=BG)
             filled = max(2, int(BARW * value / 100))
             draw.rectangle([BARX, y + 4, BARX + filled, y + BARH + 4], fill=colour)
@@ -492,7 +495,7 @@ def render_foreground(states):
         moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title()
     )
     pn_w = int(draw.textlength(phase_name, font=f_sm))
-    draw.text((MCX - pn_w // 2, MCY + MR + 8), phase_name, fill=YELLOW, font=f_sm)
+    draw.text((MCX - pn_w // 2, MCY + MR + 8), phase_name, fill=AMBER, font=f_sm)
 
     if moon_const:
         mc_text = f"in {moon_const}"
