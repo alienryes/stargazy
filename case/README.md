@@ -1,8 +1,14 @@
-# Case — Raspberry Pi Touch Display 2 (5") + Raspberry Pi 4
+# Case — Raspberry Pi Touch Display 2 (5") + Raspberry Pi 4 or Pi 5
 
 A 3D-printable desk case for the **5-inch** Raspberry Pi Touch Display 2 with a
-Raspberry Pi 4 mounted behind it, used landscape. Four printed parts, an
+Raspberry Pi 4 or Pi 5 mounted behind it, used landscape. Four printed parts, an
 easel stand at a 20° lean, and an optional 40 mm fan.
+
+The two boards share an outline and a mounting pattern, so only the port
+openings differ. Print the files for your board — see
+[Choosing the board variant](#choosing-the-board-variant), and read it before
+committing to a Pi 5: **the Pi 5 variant has not been built on hardware**, and
+its display ribbon routing is genuinely different.
 
 ## Credits and licence
 
@@ -16,9 +22,11 @@ stand, optional fan — re-drawn parametrically in CadQuery at 5-inch scale.
 
 This remix is released under **CC BY** as well. Credit RonnyS and this project.
 
-The Raspberry Pi 4B model shown in the assembly diagram is by
-**Pyro_Industries** — <https://www.printables.com/model/727545-raspberry-pi-4>,
-CC0. It is used for illustration only and is not redistributed here.
+The Raspberry Pi board models shown in the assembly diagrams are by
+**Pyro_Industries** — <https://www.printables.com/model/727545-raspberry-pi-4>
+and <https://www.printables.com/model/727155-raspberry-pi-5>, CC0. They are used
+for illustration and for measuring connector positions, and are not
+redistributed here.
 
 Differences from the original, beyond scale:
 
@@ -27,10 +35,23 @@ Differences from the original, beyond scale:
   screw chain. Here the lid screws into M2.5 male-female standoffs sitting on
   the Pi's own mounting holes, so one chain runs the whole stack and the lid
   continues the case-bottom's wall profile instead of straddling it.
+- **The lid is located by four spigots, not by its screws.** The original's lid
+  bolts into towers rising from its own plate — a short, stiff chain that needs
+  no help. Ours bolts into standoffs stacked on the Pi, which is stacked on
+  extenders, so the screws alone let the lid slide sideways on its seat. Four
+  Ø3 pins on the wall top drop into blind sockets in the skirt and take that
+  load instead. Measuring the original confirmed it has no register of its own:
+  seated, the two parts meet in a plain butt joint with 0.00 mm of overlap.
+- **Per-connector openings on the USB/Ethernet edge.** A continuous sill runs
+  under the connectors and full-height dividers stand between them, so each
+  connector gets its own window instead of one long slot. The sill is the
+  original's idiom (its +X wall stops at Z 9.1 against a 12.4 wall top); the
+  dividers are not — RonnyS leaves that edge as a single span.
 - The fan is **hung off the lid** instead of a separate Pi-mounted bracket —
   a Pi-mounted plate plus fan does not fit the 5-inch stack's headroom.
-  Note the fan clears the GPIO header by only 1.5 mm; check it on the real
-  thing before relying on it.
+  Measured against the board models, the fan clears the GPIO header by only
+  **1.10 mm**; check it on the real thing before relying on it. It does **not**
+  clear a Pi 5 active cooler at all — see below.
 - **The stand's foot is a plain blade, not a Y-fork.** The original splays each
   foot into two arms about 56 mm apart, which is what gives a narrow stand its
   sideways stability. Here the two stands are already 103.7 mm apart, so the
@@ -42,7 +63,7 @@ Differences from the original, beyond scale:
   one large rear opening. On the 5-inch panel the case-screw bosses (y ±25.5)
   and the display's own Pi standoffs (y ±28.5) fall in the same band, so an
   opening big enough to clear the standoffs would swallow the screw bosses.
-- No wall/V-slot brackets, no Pi 3/Pi 5 variants.
+- No wall/V-slot brackets, and no Pi 3 variant.
 
 ## Parts and printing
 
@@ -53,10 +74,13 @@ the stands stronger layer adhesion.
 | File | Qty | Size (mm) | ~Mass | Orientation |
 |---|---|---|---|---|
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
-| `case_bottom.stl` | 1 | 126 × 76 × 10.5 | 21 g | plate **flat**, wall up |
-| `case_top.stl` | 1 | 95 × 64 × 19.9 | 33 g | outer face **down** (as exported) |
+| `case_bottom_pi4.stl` *or* `_pi5` | 1 | 126 × 76 × 13.5 | 23 g | plate **flat**, wall up |
+| `case_top_pi4.stl` *or* `_pi5` | 1 | 95 × 71 × 19.9 | 36 g | outer face **down** (as exported) |
 | `stand_20_usb.stl` | 1 | 82 × 42.3 × 14.0 | 9 g | **flat** on the profile |
 | `stand_20_dsi.stl` | 1 | 82 × 42.3 × 14.0 | 9 g | **flat** on the profile |
+
+`shell.stl` and the stands are the same for both boards — only `case_bottom`
+and `case_top` are cut per model, and they must be a matching pair.
 
 Pick one lean angle and print **both** files for it — one per side:
 
@@ -86,6 +110,52 @@ oriented so nothing overhangs beyond 45°.
 
 The tolerances assume PETG. For PLA, drop `fit_clear` in `shell.py` from 0.5 to
 0.4 mm.
+
+## Choosing the board variant
+
+Both boards are 85 × 56 mm on the same 58 × 49 mounting pattern, so the shell,
+the stands and the whole screw stack are shared. What differs is the ports.
+Connector positions were measured off the reference board models rather than
+taken from the board drawings, and live in `pi_models.py`; both scripts derive
+their openings from that one table, so the wall gap and the lid aperture cannot
+drift apart.
+
+| | Pi 4 | Pi 5 |
+|---|---|---|
+| USB / Ethernet order on the +X edge | USB2, USB3, Ethernet | Ethernet, USB3, USB2 |
+| 3.5 mm audio jack | yes | none |
+| Display FPC connector | −X short edge | **−Y long edge** (x 6.7…15.2) |
+| Display FPC type | 15-pin | 22-pin (0.5 mm) |
+| Tallest point above the PCB | 16.8 mm | 17.7 mm |
+| Clearance under the lid | 3.20 mm | 2.26 mm |
+| Works with the optional 40 mm fan | yes | only **without** the active cooler |
+
+Build the pair for your board:
+
+```bash
+python case_bottom.py pi5 && python case_top.py pi5
+```
+
+### Read this before choosing a Pi 5
+
+**Not built on hardware.** The Pi 4 case is assembled and in service; the Pi 5
+variant is derived from the board model and checked in software only. Feedback
+welcome.
+
+**The display ribbon does not route the same way.** On the Pi 4 the DSI socket
+is on the short edge nearest the display's own FPC, so the ribbon rises through
+the bay and folds straight onto it over about 20 mm. The Pi 5 has nothing on
+that edge — both its MIPI connectors are on the −Y long edge, roughly 45 mm
+further along — so the ribbon has to run across the top of the board to reach
+one. There is room above the PCB for it, but you will need a longer cable than
+the panel's own, **and** a 22-to-15-pin adapter, since the Pi 5 uses the
+narrower 22-pin FPC. Work this out before printing.
+
+**The active cooler and the lid fan are mutually exclusive.** The cooler stands
+20.90 mm above the case floor where the fan hangs at 17.40 mm — a 3.5 mm clash.
+The cooler costs no lid height otherwise (it sits below the USB cans, which
+still set the tallest point), so fit the cooler and leave the fan out. The
+grille holes still vent.
 
 ## Hardware
 
@@ -121,7 +191,7 @@ length means changing `standoff` in `case_top.py` and re-running it.
 
 ## Assembly
 
-![Exploded assembly diagram](assembly.png)
+![Exploded assembly diagram](assembly_pi4.png)
 
 The numbered callouts match the steps below. The diagram is generated from the
 part STLs by `assembly_diagram.py`, so it cannot drift from the geometry —
@@ -143,12 +213,23 @@ re-run that script after changing any part.
    The display's socket sits under the board, so bring the ribbon up through
    the bay, **wrap it around the board's DSI edge** and fold it onto the socket
    on the Pi's top face. Lay the slack **flat over the top of the Pi**. Do not
-   bunch it underneath.
+   bunch it underneath. *(Pi 5: the socket is on the long edge instead — run
+   the ribbon across the top of the board to reach it.)*
 5. Screw the four **M2.5 × 20 standoffs** down through the Pi's mounting holes
    into the extenders. These clamp the Pi and provide the lid's threads.
 6. Optional: screw the **fan** to the lid from the outside (32 × 32 pattern).
-7. Fit the **lid** — its skirt seats on the case-bottom's wall — and secure with
+7. Fit the **lid**. Line the four **sockets in the skirt** up with the four
+   spigots on the wall top and press it down — the skirt seats on the wall and
+   the spigots take up the side play. If it will not sit flush, a spigot has
+   missed its socket; do not force it down with the screws. Then secure with
    four **M2.5 × 6** screws through the top face into the standoffs.
+
+The spigots are a Ø3.0 pin in a Ø3.5 socket, so the lid can still shift about
+0.25 mm before they bite — enough to assemble reliably in PETG, which prints
+slightly proud. If yours end up too tight to seat, or too loose to feel like
+they are doing anything, change `spigot_fit` in `case_top.py` and re-print the
+lid; the pin is not affected.
+
 ## The stands
 
 Each stand is an **L**: a flat strap that lies on the case-bottom's rear face
@@ -248,6 +329,11 @@ Useful knobs:
 | `foot_t`, `foot_t_thin`, `foot_step` | `stand.py` | strut thickness at the root, past the step, and where it steps |
 | `strap_t_thin` | `stand.py` | strap under the port band — raising it eats the 1.15 mm plug gap |
 | `grille_r`, `grille_pitch` | `case_top.py` | fan grille pattern |
+| `spigot_fit` | `case_top.py` | lid socket clearance — how much play before the spigots bite |
+| `port_clear`, `min_divider` | both | clearance around each connector, and the thinnest divider allowed |
+
+Port geometry is not edited directly: it comes from the measured tables in
+`pi_models.py`. Correct a connector there and both parts follow.
 
 `strap_x0` / `strap_x1` in `stand.py` must match `stand_strap_x0` and `half_x`
 in `case_bottom.py` — they are the two ends of the flange the strap sits on.
@@ -258,8 +344,3 @@ parameter change that would cause a collision fails loudly instead of producing
 a bad STL. `stand.py` additionally checks its whole profile against the Pi's
 measured plug keepout at every tilt, allowing 2 mm for the one Pi-position
 number never verified on a real panel.
-
-The scripts carry assertions for the clearances that matter (ribbon, Pi
-footprint versus the walls, screw ligaments, fan-screw versus grille), so a
-parameter change that would cause a collision fails loudly instead of producing
-a bad STL.

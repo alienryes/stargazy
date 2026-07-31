@@ -10,18 +10,23 @@ it cannot drift from the parts: re-run it after changing any script.
 Assembly frame: Z = 0 at the shell back plate's OUTER face, +Z rearward
 (away from the display), X = display long axis, Y = short axis.
 
-    python assembly_diagram.py
+    python assembly_diagram.py [pi4|pi5]
 """
 
 import math
 import os
+import sys
 
 import numpy as np
+import pi_models as pm
 import pyrender
 import trimesh
 from PIL import Image, ImageDraw, ImageFont
 
-VERSION = "0.4.1"
+VERSION = "0.5.0"
+
+PI_MODEL = sys.argv[1] if len(sys.argv) > 1 else "pi4"
+assert PI_MODEL in pm.PI_MODELS, f"unknown model {PI_MODEL}"
 
 W, H = 2200, 1560
 ELEV, AZIM = 30.0, 128.0             # 128 = -52 + 180 (view from the far side)
@@ -90,7 +95,10 @@ _stand_perm = np.array([[0, 0, 1, 0],
 # Its frame is X = long axis, Y = height, Z = short axis, PCB bottom at Y = 0;
 # rotating +90 about X and shifting to the board centre lands it exactly on the
 # designed position (x -41.2..43.8, y +-28, PCB bottom z 6.0).
-PI_STL = os.path.join("reference", "Raspberry Pi 4 Model B.stl")
+PI_STL = os.path.join("reference", {
+    "pi4": "Raspberry Pi 4 Model B.stl",
+    "pi5": "RASPBERRY_PI_5_.stl",
+}[PI_MODEL])
 if os.path.exists(PI_STL):
     pi_part = load(PI_STL, tr(1.3, 0.0, PI_Z0) @ rot("x", 90))
 else:
@@ -102,10 +110,11 @@ PARTS = [
      tr(z=EX_DISPLAY), (0.72, 0.24, 0.24)),
     ("shell", load("shell.stl", rot("x", 180)),
      tr(z=EX_SHELL), (0.93, 0.62, 0.24)),
-    ("case_bottom", load("case_bottom.stl", np.eye(4)),
+    ("case_bottom", load(f"case_bottom_{PI_MODEL}.stl", np.eye(4)),
      tr(z=EX_BOTTOM), (0.93, 0.62, 0.24)),
-    ("Raspberry Pi 4", pi_part, tr(z=EX_PI), (0.24, 0.52, 0.30)),
-    ("case_top", load("case_top.stl", tr(z=LID_Z_OUTER) @ rot("y", 180)),
+    (pm.label(PI_MODEL), pi_part, tr(z=EX_PI), (0.24, 0.52, 0.30)),
+    ("case_top", load(f"case_top_{PI_MODEL}.stl",
+                      tr(z=LID_Z_OUTER) @ rot("y", 180)),
      tr(z=EX_TOP), (0.93, 0.62, 0.24)),
     # the stands are handed: each file's own leg-z 0 edge is its INBOARD one,
     # so the -X part is placed from -strap_x1 rather than being mirrored here
@@ -248,7 +257,7 @@ CALLOUTS = [
      (30, 24, EX_TOP + LID_Z_OUTER), "r"),
     ("2", "40mm fan (optional)  -  M3 outside",
      (-16, -16, EX_TOP + LID_Z_OUTER), "r"),
-    ("3", "Raspberry Pi 4  -  held by the standoffs",
+    ("3", f"{pm.short_label(PI_MODEL)}  -  held by the standoffs",
      (PI_X0 + PI_W / 2, PI_Y0 + PI_H / 2, PI_Z0 + EX_PI + 2), "r"),
     ("4", "case_bottom  -  lid seats on this wall",
      (-46, -29.5, 9.0), "l"),
@@ -311,9 +320,10 @@ draw.text((48, H - 88),
           "(printables.com/model/1377047), CC BY.",
           font=F_SML, fill=(96, 96, 104))
 draw.text((48, H - 52),
-          "Raspberry Pi 4B model by Pyro_Industries "
-          "(printables.com/model/727545), CC0.",
+          "Raspberry Pi board models by Pyro_Industries "
+          "(printables.com/model/727545 and /727155), CC0.",
           font=F_SML, fill=(96, 96, 104))
 
-img.save("assembly.png")
-print(f"assembly_diagram v{VERSION}: wrote assembly.png ({W}x{H})")
+out = f"assembly_{PI_MODEL}.png"
+img.save(out)
+print(f"assembly_diagram v{VERSION} [{PI_MODEL}]: wrote {out} ({W}x{H})")

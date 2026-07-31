@@ -137,7 +137,7 @@ python3 display.py --demo     # force a vivid clear-sky animation, ignoring the 
 
 ## 🧰 Case
 
-A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](case/README.md) — four parametric CadQuery parts (shell, Pi clamshell, twin bolt-on stands at a 20° lean, optional 40 mm fan). It's a **CC BY remix of [RonnyS's Touch Display 2 case](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)**, which targets the 7" panel; this one is re-drawn for the 5". See [`case/README.md`](case/README.md) for print settings, hardware and assembly.
+A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](case/README.md) — four parametric CadQuery parts (shell, Pi clamshell, twin bolt-on stands at a 20° lean, optional 40 mm fan). A Pi 5 variant of the two clamshell parts is also generated, though it has not been built on hardware and its display ribbon routes differently. It's a **CC BY remix of [RonnyS's Touch Display 2 case](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)**, which targets the 7" panel; this one is re-drawn for the 5". See [`case/README.md`](case/README.md) for print settings, hardware and assembly.
 
 The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke stand (CadQuery frame + riser + WS2812B LED bezel ring). After moving to the self-lit Touch Display 2 that design was retired and archived, with full history, at [`adminfor/inky-impression-case`](https://forgejo.home.neilsayer.co.uk/adminfor/inky-impression-case).
 
@@ -180,7 +180,8 @@ systemd/
 case/
   README.md               Print settings, hardware, assembly
   shell.py                Display shell (front frame + back plate)
-  case_bottom.py          Pi clamshell base (bay, walls, lid towers)
+  pi_models.py            Measured Pi 4 / Pi 5 connector tables
+  case_bottom.py          Pi clamshell base (bay, walls, port sill, lid spigots)
   case_top.py             Ventilated lid (ports, fan grille + mounting)
   stand.py                Bolt-on desk stand — print 2
 ```
