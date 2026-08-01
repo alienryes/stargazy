@@ -12,6 +12,7 @@ refetches AstroWeather data from the Home Assistant REST API.
 """
 
 import argparse
+import json
 import logging
 import math
 import random
@@ -27,7 +28,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.7.4"
+FIRMWARE_VERSION = "2.8.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -469,6 +470,70 @@ def _glyph(draw, cx, cy, r, otype):
         draw.ellipse([cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy + r * 0.45], outline=STEEL)
 
 
+# Declination, so the cards can say how high each object actually gets. UpTonight
+# publishes no coordinates over MQTT, but CDS's Sesame resolver returns them for
+# any catalogue name - including the LBN/LDN entries an image library has never
+# heard of. One small text response per object, cached forever: the sky does not
+# move. Peak altitude is then 90 - |latitude - declination|.
+SESAME_URL = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/A"
+DEC_CACHE = CACHE_DIR / "declinations.json"
+
+
+def _dec_cache():
+    try:
+        return json.loads(DEC_CACHE.read_text())
+    except Exception:
+        return {}
+
+
+def declination(obj_id):
+    """Declination in degrees for an object name, or None. NETWORK on a miss."""
+    cache = _dec_cache()
+    if obj_id in cache:
+        return cache[obj_id]
+    try:
+        r = requests.get(f"{SESAME_URL}?{requests.utils.quote(obj_id)}", timeout=20)
+        r.raise_for_status()
+        # "%J <ra> <dec> = <sexagesimal>"
+        m = re.search(r"^%J\s+\S+\s+([-+]?\d+\.\d+)", r.text, re.M)
+        dec = float(m.group(1)) if m else None
+    except Exception as e:
+        log.warning("Declination for %s failed: %s", obj_id, e)
+        return None
+    cache[obj_id] = dec
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    DEC_CACHE.write_text(json.dumps(cache, indent=1, sort_keys=True))
+    log.info("Declination for %s: %s", obj_id, dec)
+    return dec
+
+
+def peak(dec, lat):
+    """(altitude, compass letter) at meridian transit. An object north of the
+    zenith culminates due north, not south - which is where you actually face."""
+    return 90.0 - abs(lat - dec), ("N" if dec > lat else "S")
+
+
+def _ut_dt(s):
+    """UpTonight's transit stamps are US-format local time, or "" when it does
+    not transit within the observing window."""
+    try:
+        return datetime.strptime(s, "%m/%d/%Y %H:%M:%S")
+    except (ValueError, TypeError):
+        return None
+
+
+def load_decs(targets, limit):
+    """{object id: declination} for the objects the page will show."""
+    decs = {}
+    for o in sorted(targets.get("objects") or [],
+                    key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))[:limit]:
+        oid = str(o.get("id", ""))
+        d = declination(oid)
+        if d is not None:
+            decs[oid] = d
+    return decs
+
+
 def load_cutouts(targets, limit):
     """{object id: image} for the objects the page will show. NETWORK on a cache
     miss, so this runs on the data thread, not the render loop."""
@@ -806,7 +871,7 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
                   font=f_xs, fill=DIM)
 
 
-def _draw_cards(img, draw, objects, images, f_med, f_sm, f_xs):
+def _draw_cards(img, draw, objects, images, decs, lat, f_med, f_sm, f_xs):
     """Deep-sky targets, best first, with a real cutout of each patch of sky."""
     # Starts clear of the column heading, which descends to about y 210.
     x0, y = P2_DIV_X + 24, 220
@@ -825,22 +890,42 @@ def _draw_cards(img, draw, objects, images, f_med, f_sm, f_xs):
 
         tx = x0 + tile + 18
         draw.text((tx, y + 2), oid, font=f_med, fill=WHITE)
-        draw.text((tx, y + 40), f"{o.get('type', '')} in {o.get('constellation', '')}",
-                  font=f_xs, fill=DIM)
+
+        # Type, constellation and magnitude share a line to free a row for the
+        # altitude, which is the more actionable of the two.
         mag = _f(o.get("mag"), 0)
-        draw.text((tx, y + 68), "mag --" if mag <= 0 else f"mag {mag:.1f}",
-                  font=f_xs, fill=DIM)
-        # foto = fraction of astronomical darkness the object stays observable
-        bx, bw = tx + 110, 150
+        sub = f"{o.get('type', '')} in {o.get('constellation', '')}"
+        if mag > 0:
+            sub += f" · mag {mag:.1f}"
+        draw.text((tx, y + 38), sub, font=f_xs, fill=DIM)
+
+        # How high it gets and which way to face. UpTonight publishes no
+        # coordinates for deep-sky objects, so this is derived from the
+        # declination: 90 - |lat - dec|. Only the MERIDIAN transit gives the
+        # time - the antimeridian one is the object's LOWEST point, and for
+        # circumpolar targets it is often the only one published.
+        dec = decs.get(oid)
+        if dec is not None and lat is not None:
+            alt, face = peak(dec, lat)
+            line = f"peaks {alt:.0f}° {face}"
+            when = _ut_dt(str(o.get("meridian transit", "")))
+            if when is not None:
+                line += f"   at {when.strftime('%H:%M')}"
+            draw.text((tx, y + 66), line, font=f_xs, fill=WHITE)
+
+        # foto = fraction of astronomical darkness the object stays observable.
+        # Kept alongside the altitude text rather than pushed to the margin,
+        # where an unlabelled bar just reads as a mystery.
+        bx, bw = tx + 230, 150
         frac = max(0.0, min(1.0, _f(o.get("foto"))))
-        draw.rectangle([bx, y + 72, bx + bw, y + 86], fill=BG, outline=STEEL)
+        draw.rectangle([bx, y + 68, bx + bw, y + 82], fill=BG, outline=STEEL)
         if frac > 0:
-            draw.rectangle([bx + 1, y + 73, bx + 1 + frac * (bw - 2), y + 85],
+            draw.rectangle([bx + 1, y + 69, bx + 1 + frac * (bw - 2), y + 81],
                            fill=ELECTRIC if frac >= 0.75 else AMBER)
         y += tile + gap
 
 
-def render_targets(states, targets, images):
+def render_targets(states, targets, images, decs=None):
     """Page 2 as an RGBA overlay, or None when UpTonight has published nothing."""
     objects = targets.get("objects") or []
     bodies  = targets.get("bodies") or []
@@ -870,7 +955,8 @@ def render_targets(states, targets, images):
     _draw_panorama(draw, bodies, comets, f_sm, f_xs)
 
     ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
-    _draw_cards(img, draw, ranked, images, f_med, f_sm, f_xs)
+    lat = targets.get("meta", {}).get("site_latitude")
+    _draw_cards(img, draw, ranked, images, decs or {}, lat, f_med, f_sm, f_xs)
 
     # No "+N more": it dangled an object the page never shows, and the column
     # heading already carries the total.
@@ -952,7 +1038,8 @@ def run_daemon(ha_url, token, animated, fps, refresh_min, page_seconds, demo=Fal
         pages = [render_foreground(states)]
         # Targets page joins the rotation only when there is something on it -
         # better a single page than a dead one after a restart.
-        page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS))
+        page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS),
+                               load_decs(targets, P2_CARDS))
         if page2 is not None:
             pages.append(page2)
         state["pages"] = pages
@@ -1059,7 +1146,8 @@ def main():
         if args.save:
             frame.save(args.save)
             log.info("Saved %s", args.save)
-            page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS))
+            page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS),
+                               load_decs(targets, P2_CARDS))
             if page2 is not None:
                 p = Path(args.save)
                 out = str(p.with_name(p.stem + "_targets" + p.suffix))
