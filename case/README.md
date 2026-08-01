@@ -154,9 +154,19 @@ is on the short edge nearest the display's own FPC, so the ribbon rises through
 the bay and folds straight onto it over about 20 mm. The Pi 5 has nothing on
 that edge — both its MIPI connectors are on the −Y long edge, roughly 45 mm
 further along — so the ribbon has to run across the top of the board to reach
-one. There is room above the PCB for it, but you will need a longer cable than
-the panel's own, **and** a 22-to-15-pin adapter, since the Pi 5 uses the
-narrower 22-pin FPC. Work this out before printing.
+one. There is room above the PCB for it, but the panel's own cable will not
+reach and will not fit.
+
+What you need is a single **Raspberry Pi Display Adapter Cable for Pi 5** —
+22-way 0.5 mm pitch at the Pi end, 15-way 1 mm pitch at the display end — which
+replaces the panel's cable outright. It is one part, not a cable plus an
+adapter. Sold in 200 / 300 / 500 mm lengths; measure your routing before
+choosing, as the run climbs through the bay and then crosses the board.
+
+**Display and camera adapter cables are not interchangeable.** The Pi 5's two
+MIPI connectors take either, and the cables look nearly identical, so Raspberry
+Pi prints `DISPLAY` along the correct one. Check for that word before plugging
+anything in.
 
 **The active cooler and the lid fan are mutually exclusive.** The cooler stands
 20.90 mm above the case floor where the fan hangs at 17.40 mm — a 3.5 mm clash.
@@ -175,6 +185,7 @@ grille holes still vent.
 | 40 × 40 × 10 mm 5 V fan | 1 | **optional** |
 | M3 self-tapping screw | 4 | fan, from outside through the lid — optional |
 | **Right-angle USB-C power lead** | 1 | see below — a straight one will foul the desk |
+| Display Adapter Cable for Pi 5 (22-way → 15-way) | 1 | **Pi 5 only.** Replaces the panel's own cable. Must say `DISPLAY` — camera cables look the same and do not work |
 
 **No heat-set inserts and no soldering iron** — everything threads into a
 standoff. Screw lengths are calculated from the stack-up; confirm the
