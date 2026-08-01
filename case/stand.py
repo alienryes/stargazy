@@ -45,7 +45,7 @@ import cadquery as cq
 from shapely.geometry import Polygon
 from shapely.geometry import box as shapely_box
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -106,6 +106,12 @@ foot_step = 20.0      # distance along the desk, from the toe, where it thins
 
 # --- Desk plane ---
 desk_clear = 3.0      # the stands carry the case; it never rests on its own corner
+# Extra height, purely to get the power lead out. The USB-C socket faces down at
+# the -Y edge and even a right-angle lead's overmould was longer than the gap
+# under the case. Lifting perpendicular to the desk buys lift/cos(tilt) of room
+# along the plug axis, which is why it fixes all three tilts at once - unlike
+# leaning further back, which moves the socket TOWARD the desk.
+lift = 10.0
 # (case_Y, case_Z) corners that could reach the desk once tilted. Validated
 # against the assembled shell / case_bottom / case_top meshes: this list
 # reproduces the true silhouette minimum at all three tilts.
@@ -175,9 +181,10 @@ def profile(tilt):
     """
     s, c = math.sin(math.radians(tilt)), math.cos(math.radians(tilt))
 
-    # Desk plane: the lowest case corner, once tilted, clears it by desk_clear.
+    # Desk plane: the lowest case corner, once tilted, clears it by
+    # desk_clear + lift.
     v_min = min(cy * c - cz * s for (cy, cz) in case_corners)
-    face_y0 = (v_min - desk_clear + FACE_Z0 * s) / c
+    face_y0 = (v_min - desk_clear - lift + FACE_Z0 * s) / c
 
     # unit vectors: along the desk, and perpendicular into the material
     d = (s, c)
@@ -215,9 +222,16 @@ def profile(tilt):
         (x_top, strap_t_thin),
         (x_top, 0.0),
     ]
-    # Largest fillet that fits the flat thick strap between the strut root and
-    # the start of the chamfer. 0.9 keeps the tangent point off the vertex.
-    run = (x_step - step_chamfer) - p_join[0]
+    # Largest fillet that fits at the strut root. The corner has TWO legs and
+    # the radius is limited by the shorter: along the thick strap to the start
+    # of its step chamfer, and along the strut's inner edge to the start of its
+    # chamfer. Only the strap side used to be checked - it was the tighter of
+    # the two until the strap grew, after which the strut side silently became
+    # binding and OCC failed the fillet outright at 30 deg.
+    # 0.9 keeps the tangent point off the vertex.
+    run_strap = (x_step - step_chamfer) - p_join[0]
+    run_strut = (foot_step - step_chamfer) - u_join
+    run = min(run_strap, run_strut)
     r_join = min(join_fillet,
                  0.9 * run * math.tan(math.radians(90.0 - tilt) / 2))
 
@@ -274,7 +288,8 @@ def check(pts, info, tilt):
 
     v_min = min(cy * c - cz * s for (cy, cz) in case_corners)
     clear = v_min - (face_y0 * c - FACE_Z0 * s)
-    assert abs(clear - desk_clear) < 1e-6, "desk clearance derivation is wrong"
+    assert abs(clear - (desk_clear + lift)) < 1e-6, \
+        "desk clearance derivation is wrong"
 
     m_tot = sum(m for (m, _, _) in masses)
     com_h = sum(m * world_h(cy, cz) for (m, cy, cz) in masses) / m_tot

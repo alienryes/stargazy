@@ -83,8 +83,8 @@ the stands stronger layer adhesion.
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
 | `case_bottom_pi4.stl` *or* `_pi5` | 1 | 126 × 76 × 13.5 | 23 g | plate **flat**, wall up |
 | `case_top_pi4.stl` *or* `_pi5` | 1 | 95 × 71 × 19.9 | 36 g | outer face **down** (as exported) |
-| `stand_20_usb.stl` | 1 | 82 × 42.3 × 14.0 | 9 g | **flat** on the profile |
-| `stand_20_dsi.stl` | 1 | 82 × 42.3 × 14.0 | 9 g | **flat** on the profile |
+| `stand_20_usb.stl` | 1 | 92.7 × 42.3 × 14.0 | 10 g | **flat** on the profile |
+| `stand_20_dsi.stl` | 1 | 92.7 × 42.3 × 14.0 | 10 g | **flat** on the profile |
 
 `shell.stl` and the stands are the same for both boards — only `case_bottom`
 and `case_top` are cut per model, and they must be a matching pair.
@@ -93,9 +93,15 @@ Pick one lean angle and print **both** files for it — one per side:
 
 | Files | Lean | Stand size (mm) | Assembly depth on the desk |
 |---|---|---|---|
-| `stand_15_usb` + `stand_15_dsi` | 15° | 82.2 × 43.5 × 14.0 | 68.5 mm |
-| `stand_20_usb` + `stand_20_dsi` | 20° | 82.0 × 42.3 × 14.0 | 73.9 mm |
-| `stand_30_usb` + `stand_30_dsi` | 30° | 82.6 × 39.0 × 14.0 | 83.1 mm |
+| `stand_15_usb` + `stand_15_dsi` | 15° | 92.5 × 43.5 × 14.0 | 68.5 mm |
+| `stand_20_usb` + `stand_20_dsi` | 20° | 92.7 × 42.3 × 14.0 | 73.9 mm |
+| `stand_30_usb` + `stand_30_dsi` | 30° | 94.1 × 39.0 × 14.0 | 83.1 mm |
+
+The stands hold the case **13 mm** clear of the desk — 3 mm so it never rests on
+its own corner, plus a deliberate 10 mm to get the power lead out (see below).
+The depth on the desk is unchanged by that lift: it is set by the leaning case's
+own silhouette, and the lift moves the case straight up, not backward. The strut
+simply tucks a little further underneath.
 
 **The stands are handed** — `_usb` goes on the USB/Ethernet side, `_dsi` on the
 ribbon side. They are mirror images, and an L-shaped profile has no mirror
@@ -184,7 +190,7 @@ grille holes still vent.
 | M2.5 × 16 screw | 4 | case screws: stand → case-bottom → shell → display |
 | 40 × 40 × 10 mm 5 V fan | 1 | **optional** |
 | M3 self-tapping screw | 4 | fan, from outside through the lid — optional |
-| **Right-angle USB-C power lead** | 1 | see below — a straight one will foul the desk |
+| **Right-angle USB-C power lead** | 1 | recommended — see below. The stands lift the case 10 mm for this; there is now ~27 mm under the socket, so a slim straight plug may also fit |
 | Display Adapter Cable for Pi 5 (22-way → 15-way) | 1 | **Pi 5 only.** Replaces the panel's own cable. Must say `DISPLAY` — camera cables look the same and do not work |
 
 **No heat-set inserts and no soldering iron** — everything threads into a
@@ -297,28 +303,38 @@ inherent to the case rather than the stand: with the strap removed entirely the
 gap would only grow to 4.15 mm, because the case-bottom's own plate is at
 Z 2.50. Both USB and Ethernet cables otherwise plug in and seat normally.
 
-**Use a right-angle USB-C power lead.** The power socket faces down toward the
-desk, and the case is deliberately low, so there is not much room beneath it:
+### Power lead clearance — why the stands lift the case
 
-| Lean | Room from the socket face to the desk |
-|---|---|
-| 15° | 17.4 mm |
-| 20° | **16.6 mm** |
-| 30° | 15.7 mm |
+The power socket faces down toward the desk. On the original 7-inch case the
+body is tall enough to swallow a straight plug; at 5 inches it is not, and this
+is the one place the smaller scale really bites. Before the lift there was only:
 
-A straight plug's overmould plus the bend the lead needs before it can run flat
-is typically longer than that, so it lands on the desk and lifts the case off
-its stands. A right-angle lead turns immediately and clears easily. Note that
-leaning **further back makes this worse, not better** — the socket gets closer
-to the desk, not further from it.
+| Lean | Room from the socket face to the desk | With the 10 mm lift |
+|---|---|---|
+| 15° | 17.4 mm | **27.8 mm** |
+| 20° | 16.6 mm | **27.2 mm** |
+| 30° | 15.7 mm | **27.3 mm** |
 
-This is the one place the 5-inch scale bites that the 7-inch original does not:
-RonnyS's case is tall enough to swallow a straight plug. The alternative fix is
-to lengthen the stands' straps, which raises the whole case — about 19 mm of
-extension to gain 20 mm of room. That would actually *improve* the front tipping
-margin (the toe moves down and forward faster than the centre of mass rises,
-taking it from 12.0 to 18.2 mm at 20°), so it is a viable route if you would
-rather not be tied to a particular lead. It is not the shipped geometry.
+A straight plug's overmould, plus the bend the lead needs before it can run
+flat, is longer than the original figures — and in practice **even a right-angle
+adaptor's overmould did not fit**. So the stands now raise the whole case by a
+deliberate 10 mm (`lift` in `stand.py`), on top of the 3 mm that keeps it off
+its own corner.
+
+Two things worth understanding about that fix:
+
+- **Leaning further back makes the problem worse, not better** — it brings the
+  socket closer to the desk. The lift is perpendicular to the desk, so it buys
+  `lift / cos(tilt)` along the plug axis. That is why all three angles land at
+  about the same 27 mm: the lift cancels the penalty for leaning back.
+- **It improves the front tipping margin** rather than hurting it, from 12.0 to
+  15.7 mm at 20°. The strap lies on the *tilted* rear face, so extending it moves
+  the toe down **and forward**, widening the front contact faster than the rising
+  centre of mass eats it. The rear margin gives up the same amount and still has
+  29 mm. Don't assume raising a leaning case costs stability.
+
+The toe still sits 15.7 mm behind the glass edge at 20°, so nothing protrudes in
+front of the display.
 
 To change the lean angle, unplug the +X cables, undo the four case screws, swap
 both stands and do them back up. The Pi and lid can stay where they are.
