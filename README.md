@@ -58,7 +58,7 @@ Meteors streak occasionally through the night sky (rarer when cloudy). Star and 
 ## 🛠️ Requirements
 
 **Hardware**
-- Raspberry Pi 4 (do **not** use a Pi 5 — `rpi_ws281x`/DSI quirks; a Pi 4 is proven here)
+- Raspberry Pi 4 — what this is built and proven on. A **Pi 5 is untested**: it needs a longer 22-pin DSI FFC plus a 22-to-15-pin adapter, and `display.py` assumes a 16-bit RGB565 `/dev/fb0`, which a Pi 5 may not provide. There is also no performance reason to move — the render loop is single-threaded and uses about one core of four.
 - Raspberry Pi Touch Display 2, 5" variant (720×1280 DSI), connected via the DSI FFC
 
 **Software**
