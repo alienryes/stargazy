@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.5.1"
+FIRMWARE_VERSION = "2.6.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -276,15 +276,21 @@ def sky_params(states):
     }
 
 
+# Parallax depth, keyed by the star's size. Bigger stars read as nearer, so they
+# drift faster; brightness and depth then reinforce each other instead of
+# fighting. Three offsets are computed per frame, not per star.
+STAR_DEPTH = {1: 0.25, 2: 0.6, 3: 1.3}
+
+
 def draw_stars(draw, t, params):
     gain = params["gain"]
-    drift = (t * params["drift"]) % W
+    drift = {s: (t * params["drift"] * d) % W for s, d in STAR_DEPTH.items()}
     for x0, y, base, phase, speed, size in STARS:
         val = base * (0.55 + 0.45 * math.sin(t * speed + phase)) * gain
         if val <= 0.05:
             continue
         c = tuple(int(ch * val) for ch in STAR_COLOUR)
-        x = (x0 + drift) % W
+        x = (x0 + drift[size]) % W
         if size == 1:
             draw.point((x, y), fill=c)
         else:
@@ -368,7 +374,8 @@ def spawn_cloud():
         sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
     return {"sprite": sp,
             "x": random.uniform(-sp.width, W),
-            "y": random.randint(-40, int(H * 0.72))}
+            "y": random.randint(-40, int(H * 0.72)),
+            "depth": random.uniform(0.75, 1.35)}   # parallax: clouds separate
 
 
 def initial_clouds(params):
@@ -668,7 +675,7 @@ def run_daemon(ha_url, token, animated, fps, refresh_min, demo=False):
             while len(clouds) < tgt:
                 clouds.append(spawn_cloud())
             for c in clouds:
-                c["x"] += params["cloud_speed"] * frame_dt
+                c["x"] += params["cloud_speed"] * c["depth"] * frame_dt
                 if c["x"] > W:
                     c["x"] = -c["sprite"].width
                     c["y"] = random.randint(-40, int(H * 0.72))
