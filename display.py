@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.7.0"
+FIRMWARE_VERSION = "2.7.1"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -660,8 +660,14 @@ def render_foreground(states):
 # ── Page 2: tonight's targets ─────────────────────────────────────────────
 P2_DIV_X = 636       # panorama | deep-sky cards
 P2_CARDS = 4         # cards that fit the right column
-PAN_TOP, PAN_BASE = 214, 566          # altitude 90 and 0
+PAN_TOP, PAN_BASE = 214, 566          # top and bottom of the altitude axis
 PAN_X0, PAN_X1 = MARGIN, P2_DIV_X - 24
+# The axis stops at 70 deg, not 90. Everything plotted here sits near the
+# ecliptic, which at 51.4N never climbs past about 62 deg for the planets or
+# 67 for the Moon at extreme standstill - so the top fifth of a 0-90 axis was
+# dead space that squeezed everything else together. Latitude-specific: raise
+# this if the display is ever used much further south.
+PAN_ALT_MAX = 70.0
 
 
 def _tl_x(t, t0, t1, x0, x1):
@@ -719,8 +725,8 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
         x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
         draw.line([(x, PAN_BASE), (x, PAN_BASE + 8)], fill=STEEL)
         draw.text((x - 8, PAN_BASE + 12), lab, font=f_xs, fill=DIM)
-    for alt in (30, 60):
-        y = PAN_BASE - (alt / 90.0) * (PAN_BASE - PAN_TOP)
+    for alt in (20, 40, 60):
+        y = PAN_BASE - (alt / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
         draw.line([(PAN_X0, y), (PAN_X1, y)], fill=(29, 94, 128, 70))
         draw.text((PAN_X1 + 4, y - 12), f"{alt}", font=f_xs, fill=DIM)
 
@@ -743,7 +749,7 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
         if alt < 0 or az < 0:
             continue                       # below the horizon: nothing to see
         x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
-        y = PAN_BASE - (min(alt, 90.0) / 90.0) * (PAN_BASE - PAN_TOP)
+        y = PAN_BASE - (min(alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
         r = max(4.0, min(13.0, 9.0 - mag * 0.8))
         draw.ellipse([x - r, y - r, x + r, y + r], fill=col)
 
