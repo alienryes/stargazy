@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.7.2"
+FIRMWARE_VERSION = "2.7.3"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -833,8 +833,12 @@ def render_targets(states, targets, images):
 
     draw.line([(P2_DIV_X, 190), (P2_DIV_X, 664)], fill=DIM)
     draw.text((MARGIN, 182), "WHERE TO LOOK", font=f_sm, fill=ELECTRIC)
-    draw.text((P2_DIV_X + 24, 182),
-              f"DEEP SKY  ({len(objects)} up)", font=f_sm, fill=ELECTRIC)
+    # Say what the column is actually showing. On a dark night the cap lets 40
+    # objects through against four cards, so "(40 up)" alone was misleading.
+    shown = min(P2_CARDS, len(objects))
+    count = (f"first {shown} of {len(objects)}" if shown < len(objects)
+             else f"all {len(objects)}")
+    draw.text((P2_DIV_X + 24, 182), f"DEEP SKY  ({count})", font=f_sm, fill=ELECTRIC)
     _draw_panorama(draw, bodies, comets, f_sm, f_xs)
 
     ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
