@@ -83,8 +83,8 @@ the stands stronger layer adhesion.
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
 | `case_bottom_pi4.stl` *or* `_pi5` | 1 | 126 × 76 × 13.5 | 23 g | plate **flat**, wall up |
 | `case_top_pi4.stl` *or* `_pi5` | 1 | 95 × 71 × 19.9 | 36 g | outer face **down** (as exported) |
-| `stand_20_usb.stl` | 1 | 92.7 × 42.3 × 14.0 | 10 g | **flat** on the profile |
-| `stand_20_dsi.stl` | 1 | 92.7 × 42.3 × 14.0 | 10 g | **flat** on the profile |
+| `stand_20_usb.stl` | 1 | 103.3 × 42.3 × 14.0 | 11 g | **flat** on the profile |
+| `stand_20_dsi.stl` | 1 | 103.3 × 42.3 × 14.0 | 11 g | **flat** on the profile |
 
 `shell.stl` and the stands are the same for both boards — only `case_bottom`
 and `case_top` are cut per model, and they must be a matching pair.
@@ -93,12 +93,17 @@ Pick one lean angle and print **both** files for it — one per side:
 
 | Files | Lean | Stand size (mm) | Assembly depth on the desk |
 |---|---|---|---|
-| `stand_15_usb` + `stand_15_dsi` | 15° | 92.5 × 43.5 × 14.0 | 68.5 mm |
-| `stand_20_usb` + `stand_20_dsi` | 20° | 92.7 × 42.3 × 14.0 | 73.9 mm |
-| `stand_30_usb` + `stand_30_dsi` | 30° | 94.1 × 39.0 × 14.0 | 83.1 mm |
+| `stand_15_usb` + `stand_15_dsi` | 15° | 102.9 × 43.5 × 14.0 | 68.5 mm |
+| `stand_20_usb` + `stand_20_dsi` | 20° | 103.3 × 42.3 × 14.0 | 73.9 mm |
+| `stand_30_usb` + `stand_30_dsi` | 30° | 105.7 × 39.0 × 14.0 | 83.1 mm |
 
-The stands hold the case **13 mm** clear of the desk — 3 mm so it never rests on
-its own corner, plus a deliberate 10 mm to get the power lead out (see below).
+**30° is the marginal option.** Raising the case moves the centre of mass back,
+so the rear tipping margin falls: 25.7 mm at 20° but only 12.7 mm at 30°, where
+the strut tip also stops level with the case's own rear edge. It passes, but 15°
+and 20° have far more room. Pick 30° for the viewing angle, not for stability.
+
+The stands hold the case **23 mm** clear of the desk — 3 mm so it never rests on
+its own corner, plus a deliberate 20 mm to get the power lead out (see below).
 The depth on the desk is unchanged by that lift: it is set by the leaning case's
 own silhouette, and the lift moves the case straight up, not backward. The strut
 simply tucks a little further underneath.
@@ -190,7 +195,7 @@ grille holes still vent.
 | M2.5 × 16 screw | 4 | case screws: stand → case-bottom → shell → display |
 | 40 × 40 × 10 mm 5 V fan | 1 | **optional** |
 | M3 self-tapping screw | 4 | fan, from outside through the lid — optional |
-| **Right-angle USB-C power lead** | 1 | recommended — see below. The stands lift the case 10 mm for this; there is now ~27 mm under the socket, so a slim straight plug may also fit |
+| USB-C power lead | 1 | the **official Raspberry Pi PSU fits** — the stands lift the case 20 mm specifically so it does. See below; a right-angle lead needs only half that |
 | Display Adapter Cable for Pi 5 (22-way → 15-way) | 1 | **Pi 5 only.** Replaces the panel's own cable. Must say `DISPLAY` — camera cables look the same and do not work |
 
 **No heat-set inserts and no soldering iron** — everything threads into a
@@ -309,17 +314,23 @@ The power socket faces down toward the desk. On the original 7-inch case the
 body is tall enough to swallow a straight plug; at 5 inches it is not, and this
 is the one place the smaller scale really bites. Before the lift there was only:
 
-| Lean | Room from the socket face to the desk | With the 10 mm lift |
+| Lean | Room from the socket face to the desk | With the 20 mm lift |
 |---|---|---|
-| 15° | 17.4 mm | **27.8 mm** |
-| 20° | 16.6 mm | **27.2 mm** |
-| 30° | 15.7 mm | **27.3 mm** |
+| 15° | 17.4 mm | **38.1 mm** |
+| 20° | 16.6 mm | **37.9 mm** |
+| 30° | 15.7 mm | **38.8 mm** |
 
 A straight plug's overmould, plus the bend the lead needs before it can run
-flat, is longer than the original figures — and in practice **even a right-angle
-adaptor's overmould did not fit**. So the stands now raise the whole case by a
-deliberate 10 mm (`lift` in `stand.py`), on top of the 3 mm that keeps it off
+flat, is far longer than the original figures — in practice **even a right-angle
+adaptor's overmould did not fit**. So the stands raise the whole case by a
+deliberate 20 mm (`lift` in `stand.py`), on top of the 3 mm that keeps it off
 its own corner.
+
+Both figures were set on hardware, not modelled. 10 mm cleared a right-angle
+adaptor; **20 mm is what the official Raspberry Pi power supply needs**, because
+its captive cable has very little flex and cannot turn tightly, so it wants
+roughly another 10 mm before it will run flat. It is sized for the supplied PSU
+deliberately — most people printing this case will have one.
 
 Two things worth understanding about that fix:
 

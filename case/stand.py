@@ -45,7 +45,7 @@ import cadquery as cq
 from shapely.geometry import Polygon
 from shapely.geometry import box as shapely_box
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -111,7 +111,13 @@ desk_clear = 3.0      # the stands carry the case; it never rests on its own cor
 # under the case. Lifting perpendicular to the desk buys lift/cos(tilt) of room
 # along the plug axis, which is why it fixes all three tilts at once - unlike
 # leaning further back, which moves the socket TOWARD the desk.
-lift = 10.0
+#
+# 10.0 cleared a right-angle adaptor (tested on hardware). 20.0 is what the
+# OFFICIAL Raspberry Pi PSU needs: its captive cable has little flex, so the
+# lead cannot turn tightly and needs roughly another 10mm before it can run
+# flat. Sized for the supplied PSU deliberately - anyone printing this case
+# most likely has one.
+lift = 20.0
 # (case_Y, case_Z) corners that could reach the desk once tilted. Validated
 # against the assembled shell / case_bottom / case_top meshes: this list
 # reproduces the true silhouette minimum at all three tilts.
