@@ -19,7 +19,7 @@ import re
 import signal
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.7.3"
+FIRMWARE_VERSION = "2.7.4"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -678,19 +678,40 @@ def _tl_x(t, t0, t1, x0, x1):
     return x0 + max(0.0, min(1.0, f)) * (x1 - x0)
 
 
+def _night_window(states):
+    """Tonight's civil dusk -> dawn.
+
+    The sun_next_* sensors roll to TOMORROW as soon as the event passes, so
+    after sunset next_setting is tomorrow's and the window inverts. That used to
+    blank the entire timeline every night from sunset onward - i.e. whenever the
+    display was actually worth looking at.
+    """
+    dusk = _dt(states.get("sensor.astroweather_backyard_sun_next_setting"))
+    dawn = _dt(states.get("sensor.astroweather_backyard_sun_next_rising"))
+    if dusk is None or dawn is None:
+        return None, None
+    if dusk >= dawn:
+        dusk -= timedelta(days=1)     # sunset already happened; this is tonight
+    return dusk, dawn
+
+
+def _tonight(t, end):
+    """Step a 'next event' back a day when it points past tonight's window."""
+    return t - timedelta(days=1) if (t is not None and t > end) else t
+
+
 def _draw_timeline(draw, states, y, f_xs):
     """Dusk-to-dawn bar with true astronomical darkness and moon-up marked."""
     x0, x1, h = MARGIN, W - MARGIN, 24
-    dusk = _dt(states.get("sensor.astroweather_backyard_sun_next_setting"))
-    dawn = _dt(states.get("sensor.astroweather_backyard_sun_next_rising"))
-    if dusk is None or dawn is None or dawn <= dusk:
+    dusk, dawn = _night_window(states)
+    if dusk is None or dawn <= dusk:
         return
     draw.rectangle([x0, y, x1, y + h], fill=BG, outline=STEEL)
 
     # Astronomical dark: the hours that actually count, not civil twilight.
-    a0 = _tl_x(_dt(states.get("sensor.astroweather_backyard_sun_next_setting_astronomical")),
+    a0 = _tl_x(_tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_setting_astronomical")), dawn),
                dusk, dawn, x0, x1)
-    a1 = _tl_x(_dt(states.get("sensor.astroweather_backyard_sun_next_rising_astronomical")),
+    a1 = _tl_x(_tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_rising_astronomical")), dawn),
                dusk, dawn, x0, x1)
     if a0 is not None and a1 is not None and a1 > a0:
         draw.rectangle([a0, y + 1, a1, y + h - 1], fill=ELECTRIC)
@@ -698,10 +719,17 @@ def _draw_timeline(draw, states, y, f_xs):
     # Moon up washes the sky out. Shown as its own strip ABOVE the bar rather
     # than a translucent overlay - amber over the electric segment just turned
     # the whole thing muddy brown and hid the darkness window.
-    m0 = _tl_x(_dt(states.get("sensor.astroweather_backyard_moon_next_rising")),
-               dusk, dawn, x0, x1)
-    m1 = _tl_x(_dt(states.get("sensor.astroweather_backyard_moon_next_setting")),
-               dusk, dawn, x0, x1)
+    # A plain day-shift does not work here: when the moon is already up, its
+    # next RISING is tomorrow's (belongs before the window) while its next
+    # SETTING is genuinely after it. Setting-before-rising is what says "up now".
+    rise = _dt(states.get("sensor.astroweather_backyard_moon_next_rising"))
+    set_ = _dt(states.get("sensor.astroweather_backyard_moon_next_setting"))
+    if rise is not None and set_ is not None:
+        up_from, up_to = (dusk, set_) if set_ < rise else (rise, set_)
+        m0 = _tl_x(up_from, dusk, dawn, x0, x1)
+        m1 = _tl_x(up_to, dusk, dawn, x0, x1)
+    else:
+        m0 = m1 = None
     if m0 is not None and m1 is not None and m1 > m0:
         draw.rectangle([m0, y - 12, m1, y - 5], fill=AMBER)
         draw.text((m0 + 6, y - 34), "moon up", font=f_xs, fill=AMBER)
