@@ -42,7 +42,7 @@ import sys
 import cadquery as cq
 import pi_models as pm
 
-VERSION = "0.17.0"
+VERSION = "0.18.0"
 
 # Which board this plate is cut for; "python case_bottom.py pi5" for the other.
 # The board outline and the 58 x 49 mount pattern are identical, so only the
