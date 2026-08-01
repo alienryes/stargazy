@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.7.1"
+FIRMWARE_VERSION = "2.7.2"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -780,8 +780,9 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
 
 def _draw_cards(img, draw, objects, images, f_med, f_sm, f_xs):
     """Deep-sky targets, best first, with a real cutout of each patch of sky."""
-    x0, y = P2_DIV_X + 24, 200
-    tile, gap = 96, 20
+    # Starts clear of the column heading, which descends to about y 210.
+    x0, y = P2_DIV_X + 24, 220
+    tile, gap = 96, 16
     for o in objects[:P2_CARDS]:
         oid = str(o.get("id", "?"))
         pic = images.get(oid)
@@ -830,7 +831,7 @@ def render_targets(states, targets, images):
     draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM)
     _draw_timeline(draw, states, 128, f_xs)
 
-    draw.line([(P2_DIV_X, 190), (P2_DIV_X, 648)], fill=DIM)
+    draw.line([(P2_DIV_X, 190), (P2_DIV_X, 664)], fill=DIM)
     draw.text((MARGIN, 182), "WHERE TO LOOK", font=f_sm, fill=ELECTRIC)
     draw.text((P2_DIV_X + 24, 182),
               f"DEEP SKY  ({len(objects)} up)", font=f_sm, fill=ELECTRIC)
@@ -839,9 +840,8 @@ def render_targets(states, targets, images):
     ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
     _draw_cards(img, draw, ranked, images, f_med, f_sm, f_xs)
 
-    if len(ranked) > P2_CARDS:
-        draw.text((P2_DIV_X + 24, 656), f"+{len(ranked) - P2_CARDS} more",
-                  font=f_xs, fill=DIM)
+    # No "+N more": it dangled an object the page never shows, and the column
+    # heading already carries the total.
     if comets:
         c = comets[0]
         draw.text((MARGIN, 656),
