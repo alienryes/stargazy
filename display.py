@@ -27,7 +27,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.6.0"
+FIRMWARE_VERSION = "2.7.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -89,7 +89,21 @@ ENTITIES = [
     "sensor.astroweather_backyard_10m_wind_speed",
     "sensor.astroweather_backyard_10m_wind_direction",
     "sensor.astroweather_backyard_lifted_index_plain",
+    "sensor.astroweather_backyard_moon_next_rising",
+    "sensor.astroweather_backyard_moon_next_setting",
+    # The plain sun_next_setting/rising are CIVIL twilight; these are the real
+    # astronomical dark bounds the timeline highlights.
+    "sensor.astroweather_backyard_sun_next_setting_astronomical",
+    "sensor.astroweather_backyard_sun_next_rising_astronomical",
 ]
+
+# UpTonight publishes its content in ATTRIBUTES, not state: the state is just a
+# count. The attribute key matches the section name in each case.
+UPTONIGHT = {
+    "objects": "sensor.uptonight_backyard_objects_garyimm",
+    "bodies":  "sensor.uptonight_backyard_bodies_garyimm",
+    "comets":  "sensor.uptonight_backyard_comets_garyimm",
+}
 
 PHASE_NAMES = {
     "moon-new":             "New Moon",
@@ -137,6 +151,8 @@ def load_config():
 
 
 def fetch_states(ha_url, token):
+    """Returns (states, targets). states maps entity -> state string; targets is
+    UpTonight's object/body/comet lists, empty if it has not published."""
     session = requests.Session()
     session.headers["Authorization"] = f"Bearer {token}"
     states = {}
@@ -148,7 +164,23 @@ def fetch_states(ha_url, token):
         except Exception as e:
             log.warning("Failed to fetch %s: %s", eid, e)
             states[eid] = "unknown"
-    return states
+
+    targets = {}
+    for key, eid in UPTONIGHT.items():
+        try:
+            r = session.get(f"{ha_url}/api/states/{eid}", timeout=10)
+            r.raise_for_status()
+            j = r.json()
+            # Its state topics are not retained, so after an HA restart these
+            # sit unavailable until the refresh automation fires. Skip quietly.
+            if j.get("state") in (None, "unknown", "unavailable"):
+                continue
+            attrs = j.get("attributes", {})
+            targets[key] = attrs.get(key, [])
+            targets.setdefault("meta", attrs)
+        except Exception as e:
+            log.warning("Failed to fetch %s: %s", eid, e)
+    return states, targets
 
 
 def _f(val, default=0.0):
@@ -383,6 +415,73 @@ def initial_clouds(params):
     return [spawn_cloud() for _ in range(n)]
 
 
+# ── Deep-sky imagery ──────────────────────────────────────────────────────
+# Real sky cutouts from the CDS hips2fits service, which resolves the object
+# name itself and renders the actual patch of sky. That beats an image-library
+# search: coverage is total (NGC and LBN designations work as well as Messier)
+# and it cannot return a confidently-wrong picture of something else. DSS2
+# colour renders on black, so the tiles composite onto the night sky cleanly.
+CACHE_DIR = Path(__file__).parent / "cache" / "dso"
+HIPS_URL = "https://alasky.cds.unistra.fr/hips-image-services/hips2fits"
+
+
+def cutout(obj_id, size_arcmin, px=200):
+    """Cached DSS2 colour cutout for an object, or None. NETWORK - background
+    thread only; never call this from the render loop."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = CACHE_DIR / (re.sub(r"[^A-Za-z0-9]+", "_", obj_id).strip("_") + ".jpg")
+    if path.exists():
+        try:
+            return Image.open(path).convert("RGB")
+        except Exception:
+            path.unlink(missing_ok=True)
+    # Frame the object rather than the pixel grid: catalogue size in arcmin,
+    # with margin, clamped so a tiny galaxy is not a dot and M31 is not a smear.
+    fov = min(max(size_arcmin * 1.8, 12.0), 50.0) / 60.0
+    try:
+        r = requests.get(HIPS_URL, timeout=25, params={
+            "hips": "CDS/P/DSS2/color", "object": obj_id, "fov": f"{fov:.4f}",
+            "width": px, "height": px, "format": "jpg"})
+        r.raise_for_status()
+        path.write_bytes(r.content)
+        img = Image.open(path).convert("RGB")
+        log.info("Cutout fetched for %s (fov %.1f')", obj_id, fov * 60)
+        return img
+    except Exception as e:
+        log.warning("Cutout for %s failed: %s", obj_id, e)
+        return None
+
+
+def _glyph(draw, cx, cy, r, otype):
+    """Fallback mark when no cutout is available (offline, or a failed fetch)."""
+    t = (otype or "").lower()
+    if "globular" in t or "cluster" in t:
+        random.seed(hash(otype) & 0xFFFF)
+        for _ in range(28):
+            a, d = random.uniform(0, 2 * math.pi), random.uniform(0, r * 0.85)
+            draw.point((cx + d * math.cos(a), cy + d * math.sin(a)), fill=WHITE)
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=STEEL)
+    elif "galaxy" in t:
+        draw.ellipse([cx - r, cy - r * 0.45, cx + r, cy + r * 0.45], outline=ICE, width=2)
+        draw.ellipse([cx - r * 0.28, cy - r * 0.16, cx + r * 0.28, cy + r * 0.16], fill=ICE)
+    else:                                            # nebulae and everything else
+        draw.ellipse([cx - r, cy - r * 0.8, cx + r, cy + r * 0.8], outline=ELECTRIC)
+        draw.ellipse([cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy + r * 0.45], outline=STEEL)
+
+
+def load_cutouts(targets, limit):
+    """{object id: image} for the objects the page will show. NETWORK on a cache
+    miss, so this runs on the data thread, not the render loop."""
+    images = {}
+    for o in sorted(targets.get("objects") or [],
+                    key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))[:limit]:
+        oid = str(o.get("id", ""))
+        pic = cutout(oid, _f(o.get("size"), 10.0))
+        if pic is not None:
+            images[oid] = pic
+    return images
+
+
 def render_foreground(states):
     """Render the dashboard as an RGBA overlay: opaque content, transparent sky."""
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -558,6 +657,195 @@ def render_foreground(states):
 
 # ── Framebuffer ───────────────────────────────────────────────────────────
 
+# ── Page 2: tonight's targets ─────────────────────────────────────────────
+P2_DIV_X = 636       # panorama | deep-sky cards
+P2_CARDS = 4         # cards that fit the right column
+PAN_TOP, PAN_BASE = 214, 566          # altitude 90 and 0
+PAN_X0, PAN_X1 = MARGIN, P2_DIV_X - 24
+
+
+def _tl_x(t, t0, t1, x0, x1):
+    """Map a time onto the timeline, clamped to its ends. None if unusable."""
+    if t is None or t0 is None or t1 is None or t1 <= t0:
+        return None
+    f = (t - t0).total_seconds() / (t1 - t0).total_seconds()
+    return x0 + max(0.0, min(1.0, f)) * (x1 - x0)
+
+
+def _draw_timeline(draw, states, y, f_xs):
+    """Dusk-to-dawn bar with true astronomical darkness and moon-up marked."""
+    x0, x1, h = MARGIN, W - MARGIN, 24
+    dusk = _dt(states.get("sensor.astroweather_backyard_sun_next_setting"))
+    dawn = _dt(states.get("sensor.astroweather_backyard_sun_next_rising"))
+    if dusk is None or dawn is None or dawn <= dusk:
+        return
+    draw.rectangle([x0, y, x1, y + h], fill=BG, outline=STEEL)
+
+    # Astronomical dark: the hours that actually count, not civil twilight.
+    a0 = _tl_x(_dt(states.get("sensor.astroweather_backyard_sun_next_setting_astronomical")),
+               dusk, dawn, x0, x1)
+    a1 = _tl_x(_dt(states.get("sensor.astroweather_backyard_sun_next_rising_astronomical")),
+               dusk, dawn, x0, x1)
+    if a0 is not None and a1 is not None and a1 > a0:
+        draw.rectangle([a0, y + 1, a1, y + h - 1], fill=ELECTRIC)
+
+    # Moon up washes the sky out. Shown as its own strip ABOVE the bar rather
+    # than a translucent overlay - amber over the electric segment just turned
+    # the whole thing muddy brown and hid the darkness window.
+    m0 = _tl_x(_dt(states.get("sensor.astroweather_backyard_moon_next_rising")),
+               dusk, dawn, x0, x1)
+    m1 = _tl_x(_dt(states.get("sensor.astroweather_backyard_moon_next_setting")),
+               dusk, dawn, x0, x1)
+    if m0 is not None and m1 is not None and m1 > m0:
+        draw.rectangle([m0, y - 12, m1, y - 5], fill=AMBER)
+        draw.text((m0 + 6, y - 34), "moon up", font=f_xs, fill=AMBER)
+
+    # Only mark "now" while it is actually within tonight; clamping it to an end
+    # would draw a marker that reads as a real time when it is not.
+    now = datetime.now().astimezone()
+    if dusk <= now <= dawn:
+        now_x = _tl_x(now, dusk, dawn, x0, x1)
+        draw.line([(now_x, y - 4), (now_x, y + h + 4)], fill=WHITE, width=2)
+
+    draw.text((x0, y + h + 6), dusk.strftime("Dusk %H:%M"), font=f_xs, fill=DIM)
+    tw = draw.textlength(dawn.strftime("Dawn %H:%M"), font=f_xs)
+    draw.text((x1 - tw, y + h + 6), dawn.strftime("Dawn %H:%M"), font=f_xs, fill=DIM)
+
+
+def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
+    """Where to look: azimuth across, altitude up. A bearing and a height."""
+    draw.line([(PAN_X0, PAN_BASE), (PAN_X1, PAN_BASE)], fill=STEEL, width=2)
+    for az, lab in ((0, "N"), (90, "E"), (180, "S"), (270, "W"), (360, "N")):
+        x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
+        draw.line([(x, PAN_BASE), (x, PAN_BASE + 8)], fill=STEEL)
+        draw.text((x - 8, PAN_BASE + 12), lab, font=f_xs, fill=DIM)
+    for alt in (30, 60):
+        y = PAN_BASE - (alt / 90.0) * (PAN_BASE - PAN_TOP)
+        draw.line([(PAN_X0, y), (PAN_X1, y)], fill=(29, 94, 128, 70))
+        draw.text((PAN_X1 + 4, y - 12), f"{alt}", font=f_xs, fill=DIM)
+
+    marks = []
+    for b in bodies:
+        alt, az = _f(b.get("max altitude"), -99), _f(b.get("azimuth"), -1)
+        name = str(b.get("target name", "?"))
+        col = AMBER if name.lower() == "moon" else ICE
+        marks.append((az, alt, name, col, _f(b.get("visual magnitude"), 5)))
+    for c in comets:
+        marks.append((_f(c.get("azimuth"), -1), _f(c.get("altitude"), -99),
+                      str(c.get("target name", "?")), ROSE,
+                      _f(c.get("visual magnitude"), 8)))
+
+    # Planets bunch up along the ecliptic - Saturn, Neptune and the Moon can sit
+    # within 30px of each other - so labels are nudged down until clear, with a
+    # leader line back to the marker whenever one has moved.
+    placed = []
+    for az, alt, name, col, mag in sorted(marks, key=lambda m: -m[1]):
+        if alt < 0 or az < 0:
+            continue                       # below the horizon: nothing to see
+        x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
+        y = PAN_BASE - (min(alt, 90.0) / 90.0) * (PAN_BASE - PAN_TOP)
+        r = max(4.0, min(13.0, 9.0 - mag * 0.8))
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=col)
+
+        lx = x + r + 8
+        lw = max(draw.textlength(name, font=f_sm), 78)
+        base = y - 14
+        # Try alternately below then above the marker. Purely-downward nudging
+        # drove low objects' labels through the horizon axis and onto the
+        # compass letters, so candidates outside the plot are rejected.
+        ly = None
+        for off in (0, 26, -26, 52, -52, 78, -78):
+            cand = base + off
+            if cand < PAN_TOP - 12 or cand + 44 > PAN_BASE - 2:
+                continue
+            if not any(lx < b[2] and lx + lw > b[0] and cand < b[3] and cand + 44 > b[1]
+                       for b in placed):
+                ly = cand
+                break
+        if ly is None:
+            ly = max(PAN_TOP - 12, min(base, PAN_BASE - 46))
+        placed.append((lx, ly, lx + lw, ly + 44))
+        if abs(ly - base) > 2:
+            draw.line([(x + r, y), (lx - 4, ly + 14)], fill=STEEL)
+        draw.text((lx, ly), name, font=f_sm, fill=WHITE)
+        draw.text((lx, ly + 22), f"{int(round(alt))}°  {int(round(az))}°",
+                  font=f_xs, fill=DIM)
+
+
+def _draw_cards(img, draw, objects, images, f_med, f_sm, f_xs):
+    """Deep-sky targets, best first, with a real cutout of each patch of sky."""
+    x0, y = P2_DIV_X + 24, 200
+    tile, gap = 96, 20
+    for o in objects[:P2_CARDS]:
+        oid = str(o.get("id", "?"))
+        pic = images.get(oid)
+        if pic is not None:
+            pic = pic.resize((tile, tile), Image.LANCZOS)
+            mask = Image.new("L", (tile, tile), 0)
+            ImageDraw.Draw(mask).ellipse([0, 0, tile - 1, tile - 1], fill=255)
+            img.paste(pic, (x0, y), mask)
+            draw.ellipse([x0, y, x0 + tile - 1, y + tile - 1], outline=STEEL)
+        else:
+            _glyph(draw, x0 + tile // 2, y + tile // 2, tile // 2 - 6, o.get("type"))
+
+        tx = x0 + tile + 18
+        draw.text((tx, y + 2), oid, font=f_med, fill=WHITE)
+        draw.text((tx, y + 40), f"{o.get('type', '')} in {o.get('constellation', '')}",
+                  font=f_xs, fill=DIM)
+        mag = _f(o.get("mag"), 0)
+        draw.text((tx, y + 68), "mag --" if mag <= 0 else f"mag {mag:.1f}",
+                  font=f_xs, fill=DIM)
+        # foto = fraction of astronomical darkness the object stays observable
+        bx, bw = tx + 110, 150
+        frac = max(0.0, min(1.0, _f(o.get("foto"))))
+        draw.rectangle([bx, y + 72, bx + bw, y + 86], fill=BG, outline=STEEL)
+        if frac > 0:
+            draw.rectangle([bx + 1, y + 73, bx + 1 + frac * (bw - 2), y + 85],
+                           fill=ELECTRIC if frac >= 0.75 else AMBER)
+        y += tile + gap
+
+
+def render_targets(states, targets, images):
+    """Page 2 as an RGBA overlay, or None when UpTonight has published nothing."""
+    objects = targets.get("objects") or []
+    bodies  = targets.get("bodies") or []
+    comets  = targets.get("comets") or []
+    if not (objects or bodies):
+        return None
+
+    img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    f_title = _font("DejaVuSans-Bold.ttf", 42)
+    f_med   = _font("DejaVuSans-Bold.ttf", 32)
+    f_sm    = _font("DejaVuSans.ttf", 24)
+    f_xs    = _font("DejaVuSans.ttf", 20)
+
+    draw.text((MARGIN, 22), "TONIGHT'S TARGETS", font=f_title, fill=WHITE)
+    draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM)
+    _draw_timeline(draw, states, 128, f_xs)
+
+    draw.line([(P2_DIV_X, 190), (P2_DIV_X, 648)], fill=DIM)
+    draw.text((MARGIN, 182), "WHERE TO LOOK", font=f_sm, fill=ELECTRIC)
+    draw.text((P2_DIV_X + 24, 182),
+              f"DEEP SKY  ({len(objects)} up)", font=f_sm, fill=ELECTRIC)
+    _draw_panorama(draw, bodies, comets, f_sm, f_xs)
+
+    ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
+    _draw_cards(img, draw, ranked, images, f_med, f_sm, f_xs)
+
+    if len(ranked) > P2_CARDS:
+        draw.text((P2_DIV_X + 24, 656), f"+{len(ranked) - P2_CARDS} more",
+                  font=f_xs, fill=DIM)
+    if comets:
+        c = comets[0]
+        draw.text((MARGIN, 656),
+                  f"Comet {c.get('target name', '?')} - "
+                  f"alt {_f(c.get('altitude')):.0f}°, az {_f(c.get('azimuth')):.0f}°",
+                  font=f_xs, fill=DIM)
+    draw.text((MARGIN, 688), "Sky imagery: DSS2 / CDS Strasbourg", font=f_xs, fill=(60, 66, 86))
+    return img
+
+
 def to_fb_bytes(img):
     rot = img.transpose(ROTATE)
     if rot.size != (FB_W, FB_H):
@@ -617,13 +905,19 @@ def _install_signal_handlers():
     signal.signal(signal.SIGINT, stop)
 
 
-def run_daemon(ha_url, token, animated, fps, refresh_min, demo=False):
+def run_daemon(ha_url, token, animated, fps, refresh_min, page_seconds, demo=False):
     """Long-running loop: animate the panel while a thread refreshes HA data."""
-    state = {"fg": None, "params": None}
+    state = {"pages": [], "params": None}
 
     def load():
-        states = fetch_states(ha_url, token)
-        state["fg"] = render_foreground(states)
+        states, targets = fetch_states(ha_url, token)
+        pages = [render_foreground(states)]
+        # Targets page joins the rotation only when there is something on it -
+        # better a single page than a dead one after a restart.
+        page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS))
+        if page2 is not None:
+            pages.append(page2)
+        state["pages"] = pages
         state["params"] = DEMO_PARAMS if demo else sky_params(states)
 
     log.info("Fetching HA states...")
@@ -650,11 +944,12 @@ def run_daemon(ha_url, token, animated, fps, refresh_min, demo=False):
             log.info("Static mode: redraw on data change.")
             last = None
             while _RUNNING:
-                if state["fg"] is not last:
-                    frame = compose(state["fg"], state["params"], 0.0, [], initial_clouds(state["params"]))
+                page = state["pages"][0]
+                if page is not last:
+                    frame = compose(page, state["params"], 0.0, [], initial_clouds(state["params"]))
                     fb.seek(0)
                     fb.write(to_fb_bytes(frame))
-                    last = state["fg"]
+                    last = page
                 time.sleep(1)
             return
 
@@ -688,7 +983,9 @@ def run_daemon(ha_url, token, animated, fps, refresh_min, demo=False):
                 m["life"] += 1
                 if m["life"] >= m["max"] or m["y"] > H + 20 or m["x"] < -20:
                     meteors.remove(m)
-            frame = compose(state["fg"], params, t, meteors, clouds)
+            pages = state["pages"]
+            page = pages[int(t / page_seconds) % len(pages)]
+            frame = compose(page, params, t, meteors, clouds)
             fb.seek(0)
             fb.write(to_fb_bytes(frame))
             dt = time.time() - now
@@ -713,16 +1010,25 @@ def main():
     mode   = disp.get("mode", "animated")
     fps    = float(disp.get("fps", 20))
     refresh_min = float(disp.get("data_refresh_min", 15))
+    page_seconds = float(disp.get("page_seconds", 20))
 
     if args.save or args.once:
         log.info("Fetching HA states...")
-        states = fetch_states(ha_url, token)
+        states, targets = fetch_states(ha_url, token)
         params = sky_params(states)
         fg = render_foreground(states)
         frame = compose(fg, params, 1.7, [], initial_clouds(params))
         if args.save:
             frame.save(args.save)
             log.info("Saved %s", args.save)
+            page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS))
+            if page2 is not None:
+                p = Path(args.save)
+                out = str(p.with_name(p.stem + "_targets" + p.suffix))
+                compose(page2, params, 1.7, [], initial_clouds(params)).save(out)
+                log.info("Saved %s", out)
+            else:
+                log.warning("No UpTonight data - targets page skipped.")
         else:
             with open(FB_DEV, "wb") as fb:
                 fb.write(to_fb_bytes(frame))
@@ -731,7 +1037,7 @@ def main():
 
     _install_signal_handlers()
     run_daemon(ha_url, token, animated=(mode != "static"), fps=fps,
-               refresh_min=refresh_min, demo=args.demo)
+               refresh_min=refresh_min, page_seconds=page_seconds, demo=args.demo)
 
 
 if __name__ == "__main__":

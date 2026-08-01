@@ -8,3 +8,7 @@ token = "your-long-lived-access-token-here"
 mode = "animated"
 fps = 20
 data_refresh_min = 15
+# Seconds each page is shown before rotating. The targets page only joins the
+# rotation when UpTonight has published something, so with no UpTonight the
+# display simply stays on the conditions page.
+page_seconds = 20
