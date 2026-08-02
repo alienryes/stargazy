@@ -5,8 +5,14 @@ set -e
 
 USER="${1:-operations}"
 
+# UpTonight is not published to PyPI and its repo carries no package metadata
+# (pyproject.toml holds lint settings only), so it is installed as a source tree
+# at a pinned commit rather than with pip.
+UT_REF="3ae62e23d020ef067672cae9b48e961a4a1030df"
+UT_DIR="/home/$USER/uptonight"
+
 echo "==> Installing system packages..."
-apt-get install -y fonts-dejavu-core python3-pil python3-numpy python3-requests python3-pip
+apt-get install -y fonts-dejavu-core python3-pil python3-numpy python3-requests python3-pip python3-venv
 
 echo "==> Ensuring $USER can write the framebuffer..."
 adduser "$USER" video || true
@@ -21,14 +27,41 @@ if [ -f "$CMDLINE" ] && ! grep -q "fbcon=map:2" "$CMDLINE"; then
     echo "    added fbcon=map:2 to $CMDLINE (reboot required)"
 fi
 
+echo "==> Installing UpTonight at $UT_REF..."
+# git is not installed on a default Raspberry Pi OS image, so fetch the tarball.
+rm -rf /tmp/uptonight-src && mkdir -p /tmp/uptonight-src "$UT_DIR"
+curl -fsSL "https://codeload.github.com/mawinkler/uptonight/tar.gz/$UT_REF" \
+    | tar xz -C /tmp/uptonight-src
+# Copy in rather than replace, so an existing out/ and config.yaml survive.
+cp -r "/tmp/uptonight-src/uptonight-$UT_REF/." "$UT_DIR/"
+mkdir -p "$UT_DIR/out"
+chown -R "$USER:$USER" "$UT_DIR"
+
+echo "==> Building UpTonight's virtualenv (a couple of minutes)..."
+# Its requirements.txt pins versions that have no wheels for Python 3.13
+# (numpy 1.26.4, astropy 6.0.1), so install the same libraries unpinned; the
+# current releases run it unmodified. --only-binary keeps this from silently
+# dropping into an hours-long source build on the Pi.
+if [ ! -d "$UT_DIR/.venv" ]; then
+    sudo -u "$USER" python3 -m venv "$UT_DIR/.venv"
+fi
+sudo -u "$USER" "$UT_DIR/.venv/bin/pip" install -q --upgrade pip
+sudo -u "$USER" "$UT_DIR/.venv/bin/pip" install -q --only-binary=:all: \
+    astroplan astropy skyfield numpy pandas matplotlib pillow h5py \
+    PyYAML pytz requests paho-mqtt
+
 echo "==> Adding sudoers rule for $USER..."
 cat > /etc/sudoers.d/touch2-stargazing <<EOF
 $USER ALL=(ALL) NOPASSWD: /usr/bin/cp /tmp/touch2-stargazing.service /tmp/fbcon-detach.service /etc/systemd/system/
+$USER ALL=(ALL) NOPASSWD: /usr/bin/cp /tmp/uptonight.service /tmp/uptonight.timer /etc/systemd/system/
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable touch2-stargazing.service
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart touch2-stargazing.service
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable fbcon-detach.service
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start fbcon-detach.service
+$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable uptonight.timer
+$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start uptonight.timer
+$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start uptonight.service
 EOF
 chmod 440 /etc/sudoers.d/touch2-stargazing
 

@@ -1,0 +1,18 @@
+[Unit]
+Description=UpTonight - compute tonight's observable targets
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=/home/__USER__/uptonight
+ExecStart=/home/__USER__/uptonight/.venv/bin/python main.py
+# The display daemon is a continuous render loop on one core; yield to it so a
+# target run never costs frames.
+Nice=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,7 @@ param(
 # Pass -PiHost to override with an explicit address if mDNS is unavailable.
 $PI = "$User@$PiHost"
 $REMOTE_DIR = "/home/$User/touch2-stargazing"
+$UT_DIR = "/home/$User/uptonight"
 
 function Invoke-Pi($cmd) {
     ssh -4 -i $KeyFile -o StrictHostKeyChecking=no $PI $cmd
@@ -30,6 +31,8 @@ Invoke-Pi "mkdir -p $REMOTE_DIR"
 Write-Host "--> Copying files..."
 Copy-ToPi "display.py"    "$REMOTE_DIR/display.py"
 Copy-ToPi "requirements.txt" "$REMOTE_DIR/requirements.txt"
+Copy-ToPi "render_uptonight_config.py" "$REMOTE_DIR/render_uptonight_config.py"
+Copy-ToPi "uptonight\config.yaml.template" "$REMOTE_DIR/uptonight-config.yaml.template"
 
 # Always deploy local config.toml (gitignored, contains real token)
 if (Test-Path "config.toml") {
@@ -41,6 +44,11 @@ if (Test-Path "config.toml") {
 # Install Python dependencies
 Write-Host "--> Installing Python dependencies..."
 Invoke-Pi "pip3 install -r $REMOTE_DIR/requirements.txt --break-system-packages --prefer-binary"
+
+# Render UpTonight's config from [location] in config.toml, so the site is only
+# ever configured in one place. Skipped if setup.sh has not installed it yet.
+Write-Host "--> Rendering UpTonight config..."
+Invoke-Pi "test -d $UT_DIR && python3 $REMOTE_DIR/render_uptonight_config.py $REMOTE_DIR/config.toml $REMOTE_DIR/uptonight-config.yaml.template $UT_DIR/config.yaml || echo '  (UpTonight not installed - run setup.sh)'"
 
 # Install systemd units (substitute the user into the service).
 # fbcon-detach frees /dev/fb0 from the console so the display isn't overdrawn.
@@ -57,6 +65,19 @@ Invoke-Pi "sudo systemctl start fbcon-detach.service"
 Invoke-Pi "sudo systemctl enable touch2-stargazing.service"
 Invoke-Pi "sudo systemctl restart touch2-stargazing.service"
 
+# UpTonight's daily timer. The service itself is oneshot and is only started
+# here when there is no report yet, so a redeploy never triggers a needless run.
+Write-Host "--> Installing UpTonight timer..."
+$ut = (Get-Content "systemd\uptonight.service" -Raw) -replace "__USER__", $User
+$ut | ssh -4 -i $KeyFile -o StrictHostKeyChecking=no $PI "cat > /tmp/uptonight.service"
+Copy-ToPi "systemd\uptonight.timer" "/tmp/uptonight.timer"
+Invoke-Pi "sudo cp /tmp/uptonight.service /tmp/uptonight.timer /etc/systemd/system/"
+Invoke-Pi "sudo systemctl daemon-reload"
+Invoke-Pi "sudo systemctl enable uptonight.timer"
+Invoke-Pi "sudo systemctl start uptonight.timer"
+Invoke-Pi "test -f $UT_DIR/out/uptonight-report.json || sudo systemctl start uptonight.service"
+
 Write-Host ""
 Write-Host "==> Done."
 Write-Host "    Always-on animated display service running. Logs: journalctl -u touch2-stargazing -f"
+Write-Host "    Targets recomputed daily at midday.        Logs: journalctl -u uptonight -f"

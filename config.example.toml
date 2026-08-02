@@ -2,6 +2,22 @@
 url = "http://192.168.1.167:8123"
 token = "your-long-lived-access-token-here"
 
+# Your observing site. This is the single source of truth for location: setup.sh
+# renders UpTonight's own config.yaml from these values, so they are never
+# entered twice. Latitude is also what turns a target's declination into the
+# altitude it reaches (90 - |lat - dec|).
+[location]
+latitude = 51.4779
+longitude = -0.0015
+elevation = 47
+timezone = "Europe/London"
+
+# UpTonight runs locally on this Pi from a systemd timer and writes its reports
+# here; the display reads them off disk. Nothing else is needed for the targets
+# page - no broker, no container, no Home Assistant.
+[uptonight]
+out_dir = "/home/operations/uptonight/out"
+
 [display]
 # "animated" = live data-reactive night sky behind the dashboard (default);
 # "static"   = redraw only when the data changes (no animation).
@@ -9,6 +25,6 @@ mode = "animated"
 fps = 20
 data_refresh_min = 15
 # Seconds each page is shown before rotating. The targets page only joins the
-# rotation when UpTonight has published something, so with no UpTonight the
+# rotation when UpTonight has produced a report, so before the first run the
 # display simply stays on the conditions page.
 page_seconds = 20

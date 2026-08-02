@@ -4,7 +4,8 @@
 Renders a 1280x720 landscape dashboard over a live, data-reactive animated night
 sky (twinkling starfield + drift + meteors) and writes frames to the Linux
 framebuffer (/dev/fb0, RGB565). Runs as a long-lived daemon; a background thread
-refetches AstroWeather data from the Home Assistant REST API.
+refetches AstroWeather conditions from the Home Assistant REST API and rereads
+UpTonight's target reports, which are produced locally by a daily systemd timer.
 
   python3 display.py                 # daemon (mode from config, default animated)
   python3 display.py --once          # render a single frame to the panel and exit
@@ -28,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "2.8.0"
+FIRMWARE_VERSION = "3.0.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -98,12 +99,13 @@ ENTITIES = [
     "sensor.astroweather_backyard_sun_next_rising_astronomical",
 ]
 
-# UpTonight publishes its content in ATTRIBUTES, not state: the state is just a
-# count. The attribute key matches the section name in each case.
-UPTONIGHT = {
-    "objects": "sensor.uptonight_backyard_objects_garyimm",
-    "bodies":  "sensor.uptonight_backyard_bodies_garyimm",
-    "comets":  "sensor.uptonight_backyard_comets_garyimm",
+# UpTonight runs on this Pi from a daily timer and writes these reports; we read
+# them straight off disk. Absent files simply mean it has not run yet, or that
+# the section is disabled (comets are off by default).
+UPTONIGHT_REPORTS = {
+    "objects": "uptonight-report.json",
+    "bodies":  "uptonight-bodies-report.json",
+    "comets":  "uptonight-comets-report.json",
 }
 
 PHASE_NAMES = {
@@ -152,8 +154,7 @@ def load_config():
 
 
 def fetch_states(ha_url, token):
-    """Returns (states, targets). states maps entity -> state string; targets is
-    UpTonight's object/body/comet lists, empty if it has not published."""
+    """Weather and sun/moon conditions, as entity -> state string."""
     session = requests.Session()
     session.headers["Authorization"] = f"Bearer {token}"
     states = {}
@@ -165,23 +166,30 @@ def fetch_states(ha_url, token):
         except Exception as e:
             log.warning("Failed to fetch %s: %s", eid, e)
             states[eid] = "unknown"
+    return states
 
+
+def _records(columns):
+    """UpTonight writes pandas column-major JSON - {"mag": {"0": 8.4, ...}, ...}
+    - so pivot it back into one dict per object. Key names are unchanged."""
+    if not isinstance(columns, dict) or not columns:
+        return []
+    index = sorted(next(iter(columns.values())).keys(), key=lambda k: int(k))
+    return [{col: values.get(i) for col, values in columns.items()} for i in index]
+
+
+def read_targets(out_dir):
+    """UpTonight's object/body/comet lists, empty if it has not run yet."""
     targets = {}
-    for key, eid in UPTONIGHT.items():
+    for key, name in UPTONIGHT_REPORTS.items():
+        path = Path(out_dir) / name
+        if not path.exists():
+            continue
         try:
-            r = session.get(f"{ha_url}/api/states/{eid}", timeout=10)
-            r.raise_for_status()
-            j = r.json()
-            # Its state topics are not retained, so after an HA restart these
-            # sit unavailable until the refresh automation fires. Skip quietly.
-            if j.get("state") in (None, "unknown", "unavailable"):
-                continue
-            attrs = j.get("attributes", {})
-            targets[key] = attrs.get(key, [])
-            targets.setdefault("meta", attrs)
+            targets[key] = _records(json.loads(path.read_text()))
         except Exception as e:
-            log.warning("Failed to fetch %s: %s", eid, e)
-    return states, targets
+            log.warning("Failed to read %s: %s", path, e)
+    return targets
 
 
 def _f(val, default=0.0):
@@ -475,38 +483,6 @@ def _glyph(draw, cx, cy, r, otype):
 # any catalogue name - including the LBN/LDN entries an image library has never
 # heard of. One small text response per object, cached forever: the sky does not
 # move. Peak altitude is then 90 - |latitude - declination|.
-SESAME_URL = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/A"
-DEC_CACHE = CACHE_DIR / "declinations.json"
-
-
-def _dec_cache():
-    try:
-        return json.loads(DEC_CACHE.read_text())
-    except Exception:
-        return {}
-
-
-def declination(obj_id):
-    """Declination in degrees for an object name, or None. NETWORK on a miss."""
-    cache = _dec_cache()
-    if obj_id in cache:
-        return cache[obj_id]
-    try:
-        r = requests.get(f"{SESAME_URL}?{requests.utils.quote(obj_id)}", timeout=20)
-        r.raise_for_status()
-        # "%J <ra> <dec> = <sexagesimal>"
-        m = re.search(r"^%J\s+\S+\s+([-+]?\d+\.\d+)", r.text, re.M)
-        dec = float(m.group(1)) if m else None
-    except Exception as e:
-        log.warning("Declination for %s failed: %s", obj_id, e)
-        return None
-    cache[obj_id] = dec
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    DEC_CACHE.write_text(json.dumps(cache, indent=1, sort_keys=True))
-    log.info("Declination for %s: %s", obj_id, dec)
-    return dec
-
-
 def peak(dec, lat):
     """(altitude, compass letter) at meridian transit. An object north of the
     zenith culminates due north, not south - which is where you actually face."""
@@ -520,18 +496,6 @@ def _ut_dt(s):
         return datetime.strptime(s, "%m/%d/%Y %H:%M:%S")
     except (ValueError, TypeError):
         return None
-
-
-def load_decs(targets, limit):
-    """{object id: declination} for the objects the page will show."""
-    decs = {}
-    for o in sorted(targets.get("objects") or [],
-                    key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))[:limit]:
-        oid = str(o.get("id", ""))
-        d = declination(oid)
-        if d is not None:
-            decs[oid] = d
-    return decs
 
 
 def load_cutouts(targets, limit):
@@ -871,7 +835,7 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
                   font=f_xs, fill=DIM)
 
 
-def _draw_cards(img, draw, objects, images, decs, lat, f_med, f_sm, f_xs):
+def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
     """Deep-sky targets, best first, with a real cutout of each patch of sky."""
     # Starts clear of the column heading, which descends to about y 210.
     x0, y = P2_DIV_X + 24, 220
@@ -899,12 +863,11 @@ def _draw_cards(img, draw, objects, images, decs, lat, f_med, f_sm, f_xs):
             sub += f" · mag {mag:.1f}"
         draw.text((tx, y + 38), sub, font=f_xs, fill=DIM)
 
-        # How high it gets and which way to face. UpTonight publishes no
-        # coordinates for deep-sky objects, so this is derived from the
-        # declination: 90 - |lat - dec|. Only the MERIDIAN transit gives the
-        # time - the antimeridian one is the object's LOWEST point, and for
-        # circumpolar targets it is often the only one published.
-        dec = decs.get(oid)
+        # How high it gets and which way to face, from the declination in the
+        # report: 90 - |lat - dec|. Only the MERIDIAN transit gives the time -
+        # the antimeridian one is the object's LOWEST point, and for circumpolar
+        # targets it is often the only one published.
+        dec = o.get("declination")
         if dec is not None and lat is not None:
             alt, face = peak(dec, lat)
             line = f"peaks {alt:.0f}° {face}"
@@ -925,8 +888,8 @@ def _draw_cards(img, draw, objects, images, decs, lat, f_med, f_sm, f_xs):
         y += tile + gap
 
 
-def render_targets(states, targets, images, decs=None):
-    """Page 2 as an RGBA overlay, or None when UpTonight has published nothing."""
+def render_targets(states, targets, images, lat=None):
+    """Page 2 as an RGBA overlay, or None when UpTonight has produced nothing."""
     objects = targets.get("objects") or []
     bodies  = targets.get("bodies") or []
     comets  = targets.get("comets") or []
@@ -955,8 +918,7 @@ def render_targets(states, targets, images, decs=None):
     _draw_panorama(draw, bodies, comets, f_sm, f_xs)
 
     ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
-    lat = targets.get("meta", {}).get("site_latitude")
-    _draw_cards(img, draw, ranked, images, decs or {}, lat, f_med, f_sm, f_xs)
+    _draw_cards(img, draw, ranked, images, lat, f_med, f_sm, f_xs)
 
     # No "+N more": it dangled an object the page never shows, and the column
     # heading already carries the total.
@@ -1029,17 +991,18 @@ def _install_signal_handlers():
     signal.signal(signal.SIGINT, stop)
 
 
-def run_daemon(ha_url, token, animated, fps, refresh_min, page_seconds, demo=False):
-    """Long-running loop: animate the panel while a thread refreshes HA data."""
+def run_daemon(ha_url, token, out_dir, lat, animated, fps, refresh_min,
+               page_seconds, demo=False):
+    """Long-running loop: animate the panel while a thread refreshes the data."""
     state = {"pages": [], "params": None}
 
     def load():
-        states, targets = fetch_states(ha_url, token)
+        states = fetch_states(ha_url, token)
+        targets = read_targets(out_dir)
         pages = [render_foreground(states)]
         # Targets page joins the rotation only when there is something on it -
-        # better a single page than a dead one after a restart.
-        page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS),
-                               load_decs(targets, P2_CARDS))
+        # better a single page than a dead one before UpTonight's first run.
+        page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS), lat)
         if page2 is not None:
             pages.append(page2)
         state["pages"] = pages
@@ -1131,6 +1094,8 @@ def main():
     config = load_config()
     ha_url = config["ha"]["url"].rstrip("/")
     token  = config["ha"]["token"]
+    out_dir = config.get("uptonight", {}).get("out_dir", "")
+    lat    = config.get("location", {}).get("latitude")
     disp   = config.get("display", {})
     mode   = disp.get("mode", "animated")
     fps    = float(disp.get("fps", 20))
@@ -1139,22 +1104,23 @@ def main():
 
     if args.save or args.once:
         log.info("Fetching HA states...")
-        states, targets = fetch_states(ha_url, token)
+        states = fetch_states(ha_url, token)
+        targets = read_targets(out_dir)
         params = sky_params(states)
         fg = render_foreground(states)
         frame = compose(fg, params, 1.7, [], initial_clouds(params))
         if args.save:
             frame.save(args.save)
             log.info("Saved %s", args.save)
-            page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS),
-                               load_decs(targets, P2_CARDS))
+            page2 = render_targets(states, targets,
+                                   load_cutouts(targets, P2_CARDS), lat)
             if page2 is not None:
                 p = Path(args.save)
                 out = str(p.with_name(p.stem + "_targets" + p.suffix))
                 compose(page2, params, 1.7, [], initial_clouds(params)).save(out)
                 log.info("Saved %s", out)
             else:
-                log.warning("No UpTonight data - targets page skipped.")
+                log.warning("No UpTonight reports in %s - targets page skipped.", out_dir)
         else:
             with open(FB_DEV, "wb") as fb:
                 fb.write(to_fb_bytes(frame))
@@ -1162,7 +1128,7 @@ def main():
         return
 
     _install_signal_handlers()
-    run_daemon(ha_url, token, animated=(mode != "static"), fps=fps,
+    run_daemon(ha_url, token, out_dir, lat, animated=(mode != "static"), fps=fps,
                refresh_min=refresh_min, page_seconds=page_seconds, demo=args.demo)
 
 
