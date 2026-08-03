@@ -12,7 +12,8 @@ UT_REF="3ae62e23d020ef067672cae9b48e961a4a1030df"
 UT_DIR="/home/$USER/uptonight"
 
 echo "==> Installing system packages..."
-apt-get install -y fonts-dejavu-core python3-pil python3-numpy python3-requests python3-pip python3-venv
+apt-get install -y fonts-dejavu-core fonts-ibm-plex python3-pil python3-numpy \
+    python3-requests python3-pip python3-venv
 
 echo "==> Ensuring $USER can write the framebuffer..."
 adduser "$USER" video || true

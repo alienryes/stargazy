@@ -29,10 +29,16 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.2.2"
+FIRMWARE_VERSION = "3.3.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
-FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
+# IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
+# holds up at a distance, and its figures are tabular so nothing shifts as the
+# numbers change. It runs about 11% narrower than DejaVu at the same nominal
+# size, which is why every size below is ~8% larger than the DejaVu original -
+# the aim is to match the OPTICAL size, not the point size.
+FONT_DIR = Path("/usr/share/fonts/truetype/ibm-plex")
+FONT_FALLBACK_DIR = Path("/usr/share/fonts/truetype/dejavu")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -389,11 +395,25 @@ def _dt(s):
         return None
 
 
+_DEJAVU = {"IBMPlexSans-Regular.ttf": "DejaVuSans.ttf",
+           "IBMPlexSans-SemiBold.ttf": "DejaVuSans-Bold.ttf",
+           "IBMPlexSans-Bold.ttf": "DejaVuSans-Bold.ttf"}
+
+
 def _font(name, size):
-    try:
-        return ImageFont.truetype(str(FONT_DIR / name), size)
-    except OSError:
-        return ImageFont.load_default()
+    """Plex, falling back to DejaVu, falling back to whatever Pillow has.
+
+    Plex arrives via setup.sh rather than with the OS, so an install that
+    skipped it would otherwise drop to Pillow's default bitmap face and render
+    a dashboard nobody could read from across a room. DejaVu is on every
+    Raspberry Pi OS image, so the middle rung always exists.
+    """
+    for path in (FONT_DIR / name, FONT_FALLBACK_DIR / _DEJAVU[name]):
+        try:
+            return ImageFont.truetype(str(path), size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
 
 def _verdict(score):
@@ -690,10 +710,10 @@ def render_foreground(states):
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    f_large = _font("DejaVuSans-Bold.ttf", 96)
-    f_med   = _font("DejaVuSans-Bold.ttf", 42)
-    f_sm    = _font("DejaVuSans.ttf", 30)
-    f_xs    = _font("DejaVuSans.ttf", 24)
+    f_large = _font("IBMPlexSans-Bold.ttf", 104)
+    f_med   = _font("IBMPlexSans-SemiBold.ttf", 46)
+    f_sm    = _font("IBMPlexSans-Regular.ttf", 32)
+    f_xs    = _font("IBMPlexSans-Regular.ttf", 26)
 
     s = states
 
@@ -772,7 +792,10 @@ def render_foreground(states):
             msg_w = int(draw.textlength(msg, font=f_med))
             draw.text((LP_CX - msg_w // 2, 380), msg, fill=AMBER, font=f_med)
     else:
-        LX, LBLW, BARW, BARH, GAP = MARGIN, 200, 400, 30, 66
+        # LBLW was 200 and "Transparency" measured 200 - the label was touching
+        # the bar. Plex buys the room back; 216 spends a little of it so the
+        # longest label has a gap. There is slack to DIV_X either way.
+        LX, LBLW, BARW, BARH, GAP = MARGIN, 216, 400, 30, 66
         BARX = LX + LBLW
         VALX = BARX + BARW + 16
 
@@ -923,7 +946,9 @@ def _tonight(t, end):
 
 def _draw_timeline(draw, states, y, f_xs):
     """Dusk-to-dawn bar with true astronomical darkness and moon-up marked."""
-    x0, x1, h = MARGIN, W - MARGIN, 24
+    # h must clear the in-bar label's line height, not just look right empty:
+    # at 24 the larger Plex f_xs spilled out of the bar top and bottom.
+    x0, x1, h = MARGIN, W - MARGIN, 32
     dusk, dawn = _night_window(states)
     if dusk is None or dawn <= dusk:
         return
@@ -945,7 +970,7 @@ def _draw_timeline(draw, states, y, f_xs):
         span = f"{t_a0.strftime('%H:%M')} - {t_a1.strftime('%H:%M')}"
         for lab in (f"astronomical dark   {span}", "astronomical dark", span):
             if draw.textlength(lab, font=f_xs) + 12 < a1 - a0:
-                draw.text((a0 + 6, y + 3), lab, font=f_xs, fill=BG)
+                draw.text((a0 + 8, y + 4), lab, font=f_xs, fill=BG)
                 break
 
     # Moon up washes the sky out. Shown as its own strip ABOVE the bar rather
@@ -964,7 +989,9 @@ def _draw_timeline(draw, states, y, f_xs):
         m0 = m1 = None
     if m0 is not None and m1 is not None and m1 > m0:
         draw.rectangle([m0, y - 12, m1, y - 5], fill=AMBER)
-        draw.text((m0 + 6, y - 34), "moon up", font=f_xs, fill=AMBER)
+        # Sits clear of the strip: the label's descenders reached it once the
+        # type grew, so the offset is measured from the text, not guessed.
+        draw.text((m0 + 6, y - 16 - f_xs.size), "moon up", font=f_xs, fill=AMBER)
 
     # Only mark "now" while it is actually within tonight; clamping it to an end
     # would draw a marker that reads as a real time when it is not.
@@ -973,9 +1000,19 @@ def _draw_timeline(draw, states, y, f_xs):
         now_x = _tl_x(now, dusk, dawn, x0, x1)
         draw.line([(now_x, y - 4), (now_x, y + h + 4)], fill=WHITE, width=2)
 
-    draw.text((x0, y + h + 6), dusk.strftime("Dusk %H:%M"), font=f_xs, fill=MUTED)
-    tw = draw.textlength(dawn.strftime("Dawn %H:%M"), font=f_xs)
-    draw.text((x1 - tw, y + h + 6), dawn.strftime("Dawn %H:%M"), font=f_xs, fill=MUTED)
+    # Dusk and dawn ride INSIDE the bar's own ends. They used to sit on a row
+    # underneath, which the taller bar drove into the section headings below;
+    # moving them in makes the strip self-contained instead of pushing every
+    # constant on the page down by 8px. They are the bar's endpoints, so this
+    # is also where they belong. Falls back to the old row if the dark segment
+    # leaves no unlit end to write on.
+    d_lab, w_lab = dusk.strftime("Dusk %H:%M"), dawn.strftime("Dawn %H:%M")
+    dw, ww = draw.textlength(d_lab, font=f_xs), draw.textlength(w_lab, font=f_xs)
+    inside = (a0 is not None and a1 is not None
+              and a0 - x0 > dw + 16 and x1 - a1 > ww + 16)
+    ty = y + 4 if inside else y + h + 4
+    draw.text((x0 + 8 if inside else x0, ty), d_lab, font=f_xs, fill=MUTED)
+    draw.text((x1 - ww - (8 if inside else 0), ty), w_lab, font=f_xs, fill=MUTED)
 
 
 def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
@@ -1119,10 +1156,10 @@ def render_targets(states, targets, images, lat=None):
 
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    f_title = _font("DejaVuSans-Bold.ttf", 42)
-    f_med   = _font("DejaVuSans-Bold.ttf", 32)
-    f_sm    = _font("DejaVuSans.ttf", 24)
-    f_xs    = _font("DejaVuSans.ttf", 20)
+    f_title = _font("IBMPlexSans-Bold.ttf", 46)
+    f_med   = _font("IBMPlexSans-SemiBold.ttf", 36)
+    f_sm    = _font("IBMPlexSans-Regular.ttf", 26)
+    f_xs    = _font("IBMPlexSans-Regular.ttf", 22)
 
     draw.text((MARGIN, 22), "TONIGHT'S TARGETS", font=f_title, fill=WHITE)
     draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM)
@@ -1184,7 +1221,7 @@ def draw_clock(draw):
     advances live and the date rolls over at midnight. It is one short text draw
     over transparent sky, which the 20 fps loop does not notice.
     """
-    f_sm    = _font("DejaVuSans.ttf", 30)
+    f_sm    = _font("IBMPlexSans-Regular.ttf", 32)
     now_str = datetime.now().strftime("%a %d %b  %H:%M")
     ts_w    = int(draw.textlength(now_str, font=f_sm))
     # Secondary ink: at full white it carried the same weight as the title and

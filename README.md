@@ -92,7 +92,7 @@ sudo reboot   # required: setup.sh adds fbcon=map:2 to the kernel cmdline
 ```
 
 `setup.sh`:
-- installs `fonts-dejavu-core`, `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`, `python3-venv`
+- installs `fonts-ibm-plex` (the display's typeface), `fonts-dejavu-core` (fallback), `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`, `python3-venv`
 - builds the display's virtualenv (`--system-site-packages`, so apt's Pillow and NumPy are reused rather than rebuilt). The direct weather source brings pandas, which carries its own NumPy — keeping that out of the system Python is what stops it shadowing the one the framebuffer path uses
 - adds the user to the `video` group so it can write `/dev/fb0` without sudo
 - adds `fbcon=map:2` to `/boot/firmware/cmdline.txt` so the text console never draws over the display
