@@ -122,7 +122,9 @@ fps = 20
 data_refresh_min = 15
 ```
 
-The `[display]` section is optional; the values above are the defaults. To read from Home Assistant instead, set `source = "homeassistant"` and add an `[ha]` section with your URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens).
+The `[display]` section is optional; the values above are the defaults.
+
+**Night mode** (`night_mode = "off" | "dim" | "red"`) applies between real dusk and dawn rather than on a clock schedule, because the point is to stop the panel ruining your dark adaptation and that starts when the sky does. `"dim"` keeps the colours at `night_dim`% brightness; `"red"` goes monochrome red, which is what observers use because long wavelengths leave scotopic vision alone. Nothing is lost by going red — no reading on this display is carried by colour alone, so the verdict word, the numbers and the bar lengths all still say what they said. It is applied to the finished frame, so it covers the animated sky and the sky photographs too, and it costs no measurable CPU. To read from Home Assistant instead, set `source = "homeassistant"` and add an `[ha]` section with your URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens).
 
 Both sources are the same underlying model, so they agree — `display.py --compare` fetches from each back to back and prints a per-value diff if you want to confirm it on your own site.
 

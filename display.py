@@ -29,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.4.1"
+FIRMWARE_VERSION = "3.5.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 # IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
@@ -1226,13 +1226,62 @@ def render_targets(states, targets, images, lat=None):
     return img
 
 
-def to_fb_bytes(img):
+def _night_filter(arr, mode, dim):
+    """Night transform over an HxWx3 uint16 array. The transform lives here
+    once; both the framebuffer path and --save go through it.
+
+    Applied to the FINISHED frame rather than by swapping the palette, which
+    means it also covers the animated sky and the DSS2 cutouts - a palette
+    swap would have left photographs of galaxies glowing white.
+    """
+    if mode == "dim":
+        return (arr * dim) // 100
+    if mode == "red":
+        # Rec.601 luma, then everything onto the red channel. Red is what
+        # observers use because long wavelengths leave scotopic vision alone;
+        # a trace of green and blue keeps it from looking like a fault.
+        lum = (arr[:, :, 0] * 54 + arr[:, :, 1] * 183 + arr[:, :, 2] * 19) >> 8
+        out = np.zeros_like(arr)
+        out[:, :, 0] = lum
+        out[:, :, 1] = lum >> 4
+        out[:, :, 2] = lum >> 5
+        return out
+    return arr
+
+
+def apply_night(img, mode, dim):
+    """Same transform, for the paths that want a PIL image back (--save)."""
+    if mode == "off":
+        return img
+    arr = _night_filter(np.asarray(img, dtype=np.uint16), mode, dim)
+    return Image.fromarray(arr.astype(np.uint8))
+
+
+def to_fb_bytes(img, night="off", dim=45):
     rot = img.transpose(ROTATE)
     if rot.size != (FB_W, FB_H):
         rot = rot.resize((FB_W, FB_H))
     arr = np.asarray(rot, dtype=np.uint16)
+    # Filtered here rather than in compose(): this array already exists, so
+    # night mode costs no extra conversion on the 20fps path.
+    arr = _night_filter(arr, night, dim)
     packed = ((arr[:, :, 0] >> 3) << 11) | ((arr[:, :, 1] >> 2) << 5) | (arr[:, :, 2] >> 3)
     return packed.astype("<u2").tobytes()
+
+
+def night_mode_now(mode, window):
+    """The mode to apply right now - "off" outside the dusk-to-dawn window.
+
+    Tied to real dusk and dawn rather than a clock schedule, because the whole
+    point is to stop the panel wrecking your dark adaptation, and that starts
+    when the sky does.
+    """
+    if mode == "off" or not window:
+        return "off"
+    dusk, dawn = window
+    if dusk is None or dawn is None:
+        return "off"
+    return mode if dusk <= datetime.now().astimezone() <= dawn else "off"
 
 
 NIGHT_BASE = None
@@ -1288,9 +1337,9 @@ def _install_signal_handlers():
 
 
 def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
-               page_seconds, demo=False):
+               page_seconds, demo=False, night="off", night_dim=45):
     """Long-running loop: animate the panel while a thread refreshes the data."""
-    state = {"pages": [], "params": None}
+    state = {"pages": [], "params": None, "window": None}
 
     def load():
         states = fetch()
@@ -1303,6 +1352,8 @@ def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
             pages.append(page2)
         state["pages"] = pages
         state["params"] = DEMO_PARAMS if demo else sky_params(states)
+        # Dusk/dawn drive night mode, and they only change when the data does.
+        state["window"] = _night_window(states)
 
     log.info("Fetching conditions...")
     load()
@@ -1326,14 +1377,15 @@ def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
     try:
         if not animated:
             log.info("Static mode: redraw on data change.")
-            last = None
+            last, last_mode = None, None
             while _RUNNING:
                 page = state["pages"][0]
-                if page is not last:
+                mode = night_mode_now(night, state["window"])
+                if page is not last or mode != last_mode:
                     frame = compose(page, state["params"], 0.0, [], initial_clouds(state["params"]))
                     fb.seek(0)
-                    fb.write(to_fb_bytes(frame))
-                    last = page
+                    fb.write(to_fb_bytes(frame, mode, night_dim))
+                    last, last_mode = page, mode
                 time.sleep(1)
             return
 
@@ -1371,7 +1423,8 @@ def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
             page = pages[int(t / page_seconds) % len(pages)]
             frame = compose(page, params, t, meteors, clouds)
             fb.seek(0)
-            fb.write(to_fb_bytes(frame))
+            fb.write(to_fb_bytes(frame, night_mode_now(night, state["window"]),
+                                 night_dim))
             dt = time.time() - now
             if dt < frame_dt:
                 time.sleep(frame_dt - dt)
@@ -1397,6 +1450,11 @@ def main():
     fps    = float(disp.get("fps", 20))
     refresh_min = float(disp.get("data_refresh_min", 15))
     page_seconds = float(disp.get("page_seconds", 20))
+    night = disp.get("night_mode", "off")
+    night_dim = int(disp.get("night_dim", 45))
+    if night not in ("off", "dim", "red"):
+        raise ValueError(f'display.night_mode is "{night}"; '
+                         'expected "off", "dim" or "red"')
 
     if args.compare:
         return compare_sources(config)
@@ -1409,28 +1467,34 @@ def main():
         targets = read_targets(out_dir)
         params = sky_params(states)
         fg = render_foreground(states)
+        # A saved preview should look like the panel does right now, night mode
+        # included - otherwise --save quietly lies once the sun goes down.
+        now_mode = night_mode_now(night, _night_window(states))
         frame = compose(fg, params, 1.7, [], initial_clouds(params))
         if args.save:
-            frame.save(args.save)
+            apply_night(frame, now_mode, night_dim).save(args.save)
             log.info("Saved %s", args.save)
             page2 = render_targets(states, targets,
                                    load_cutouts(targets, P2_CARDS), lat)
             if page2 is not None:
                 p = Path(args.save)
                 out = str(p.with_name(p.stem + "_targets" + p.suffix))
-                compose(page2, params, 1.7, [], initial_clouds(params)).save(out)
+                apply_night(compose(page2, params, 1.7, [],
+                                    initial_clouds(params)),
+                            now_mode, night_dim).save(out)
                 log.info("Saved %s", out)
             else:
                 log.warning("No UpTonight reports in %s - targets page skipped.", out_dir)
         else:
             with open(FB_DEV, "wb") as fb:
-                fb.write(to_fb_bytes(frame))
+                fb.write(to_fb_bytes(frame, now_mode, night_dim))
             log.info("Done. v%s", FIRMWARE_VERSION)
         return
 
     _install_signal_handlers()
     run_daemon(fetch, out_dir, lat, animated=(mode != "static"), fps=fps,
-               refresh_min=refresh_min, page_seconds=page_seconds, demo=args.demo)
+               refresh_min=refresh_min, page_seconds=page_seconds, demo=args.demo,
+               night=night, night_dim=night_dim)
 
 
 if __name__ == "__main__":

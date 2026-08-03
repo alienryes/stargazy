@@ -61,3 +61,15 @@ data_refresh_min = 15
 # rotation when UpTonight has produced a report, so before the first run the
 # display simply stays on the conditions page.
 page_seconds = 20
+
+# Night mode, applied between real dusk and dawn - not on a clock schedule,
+# because the point is to stop the panel wrecking your dark adaptation and
+# that starts when the sky does.
+#
+#   "off"  - no change (default)
+#   "dim"  - same colours, night_dim% brightness
+#   "red"  - monochrome red. Long wavelengths leave scotopic vision alone,
+#            which is why observers use red torches. Nothing is lost by it:
+#            no reading on this display is carried by colour alone.
+night_mode = "off"
+night_dim = 45
