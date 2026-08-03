@@ -29,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.1.0"
+FIRMWARE_VERSION = "3.2.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -54,6 +54,7 @@ AMBER    = (245, 158, 11)    # #F59E0B — moon, and fair/caution
 ROSE     = (244, 63, 94)     # #F43F5E — poor conditions
 STEEL    = (29, 94, 128)     # muted electric — bar trough frame
 MOON_DARK = (27, 36, 64)     # unlit lunar disc, just above the sky navy
+MUTED    = (150, 158, 180)   # secondary text — present, but not competing
 DIM      = (90, 98, 120)     # divider lines / subtle rules
 STAR_COLOUR = (232, 234, 248)
 
@@ -769,20 +770,32 @@ def render_foreground(states):
         BARX = LX + LBLW
         VALX = BARX + BARW + 16
 
+        # (label, value, good, warn) - the two thresholds are drawn as ticks as
+        # well as driving the colour. Without them the fill changes hue at an
+        # invisible boundary, which makes the colour read as decoration rather
+        # than as information.
         conditions = [
-            ("Cloudless",    100 - cloud, _bar_colour(100 - cloud, 60, 40)),
-            ("Seeing",       seeing,      _bar_colour(seeing,       60, 40)),
-            ("Transparency", transp,      _bar_colour(transp,       60, 40)),
-            ("Calm",         calm,        _bar_colour(calm,         70, 50)),
+            ("Cloudless",    100 - cloud, 60, 40),
+            ("Seeing",       seeing,      60, 40),
+            ("Transparency", transp,      60, 40),
+            ("Calm",         calm,        70, 50),
         ]
-        for i, (label, value, colour) in enumerate(conditions):
+        for i, (label, value, good, warn) in enumerate(conditions):
             y = 272 + i * GAP
             draw.text((LX, y), label, fill=WHITE, font=f_sm)
             # Coloured border > opaque trough > coloured fill (opaque over the sky).
             draw.rectangle([BARX - 2, y + 2, BARX + BARW + 2, y + BARH + 6], fill=STEEL)
             draw.rectangle([BARX,     y + 4, BARX + BARW,     y + BARH + 4], fill=BG)
             filled = max(2, int(BARW * value / 100))
-            draw.rectangle([BARX, y + 4, BARX + filled, y + BARH + 4], fill=colour)
+            draw.rectangle([BARX, y + 4, BARX + filled, y + BARH + 4],
+                           fill=_bar_colour(value, good, warn))
+            # Ticks at the top and bottom edges only, so they never fight the
+            # fill. DIM reads darker than any fill colour and lighter than the
+            # empty trough, so one colour works on both sides of the boundary.
+            for t in (warn, good):
+                tx = BARX + int(BARW * t / 100)
+                draw.line([(tx, y + 4), (tx, y + 11)], fill=DIM)
+                draw.line([(tx, y + BARH - 3), (tx, y + BARH + 4)], fill=DIM)
             draw.text((VALX, y), f"{value}%", fill=WHITE, font=f_sm)
 
     draw.line([(DIV_X, HLINE2), (DIV_X, HLINE3)], fill=DIM, width=2)
@@ -809,10 +822,14 @@ def render_foreground(states):
 
     # Row 1 -- tomorrow's forecast (left) + next new/full moon dates (right,
     # grouped under the moon card with the rest of the astronomical data).
-    t_colour = _verdict(dsky_tmrw)[1]
+    # Only the score is coloured. Colouring the whole phrase made a plain
+    # description read as an alert and blunted the one figure that earned it.
     draw.text((MARGIN, 560), "Tomorrow:", fill=WHITE, font=f_sm)
     tm_w = int(draw.textlength("Tomorrow: ", font=f_sm))
-    draw.text((MARGIN + tm_w, 560), f"{dsky_tmrw_desc}  ({dsky_tmrw}%)", fill=t_colour, font=f_sm)
+    desc = f"{dsky_tmrw_desc}  "
+    draw.text((MARGIN + tm_w, 560), desc, fill=WHITE, font=f_sm)
+    draw.text((MARGIN + tm_w + int(draw.textlength(desc, font=f_sm)), 560),
+              f"({dsky_tmrw}%)", fill=_verdict(dsky_tmrw)[1], font=f_sm)
 
     moon_date_parts = []
     if next_new:
@@ -913,6 +930,12 @@ def _draw_timeline(draw, states, y, f_xs):
                dusk, dawn, x0, x1)
     if a0 is not None and a1 is not None and a1 > a0:
         draw.rectangle([a0, y + 1, a1, y + h - 1], fill=ELECTRIC)
+        # Label it, the same way the moon strip is labelled. This is the more
+        # important of the two windows and it was the only unexplained mark on
+        # the page - the bar cannot be read without knowing what the blue means.
+        lab = "astronomical dark"
+        if draw.textlength(lab, font=f_xs) + 12 < a1 - a0:
+            draw.text((a0 + 6, y + 3), lab, font=f_xs, fill=BG)
 
     # Moon up washes the sky out. Shown as its own strip ABOVE the bar rather
     # than a translucent overlay - amber over the electric segment just turned
@@ -955,6 +978,8 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
         y = PAN_BASE - (alt / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
         draw.line([(PAN_X0, y), (PAN_X1, y)], fill=(29, 94, 128, 70))
         draw.text((PAN_X1 + 4, y - 12), f"{alt}", font=f_xs, fill=DIM)
+    # The axis numbers were unitless; one marker at the top says what they are.
+    draw.text((PAN_X1 + 4, PAN_TOP - 6), "alt°", font=f_xs, fill=DIM)
 
     marks = []
     for b in bodies:
@@ -979,29 +1004,36 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
         r = max(4.0, min(13.0, 9.0 - mag * 0.8))
         draw.ellipse([x - r, y - r, x + r, y + r], fill=col)
 
+        # ONE line per object. The altitude figure used to sit on a second line
+        # and was pure duplication - this plot's whole y axis is altitude, so
+        # the marker already states it. Dropping it halves each label's height,
+        # which fixes the Moon/Neptune and Uranus/Saturn crowding at source
+        # instead of nudging labels around it. The bearing stays: it is the one
+        # number worth reading off precisely, and a compass axis cannot give it.
+        bearing = f"  {int(round(az))}°"
+        nw = draw.textlength(name, font=f_sm)
         lx = x + r + 8
-        lw = max(draw.textlength(name, font=f_sm), 78)
-        base = y - 14
+        lw = max(nw + draw.textlength(bearing, font=f_sm), 60)
+        base = y - 12
         # Try alternately below then above the marker. Purely-downward nudging
         # drove low objects' labels through the horizon axis and onto the
         # compass letters, so candidates outside the plot are rejected.
         ly = None
-        for off in (0, 26, -26, 52, -52, 78, -78):
+        for off in (0, 24, -24, 48, -48, 72, -72):
             cand = base + off
-            if cand < PAN_TOP - 12 or cand + 44 > PAN_BASE - 2:
+            if cand < PAN_TOP - 10 or cand + 24 > PAN_BASE - 2:
                 continue
-            if not any(lx < b[2] and lx + lw > b[0] and cand < b[3] and cand + 44 > b[1]
+            if not any(lx < b[2] and lx + lw > b[0] and cand < b[3] and cand + 24 > b[1]
                        for b in placed):
                 ly = cand
                 break
         if ly is None:
-            ly = max(PAN_TOP - 12, min(base, PAN_BASE - 46))
-        placed.append((lx, ly, lx + lw, ly + 44))
+            ly = max(PAN_TOP - 10, min(base, PAN_BASE - 26))
+        placed.append((lx, ly, lx + lw, ly + 24))
         if abs(ly - base) > 2:
-            draw.line([(x + r, y), (lx - 4, ly + 14)], fill=STEEL)
+            draw.line([(x + r, y), (lx - 4, ly + 12)], fill=STEEL)
         draw.text((lx, ly), name, font=f_sm, fill=WHITE)
-        draw.text((lx, ly + 22), f"{int(round(alt))}°  {int(round(az))}°",
-                  font=f_xs, fill=DIM)
+        draw.text((lx + nw, ly), bearing, font=f_sm, fill=MUTED)
 
 
 def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
@@ -1009,6 +1041,16 @@ def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
     # Starts clear of the column heading, which descends to about y 210.
     x0, y = P2_DIV_X + 24, 220
     tile, gap = 96, 16
+
+    # One heading for the bar column. Four right-aligned bars with no axis, no
+    # legend and no label are simply unreadable - the earlier note claimed
+    # keeping them beside the text stopped them reading as a mystery, and on
+    # the panel they still did.
+    bar_x, bar_w = x0 + tile + 18 + 230, 150
+    cap = "% of dark hours up"
+    draw.text((bar_x + bar_w - draw.textlength(cap, font=f_xs), 186), cap,
+              font=f_xs, fill=DIM)
+
     for o in objects[:P2_CARDS]:
         oid = str(o.get("id", "?"))
         pic = images.get(oid)
@@ -1045,10 +1087,9 @@ def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
                 line += f"   at {when.strftime('%H:%M')}"
             draw.text((tx, y + 66), line, font=f_xs, fill=WHITE)
 
-        # foto = fraction of astronomical darkness the object stays observable.
-        # Kept alongside the altitude text rather than pushed to the margin,
-        # where an unlabelled bar just reads as a mystery.
-        bx, bw = tx + 230, 150
+        # foto = fraction of astronomical darkness the object stays observable,
+        # named by the column heading above.
+        bx, bw = bar_x, bar_w
         frac = max(0.0, min(1.0, _f(o.get("foto"))))
         draw.rectangle([bx, y + 68, bx + bw, y + 82], fill=BG, outline=STEEL)
         if frac > 0:
@@ -1132,7 +1173,9 @@ def draw_clock(draw):
     f_sm    = _font("DejaVuSans.ttf", 30)
     now_str = datetime.now().strftime("%a %d %b  %H:%M")
     ts_w    = int(draw.textlength(now_str, font=f_sm))
-    draw.text((W - ts_w - MARGIN, 28), now_str, fill=WHITE, font=f_sm)
+    # Secondary ink: at full white it carried the same weight as the title and
+    # the two competed for the header.
+    draw.text((W - ts_w - MARGIN, 28), now_str, fill=MUTED, font=f_sm)
 
 
 def compose(fg, params, t, meteors, clouds):
