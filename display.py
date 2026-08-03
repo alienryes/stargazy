@@ -29,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.3.0"
+FIRMWARE_VERSION = "3.3.1"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 # IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
@@ -967,11 +967,28 @@ def _draw_timeline(draw, states, y, f_xs):
         # The times ride in the same label rather than sitting under the
         # boundaries: one element cannot collide with the Dusk/Dawn row below,
         # and it degrades by dropping detail rather than by overlapping.
-        span = f"{t_a0.strftime('%H:%M')} - {t_a1.strftime('%H:%M')}"
-        for lab in (f"astronomical dark   {span}", "astronomical dark", span):
-            if draw.textlength(lab, font=f_xs) + 12 < a1 - a0:
-                draw.text((a0 + 8, y + 4), lab, font=f_xs, fill=BG)
-                break
+        # Each time sits at the end of the window it bounds, with the name
+        # centred between them - so the segment reads as an axis of its own
+        # rather than as a caption with numbers trailing after it. With Dusk
+        # and Dawn already at the bar's outer ends, the whole strip is then
+        # labelled at every boundary it has.
+        lab = "astronomical dark"
+        s0, s1 = t_a0.strftime("%H:%M"), t_a1.strftime("%H:%M")
+        w0 = draw.textlength(s0, font=f_xs)
+        w1 = draw.textlength(s1, font=f_xs)
+        wl = draw.textlength(lab, font=f_xs)
+        seg, ty = a1 - a0, y + 4
+        # Degrade by dropping pieces, never by overlapping them: name and both
+        # times, then times alone, then the name alone.
+        if w0 + w1 + wl + 48 < seg:
+            draw.text((a0 + 8, ty), s0, font=f_xs, fill=BG)
+            draw.text((a1 - w1 - 8, ty), s1, font=f_xs, fill=BG)
+            draw.text((a0 + (seg - wl) / 2, ty), lab, font=f_xs, fill=BG)
+        elif w0 + w1 + 24 < seg:
+            draw.text((a0 + 8, ty), s0, font=f_xs, fill=BG)
+            draw.text((a1 - w1 - 8, ty), s1, font=f_xs, fill=BG)
+        elif wl + 12 < seg:
+            draw.text((a0 + (seg - wl) / 2, ty), lab, font=f_xs, fill=BG)
 
     # Moon up washes the sky out. Shown as its own strip ABOVE the bar rather
     # than a translucent overlay - amber over the electric segment just turned
