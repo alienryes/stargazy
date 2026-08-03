@@ -1,6 +1,6 @@
 # 🌌 touch2-stargazing-display
 
-A stargazing conditions display for the [Raspberry Pi Touch Display 2 (5")](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html), driven by a Raspberry Pi 4. It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) data from Home Assistant and renders a colour-coded overnight forecast over a live, data-reactive animated night sky — no interaction required.
+A stargazing conditions display for the [Raspberry Pi Touch Display 2 (5")](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html), driven by a Raspberry Pi 4. It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if you run it — and renders a colour-coded overnight forecast over a live, data-reactive animated night sky — no interaction required.
 
 Rendered with Pillow at 1280×720 landscape and written straight to the Linux framebuffer (`/dev/fb0`, RGB565) — no X, no display server, no `inky` library.
 
@@ -64,8 +64,7 @@ Meteors streak occasionally through the night sky (rarer when cloudy). Star and 
 **Software**
 - Raspberry Pi OS Lite 64-bit (Trixie / Bookworm), headless (`multi-user.target`)
 - Python 3.11+
-- Home Assistant with the [AstroWeather](https://github.com/mawinkler/astroweather) integration (backyard location configured)
-- HA long-lived access token
+- **No Home Assistant required.** Weather comes from [pyastroweatherio](https://github.com/mawinkler/pyastroweatherio) — the library the Home Assistant [AstroWeather](https://github.com/mawinkler/astroweather) integration itself wraps — talking straight to MET Norway and Open-Meteo. If you do run Home Assistant with that integration, set `weather.source = "homeassistant"` and the display reads its sensors instead.
 
 ---
 
@@ -82,7 +81,8 @@ sudo reboot   # required: setup.sh adds fbcon=map:2 to the kernel cmdline
 ```
 
 `setup.sh`:
-- installs `fonts-dejavu-core`, `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`
+- installs `fonts-dejavu-core`, `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`, `python3-venv`
+- builds the display's virtualenv (`--system-site-packages`, so apt's Pillow and NumPy are reused rather than rebuilt). The direct weather source brings pandas, which carries its own NumPy — keeping that out of the system Python is what stops it shadowing the one the framebuffer path uses
 - adds the user to the `video` group so it can write `/dev/fb0` without sudo
 - adds `fbcon=map:2` to `/boot/firmware/cmdline.txt` so the text console never draws over the display
 - installs a scoped sudoers rule for the deploy script
@@ -93,12 +93,17 @@ sudo reboot   # required: setup.sh adds fbcon=map:2 to the kernel cmdline
 cp config.example.toml config.toml
 ```
 
-Edit `config.toml` with your HA URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens):
+Set your observing site in `[location]`; that is the only thing you must edit. The default `weather.source = "direct"` fetches the forecast on the Pi itself and needs no credentials at all:
 
 ```toml
-[ha]
-url = "http://192.168.1.x:8123"
-token = "your-token-here"
+[weather]
+source = "direct"
+
+[location]
+latitude = 51.4779
+longitude = -0.0015
+elevation = 47
+timezone = "Europe/London"
 
 [display]
 mode = "animated"     # or "static" (redraw only when the data changes)
@@ -106,7 +111,9 @@ fps = 20
 data_refresh_min = 15
 ```
 
-The `[display]` section is optional; the values above are the defaults.
+The `[display]` section is optional; the values above are the defaults. To read from Home Assistant instead, set `source = "homeassistant"` and add an `[ha]` section with your URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens).
+
+Both sources are the same underlying model, so they agree — `display.py --compare` fetches from each back to back and prints a per-value diff if you want to confirm it on your own site.
 
 ### 3. Deploy
 
@@ -129,6 +136,7 @@ python3 display.py            # daemon (mode from config; default animated)
 python3 display.py --once     # render one frame to the panel and exit
 python3 display.py --save preview.png   # save a single composited frame (no panel needed)
 python3 display.py --demo     # force a vivid clear-sky animation, ignoring the weather
+python3 display.py --compare  # fetch from both weather sources and diff them
 ```
 
 `--demo` is handy for checking the vivid end of the range without waiting for a clear night.
@@ -149,7 +157,7 @@ The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke s
 |---|---|
 | Blank panel, or console/login text over the dashboard | The text console is still bound to `/dev/fb0`. Ensure `fbcon=map:2` is in `/boot/firmware/cmdline.txt` and reboot; `fbcon-detach.service` also unbinds it at start |
 | `PermissionError` writing `/dev/fb0` | The user isn't in the `video` group — rerun `setup.sh`, or `sudo adduser <user> video` and re-login |
-| Sky looks static / no visible animation | Heavy cloud legitimately calms the sky. Confirm with `python3 display.py --demo`; check the computed mood with `python3 -c "import tomllib,display; c=tomllib.load(open('config.toml','rb')); print(display.sky_params(display.fetch_states(c['ha']['url'].rstrip('/'), c['ha']['token'])))"` |
+| Sky looks static / no visible animation | Heavy cloud legitimately calms the sky. Confirm with `python3 display.py --demo`; check the computed mood with `python3 -c "import tomllib,display; c=tomllib.load(open('config.toml','rb')); print(display.sky_params(display.make_fetcher(c)()))"` |
 | Dashboard upside down / mirrored | Flip `ROTATE` in `display.py` between `Image.ROTATE_90` and `Image.ROTATE_270` |
 | `ModuleNotFoundError: numpy` | `sudo apt install python3-numpy` (or rerun `setup.sh`) |
 | `KeyError: 'ha'` in config | `config.toml` is missing the `[ha]` section header |

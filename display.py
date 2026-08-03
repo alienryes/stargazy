@@ -29,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.0.0"
+FIRMWARE_VERSION = "3.1.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -67,37 +67,54 @@ HLINE3 = 548                # footer top
 DIV_X  = 800                # vertical divider: conditions | moon
 RIGHT_CX = (DIV_X + W) // 2  # centre of right (moon) panel = 1040
 
-ENTITIES = [
-    "sensor.astroweather_backyard_astronomical_night_duration",
-    "sensor.astroweather_backyard_deepsky_forecast_today",
-    "sensor.astroweather_backyard_deepsky_forecast_today_description",
-    "sensor.astroweather_backyard_deepsky_forecast_tomorrow",
-    "sensor.astroweather_backyard_deepsky_forecast_tomorrow_description",
-    "sensor.astroweather_backyard_cloud_cover",
-    "sensor.astroweather_backyard_seeing_percentage",
-    "sensor.astroweather_backyard_transparency",
-    "sensor.astroweather_backyard_calm_percentage",
-    "sensor.astroweather_backyard_moon_phase",
-    "sensor.astroweather_backyard_moon_icon",
-    "sensor.astroweather_backyard_moon_constellation",
-    "sensor.astroweather_backyard_moon_next_new_moon",
-    "sensor.astroweather_backyard_moon_next_full_moon",
-    "sensor.astroweather_backyard_moon_next_dark_night",
-    "sensor.astroweather_backyard_sun_next_setting",
-    "sensor.astroweather_backyard_sun_next_rising",
-    "sensor.astroweather_backyard_2m_temperature",
-    "sensor.astroweather_backyard_2m_dewpoint",
-    "sensor.astroweather_backyard_2m_relative_humidity",
-    "sensor.astroweather_backyard_10m_wind_speed",
-    "sensor.astroweather_backyard_10m_wind_direction",
-    "sensor.astroweather_backyard_lifted_index_plain",
-    "sensor.astroweather_backyard_moon_next_rising",
-    "sensor.astroweather_backyard_moon_next_setting",
+# Every value the dashboard needs, as HA entity suffix -> pyastroweatherio
+# property. ONE table, because the two weather sources must stay in step: the
+# Home Assistant path uses the keys, the direct path uses the values, and the
+# render code below is keyed on the full entity id either way.
+HA_PREFIX = "sensor.astroweather_backyard_"
+
+FIELDS = {
+    "astronomical_night_duration":           "night_duration_astronomical",
+    "deepsky_forecast_today":                "deepsky_forecast_today",
+    "deepsky_forecast_today_description":    "deepsky_forecast_today_desc",
+    "deepsky_forecast_tomorrow":             "deepsky_forecast_tomorrow",
+    "deepsky_forecast_tomorrow_description": "deepsky_forecast_tomorrow_desc",
+    "cloud_cover":                           "cloudcover_percentage",
+    "seeing_percentage":                     "seeing_percentage",
+    # NB the plain `transparency` property is a magnitude figure; the HA sensor
+    # of that name carries the PERCENTAGE, which is what the bars expect.
+    "transparency":                          "transparency_percentage",
+    "calm_percentage":                       "calm_percentage",
+    "moon_phase":                            "moon_phase",
+    "moon_icon":                             "moon_icon",
+    "moon_constellation":                    "moon_constellation",
+    "moon_next_new_moon":                    "moon_next_new_moon",
+    "moon_next_full_moon":                   "moon_next_full_moon",
+    "moon_next_dark_night":                  "moon_next_dark_night",
+    "sun_next_setting":                      "sun_next_setting",
+    "sun_next_rising":                       "sun_next_rising",
+    "2m_temperature":                        "temp2m",
+    "2m_dewpoint":                           "dewpoint2m",
+    "2m_relative_humidity":                  "rh2m",
+    "10m_wind_speed":                        "wind10m_speed",
+    "10m_wind_direction":                    "wind10m_direction",
+    "lifted_index_plain":                    "lifted_index_plain",
+    "moon_next_rising":                      "moon_next_rising",
+    "moon_next_setting":                     "moon_next_setting",
     # The plain sun_next_setting/rising are CIVIL twilight; these are the real
     # astronomical dark bounds the timeline highlights.
-    "sensor.astroweather_backyard_sun_next_setting_astronomical",
-    "sensor.astroweather_backyard_sun_next_rising_astronomical",
-]
+    "sun_next_setting_astronomical":         "sun_next_setting_astro",
+    "sun_next_rising_astronomical":          "sun_next_rising_astro",
+}
+
+ENTITIES = [HA_PREFIX + suffix for suffix in FIELDS]
+
+# pyastroweatherio reports wind in m/s; Home Assistant serves the same figure in
+# km/h. Everything downstream - the footer and the starfield drift coefficient
+# in sky_params() - was tuned against km/h, so the direct path converts and km/h
+# stays the internal unit. Only the footer converts again, to mph, for display.
+MS_TO_KMH = 3.6
+KMH_TO_MPH = 1 / 1.609344
 
 # UpTonight runs on this Pi from a daily timer and writes these reports; we read
 # them straight off disk. Absent files simply mean it has not run yet, or that
@@ -167,6 +184,156 @@ def fetch_states(ha_url, token):
             log.warning("Failed to fetch %s: %s", eid, e)
             states[eid] = "unknown"
     return states
+
+
+def _as_state(value):
+    """Render a library value the way Home Assistant's REST API would.
+
+    The whole point is that both sources hand the render code the same thing:
+    strings, with datetimes in ISO form (which _dt parses) and missing values
+    as "unknown" (which _f/_i already fall back on).
+    """
+    if value is None:
+        return "unknown"
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def fetch_states_direct(loc, tuning):
+    """The same dict as fetch_states(), fetched straight from Met.no/Open-Meteo.
+
+    This is what makes the display work without Home Assistant on the network.
+    pyastroweatherio is the very library the HA integration wraps, so the
+    numbers are its numbers rather than a reimplementation of its judgement.
+
+    Imported lazily and deliberately: the library pulls in aiohttp, pandas and
+    ephem (~195MB installed), and nobody running source = "homeassistant"
+    should have to carry that.
+    """
+    import asyncio
+
+    import aiohttp
+    from pyastroweatherio import AstroWeather
+
+    async def _fetch():
+        async with aiohttp.ClientSession() as session:
+            aw = AstroWeather(
+                session,
+                latitude=loc["latitude"],
+                longitude=loc["longitude"],
+                elevation=loc.get("elevation", 0),
+                timezone_info=loc.get("timezone", "Etc/UTC"),
+                cloudcover_weight=tuning["cloudcover_weight"],
+                # fractions, not percentages - the HA integration scales its
+                # own 40/70/100 defaults down before passing them
+                cloudcover_high_weakening=tuning["cloudcover_high_weakening"],
+                cloudcover_medium_weakening=tuning["cloudcover_medium_weakening"],
+                cloudcover_low_weakening=tuning["cloudcover_low_weakening"],
+                fog_weight=tuning["fog_weight"],
+                seeing_weight=tuning["seeing_weight"],
+                transparency_weight=tuning["transparency_weight"],
+                calm_weight=tuning["calm_weight"],
+                uptonight_path="",   # UpTonight is read off disk by read_targets
+                experimental_features=tuning["experimental_features"],
+                forecast_model=tuning["forecast_model"],
+            )
+            return await aw.get_location_data()
+
+    try:
+        data = asyncio.run(_fetch())
+    except Exception as e:
+        log.warning("Direct weather fetch failed: %s", e)
+        return {eid: "unknown" for eid in ENTITIES}
+
+    if isinstance(data, list):        # get_location_data returns a 1-item list
+        data = data[0]
+
+    states = {}
+    for suffix, prop in FIELDS.items():
+        try:
+            value = getattr(data, prop)
+        except Exception as e:
+            log.warning("No %s from pyastroweatherio: %s", prop, e)
+            value = None
+        if suffix == "10m_wind_speed" and value is not None:
+            value = _f(value) * MS_TO_KMH
+        states[HA_PREFIX + suffix] = _as_state(value)
+    return states
+
+
+# pyastroweatherio's own defaults. They are NOT the AstroWeather HA
+# integration's DEFAULT_ constants, which are on a different scale for the
+# weights and expressed as percentages for the weakenings.
+TUNING_DEFAULTS = {
+    "cloudcover_weight": 3,
+    "cloudcover_high_weakening": 0.4,
+    "cloudcover_medium_weakening": 0.7,
+    "cloudcover_low_weakening": 1.0,
+    "fog_weight": 3,
+    "seeing_weight": 2,
+    "transparency_weight": 1,
+    "calm_weight": 2,
+    "experimental_features": True,
+    "forecast_model": "ecmwf_ifs025",
+}
+
+
+def make_fetcher(config):
+    """Return a zero-argument callable giving the states dict for this config."""
+    weather = config.get("weather", {})
+    source = weather.get("source", "direct")
+    if source == "homeassistant":
+        ha = config["ha"]
+        url, token = ha["url"].rstrip("/"), ha["token"]
+        return lambda: fetch_states(url, token)
+    if source != "direct":
+        raise ValueError(
+            f'weather.source is "{source}"; expected "direct" or "homeassistant"')
+    loc = config["location"]
+    tuning = {**TUNING_DEFAULTS, **{k: v for k, v in weather.items() if k != "source"}}
+    return lambda: fetch_states_direct(loc, tuning)
+
+
+def compare_sources(config):
+    """Fetch from both sources and diff them, value by value.
+
+    Worth keeping in the tool rather than in a scratch script: the two sources
+    are meant to agree, and the cheapest way to know they still do after a
+    library or integration update is to ask the running install.
+
+    Both are fetched back to back - AstroWeather refreshes every few minutes,
+    so comparing readings taken minutes apart invents differences that are not
+    there.
+    """
+    loc, ha = config["location"], config["ha"]
+    weather = config.get("weather", {})
+    tuning = {**TUNING_DEFAULTS, **{k: v for k, v in weather.items() if k != "source"}}
+
+    direct = fetch_states_direct(loc, tuning)
+    hass = fetch_states(ha["url"].rstrip("/"), ha["token"])
+
+    same = 0
+    for suffix in FIELDS:
+        eid = HA_PREFIX + suffix
+        d, h = direct[eid], hass[eid]
+        # Times come back at differing precision - Home Assistant truncates to
+        # whole seconds, the library keeps microseconds - so compare instants
+        # with a tolerance rather than for equality.
+        dd, hh = _dt(d), _dt(h)
+        if dd and hh:
+            equal = abs((dd - hh).total_seconds()) < 2.0
+        else:
+            equal = d == h
+        if not equal and not (dd or hh):
+            # numeric near-equality, so 45 and 45.0 are not a "difference"
+            fd, fh = _f(d, None), _f(h, None)
+            equal = fd is not None and fh is not None and abs(fd - fh) < 0.05
+        same += equal
+        print(f"{'ok ' if equal else 'DIFF'} {suffix:38s} "
+              f"direct={d:<34.34} ha={h}")
+    print(f"\n{same}/{len(FIELDS)} identical")
+    return 0 if same == len(FIELDS) else 1
 
 
 def _records(columns):
@@ -674,7 +841,9 @@ def render_foreground(states):
         draw.text((W - sun_w - MARGIN, 606), sun_text, fill=WHITE, font=f_sm)
 
     # Row 3 -- weather
-    wx = f"Temp {temp:.1f}°C  -  Dew {dew:.1f}°C  -  RH {humidity}%  -  Wind {wind_dir} {wind_spd:.1f} m/s"
+    # wind_spd is km/h internally; the footer is the only place it is converted.
+    wx = (f"Temp {temp:.1f}°C  -  Dew {dew:.1f}°C  -  RH {humidity}%  -  "
+          f"Wind {wind_dir} {wind_spd * KMH_TO_MPH:.1f} mph")
     draw.text((MARGIN, 652), wx, fill=WHITE, font=f_sm)
 
     ver   = f"v{FIRMWARE_VERSION}"
@@ -991,13 +1160,13 @@ def _install_signal_handlers():
     signal.signal(signal.SIGINT, stop)
 
 
-def run_daemon(ha_url, token, out_dir, lat, animated, fps, refresh_min,
+def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
                page_seconds, demo=False):
     """Long-running loop: animate the panel while a thread refreshes the data."""
     state = {"pages": [], "params": None}
 
     def load():
-        states = fetch_states(ha_url, token)
+        states = fetch()
         targets = read_targets(out_dir)
         pages = [render_foreground(states)]
         # Targets page joins the rotation only when there is something on it -
@@ -1008,7 +1177,7 @@ def run_daemon(ha_url, token, out_dir, lat, animated, fps, refresh_min,
         state["pages"] = pages
         state["params"] = DEMO_PARAMS if demo else sky_params(states)
 
-    log.info("Fetching HA states...")
+    log.info("Fetching conditions...")
     load()
 
     def refresher():
@@ -1089,11 +1258,11 @@ def main():
     parser.add_argument("--save", metavar="PATH", help="Save a single composited frame and exit")
     parser.add_argument("--once", action="store_true", help="Render one frame to the panel and exit")
     parser.add_argument("--demo", action="store_true", help="Force vivid clear-sky animation (ignore conditions)")
+    parser.add_argument("--compare", action="store_true",
+                        help="Fetch from both weather sources and print a per-value diff")
     args = parser.parse_args()
 
     config = load_config()
-    ha_url = config["ha"]["url"].rstrip("/")
-    token  = config["ha"]["token"]
     out_dir = config.get("uptonight", {}).get("out_dir", "")
     lat    = config.get("location", {}).get("latitude")
     disp   = config.get("display", {})
@@ -1102,9 +1271,14 @@ def main():
     refresh_min = float(disp.get("data_refresh_min", 15))
     page_seconds = float(disp.get("page_seconds", 20))
 
+    if args.compare:
+        return compare_sources(config)
+
+    fetch = make_fetcher(config)
+
     if args.save or args.once:
-        log.info("Fetching HA states...")
-        states = fetch_states(ha_url, token)
+        log.info("Fetching conditions...")
+        states = fetch()
         targets = read_targets(out_dir)
         params = sky_params(states)
         fg = render_foreground(states)
@@ -1128,7 +1302,7 @@ def main():
         return
 
     _install_signal_handlers()
-    run_daemon(ha_url, token, out_dir, lat, animated=(mode != "static"), fps=fps,
+    run_daemon(fetch, out_dir, lat, animated=(mode != "static"), fps=fps,
                refresh_min=refresh_min, page_seconds=page_seconds, demo=args.demo)
 
 

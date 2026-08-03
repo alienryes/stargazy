@@ -43,7 +43,7 @@ if (Test-Path "config.toml") {
 
 # Install Python dependencies
 Write-Host "--> Installing Python dependencies..."
-Invoke-Pi "pip3 install -r $REMOTE_DIR/requirements.txt --break-system-packages --prefer-binary"
+Invoke-Pi "$REMOTE_DIR/.venv/bin/pip install -q -r $REMOTE_DIR/requirements.txt --prefer-binary"
 
 # Render UpTonight's config from [location] in config.toml, so the site is only
 # ever configured in one place. Skipped if setup.sh has not installed it yet.

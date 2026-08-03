@@ -50,6 +50,20 @@ sudo -u "$USER" "$UT_DIR/.venv/bin/pip" install -q --only-binary=:all: \
     astroplan astropy skyfield numpy pandas matplotlib pillow h5py \
     PyYAML pytz requests paho-mqtt
 
+echo "==> Building the display's virtualenv..."
+# The display gets its own venv for the same reason UpTonight does: the direct
+# weather source pulls in pandas, which brings its own numpy, and dropping that
+# into the system Python alongside apt's python3-numpy risks shadowing the very
+# package the framebuffer path depends on. --system-site-packages keeps apt's
+# pillow/numpy/requests visible, so only the new libraries are downloaded.
+DISPLAY_DIR="/home/$USER/touch2-stargazing"
+mkdir -p "$DISPLAY_DIR"
+chown "$USER:$USER" "$DISPLAY_DIR"
+if [ ! -d "$DISPLAY_DIR/.venv" ]; then
+    sudo -u "$USER" python3 -m venv --system-site-packages "$DISPLAY_DIR/.venv"
+fi
+sudo -u "$USER" "$DISPLAY_DIR/.venv/bin/pip" install -q --upgrade pip
+
 echo "==> Adding sudoers rule for $USER..."
 cat > /etc/sudoers.d/touch2-stargazing <<EOF
 $USER ALL=(ALL) NOPASSWD: /usr/bin/cp /tmp/touch2-stargazing.service /tmp/fbcon-detach.service /etc/systemd/system/

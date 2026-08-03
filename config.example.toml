@@ -1,3 +1,36 @@
+# Where the weather comes from.
+#
+#   "direct"        - fetch it here, via pyastroweatherio (the same library the
+#                     Home Assistant AstroWeather integration wraps). No Home
+#                     Assistant needed; this is the default.
+#   "homeassistant" - read the AstroWeather sensors from a running HA instance
+#                     over its REST API. Needs the [ha] section below.
+#
+# Both produce identical numbers - run `display.py --compare` to check for
+# yourself. "direct" needs the extra packages in requirements.txt (~195MB,
+# mostly pandas); "homeassistant" needs none of them.
+[weather]
+source = "direct"
+
+# Condition weighting, passed straight to pyastroweatherio. These are its own
+# defaults and match what the HA integration uses; leave them alone unless you
+# have a reason. NB the three weakenings are FRACTIONS (the integration's
+# settings screen shows the same numbers as percentages).
+cloudcover_weight = 3
+cloudcover_high_weakening = 0.4
+cloudcover_medium_weakening = 0.7
+cloudcover_low_weakening = 1.0
+fog_weight = 3
+seeing_weight = 2
+transparency_weight = 1
+calm_weight = 2
+# Approximates lifted index, seeing, transparency and ground fog.
+experimental_features = true
+# Open-Meteo model: icon_seamless (DWD), metno_seamless, gfs_seamless,
+# ecmwf_ifs025. Leave unset at your peril - it changes the numbers a lot.
+forecast_model = "ecmwf_ifs025"
+
+# Only needed when weather.source = "homeassistant".
 [ha]
 url = "http://192.168.1.167:8123"
 token = "your-long-lived-access-token-here"
