@@ -29,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.4.0"
+FIRMWARE_VERSION = "3.4.1"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 # IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
@@ -771,7 +771,13 @@ def render_foreground(states):
         v_text, v_colour = _verdict(dsky_today)
         v_sub = f"Deep sky: {dsky_today}%  -  {dsky_today_desc}"
 
-    draw.text((MARGIN, 92), v_text, fill=v_colour, font=f_large)
+    # Measured, not guessed: at (MARGIN, 92) the verdict's ink already started
+    # at x 28, exactly level with the title and the subtitle - so there was no
+    # metric misalignment to fix. What there is is an optical one: 104px bold
+    # reads as indented beside 32px regular even when the stems are flush, so
+    # it gets a small pull left. Vertically it sat 46px below the rule and only
+    # 12px above the subtitle; 74 evens that to 28 above and 30 below.
+    draw.text((MARGIN - 4, 74), v_text, fill=v_colour, font=f_large)
     draw.text((MARGIN, 202), v_sub, fill=WHITE, font=f_sm)
     draw.line([(0, HLINE2), (W, HLINE2)], fill=DIM, width=2)
 
