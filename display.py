@@ -29,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.2.1"
+FIRMWARE_VERSION = "3.2.2"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -54,7 +54,13 @@ AMBER    = (245, 158, 11)    # #F59E0B — moon, and fair/caution
 ROSE     = (244, 63, 94)     # #F43F5E — poor conditions
 STEEL    = (29, 94, 128)     # muted electric — bar trough frame
 MOON_DARK = (27, 36, 64)     # unlit lunar disc, just above the sky navy
-MUTED    = (150, 158, 180)   # secondary text — present, but not competing
+MUTED    = (150, 158, 180)   # secondary TEXT — present, but not competing
+# Rules, ticks and frames - plus the two deliberately recessive marginal notes,
+# the version stamp and the imagery credit. NEVER content: at 3.2:1 on the
+# night sky and 1.8:1 on the twilight one it is below WCAG AA wherever it is
+# legible at all, and until v3.2.2 it was carrying axis labels, dusk/dawn times
+# and the card subtitles. Lines are graphical objects, whose bar is 3:1, so it
+# is the right colour for what it is used for now and was the wrong one before.
 DIM      = (90, 98, 120)     # divider lines / subtle rules
 STAR_COLOUR = (232, 234, 248)
 
@@ -967,9 +973,9 @@ def _draw_timeline(draw, states, y, f_xs):
         now_x = _tl_x(now, dusk, dawn, x0, x1)
         draw.line([(now_x, y - 4), (now_x, y + h + 4)], fill=WHITE, width=2)
 
-    draw.text((x0, y + h + 6), dusk.strftime("Dusk %H:%M"), font=f_xs, fill=DIM)
+    draw.text((x0, y + h + 6), dusk.strftime("Dusk %H:%M"), font=f_xs, fill=MUTED)
     tw = draw.textlength(dawn.strftime("Dawn %H:%M"), font=f_xs)
-    draw.text((x1 - tw, y + h + 6), dawn.strftime("Dawn %H:%M"), font=f_xs, fill=DIM)
+    draw.text((x1 - tw, y + h + 6), dawn.strftime("Dawn %H:%M"), font=f_xs, fill=MUTED)
 
 
 def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
@@ -978,13 +984,13 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
     for az, lab in ((0, "N"), (90, "E"), (180, "S"), (270, "W"), (360, "N")):
         x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
         draw.line([(x, PAN_BASE), (x, PAN_BASE + 8)], fill=STEEL)
-        draw.text((x - 8, PAN_BASE + 12), lab, font=f_xs, fill=DIM)
+        draw.text((x - 8, PAN_BASE + 12), lab, font=f_xs, fill=MUTED)
     for alt in (20, 40, 60):
         y = PAN_BASE - (alt / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
         draw.line([(PAN_X0, y), (PAN_X1, y)], fill=(29, 94, 128, 70))
-        draw.text((PAN_X1 + 4, y - 12), f"{alt}", font=f_xs, fill=DIM)
+        draw.text((PAN_X1 + 4, y - 12), f"{alt}", font=f_xs, fill=MUTED)
     # The axis numbers were unitless; one marker at the top says what they are.
-    draw.text((PAN_X1 + 4, PAN_TOP - 6), "alt°", font=f_xs, fill=DIM)
+    draw.text((PAN_X1 + 4, PAN_TOP - 6), "alt°", font=f_xs, fill=MUTED)
 
     marks = []
     for b in bodies:
@@ -1054,7 +1060,7 @@ def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
     bar_x, bar_w = x0 + tile + 18 + 230, 150
     cap = "% of dark hours up"
     draw.text((bar_x + bar_w - draw.textlength(cap, font=f_xs), 186), cap,
-              font=f_xs, fill=DIM)
+              font=f_xs, fill=MUTED)
 
     for o in objects[:P2_CARDS]:
         oid = str(o.get("id", "?"))
@@ -1077,7 +1083,7 @@ def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
         sub = f"{o.get('type', '')} in {o.get('constellation', '')}"
         if mag > 0:
             sub += f" · mag {mag:.1f}"
-        draw.text((tx, y + 38), sub, font=f_xs, fill=DIM)
+        draw.text((tx, y + 38), sub, font=f_xs, fill=MUTED)
 
         # How high it gets and which way to face, from the declination in the
         # report: 90 - |lat - dec|. Only the MERIDIAN transit gives the time -
@@ -1142,8 +1148,11 @@ def render_targets(states, targets, images, lat=None):
         draw.text((MARGIN, 656),
                   f"Comet {c.get('target name', '?')} - "
                   f"alt {_f(c.get('altitude')):.0f}°, az {_f(c.get('azimuth')):.0f}°",
-                  font=f_xs, fill=DIM)
-    draw.text((MARGIN, 688), "Sky imagery: DSS2 / CDS Strasbourg", font=f_xs, fill=(60, 66, 86))
+                  font=f_xs, fill=MUTED)
+    # The credit was at (60, 66, 86) - about 1.9:1, which is barely visible. An
+    # attribution nobody can read is not much of an attribution, and CDS ask for
+    # this one. DIM keeps it recessive without hiding it.
+    draw.text((MARGIN, 688), "Sky imagery: DSS2 / CDS Strasbourg", font=f_xs, fill=DIM)
     return img
 
 
