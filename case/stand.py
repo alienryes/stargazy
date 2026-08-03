@@ -45,7 +45,7 @@ import cadquery as cq
 from shapely.geometry import Polygon
 from shapely.geometry import box as shapely_box
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -112,12 +112,16 @@ desk_clear = 3.0      # the stands carry the case; it never rests on its own cor
 # along the plug axis, which is why it fixes all three tilts at once - unlike
 # leaning further back, which moves the socket TOWARD the desk.
 #
-# 10.0 cleared a right-angle adaptor (tested on hardware). 20.0 is what the
-# OFFICIAL Raspberry Pi PSU needs: its captive cable has little flex, so the
-# lead cannot turn tightly and needs roughly another 10mm before it can run
-# flat. Sized for the supplied PSU deliberately - anyone printing this case
-# most likely has one.
-lift = 20.0
+# 10.0 cleared a right-angle adaptor (tested on hardware). 20.0 got the
+# OFFICIAL Raspberry Pi PSU in, but only just: its captive cable is thick and
+# has little flex, so the lead cannot turn tightly and was still working
+# against the desk. 22.0 is the printed-and-fitted answer. Sized for the
+# supplied PSU deliberately - anyone printing this case most likely has one.
+#
+# 30 deg is the tilt that limits any further lift: raising the case moves the
+# CoM back, so the REAR tipping margin is what falls, and at 30 deg it is
+# already down to ~11.6mm against the 5.0mm floor asserted in check().
+lift = 22.0
 # (case_Y, case_Z) corners that could reach the desk once tilted. Validated
 # against the assembled shell / case_bottom / case_top meshes: this list
 # reproduces the true silhouette minimum at all three tilts.
@@ -326,19 +330,33 @@ def _bore(x, dia, y0, y1):
     )
 
 
-def _cbore(x, y0, y1):
-    """Counterbore, opened out through the strap's INBOARD edge.
+def _slot(x, dia, y0, y1):
+    """A bore opened out through the strap's INBOARD edge.
 
-    The screw axis is only 2.85mm from that edge, so a plain circular
-    counterbore would leave a 0.15mm fin standing 2mm tall - it would simply
-    break off. Running the pocket out to the edge instead gives a clean slot;
-    the head still lands on the full 1mm floor, and the through-hole is what
-    locates the screw laterally in any case.
+    BOTH screw features are slotted this way, for two different reasons:
+
+    - the COUNTERBORE has to be. The screw axis is only 2.85mm from that edge,
+      so a plain circular pocket would leave a 0.15mm fin standing 2mm tall,
+      which would simply break off.
+    - the THROUGH-HOLE is, so the leg can be slid on and off with the case
+      screws merely slackened rather than withdrawn. Undoing them fully means
+      taking the load off case_bottom -> shell -> display while holding the
+      whole assembly, which is the awkward part of changing the lean angle.
+
+    The mouth faces INBOARD, which is the only direction that works: the leg
+    is offered up ~3mm outboard of its seated position, overhanging the free
+    plate edge at case X 63, and slid inboard onto the screws. A mouth on the
+    outboard edge would need the leg to start 2.85mm further IN, driving its
+    inboard edge to case X 46.15 and straight into the -X wall at 48.5.
+
+    Consequence: nothing locates the leg along X any more except friction
+    under the screw heads. The case's weight acts in case Y/Z, i.e. across the
+    slot rather than along it, so service load does not drive the leg off.
     """
-    circle = _bore(x, cbore_d, y0, y1)
+    circle = _bore(x, dia, y0, y1)
     mouth = (
         cq.Workplane("XZ")
-        .rect(cbore_d, strap_z + 1.0, centered=(True, False))
+        .rect(dia, strap_z + 1.0, centered=(True, False))
         .extrude(-(y1 - y0))
         .translate((x, y0, -1.0))
     )
@@ -369,13 +387,14 @@ def build(tilt):
         cq.NearestToPointSelector((jx, jy, leg_w / 2))
     ).fillet(info["r_join"])
 
-    # Screw holes, run from the mounting face out through the strap. The
+    # Screw slots, run from the mounting face out through the strap. The
     # counterbore is cut from the outer face inward, so the head lands on its
-    # floor. Both bores are horizontal in print orientation and their roofs
-    # will droop a little - hence cbore_d carrying +0.2 over the head.
+    # floor. Both are horizontal in print orientation and their roofs will
+    # droop a little - hence cbore_d carrying +0.2 over the head.
     for x in (info["x_screw_lo"], info["x_screw_hi"]):
-        leg = leg.cut(_bore(x, screw_d, -1.0, strap_t_thin + 1.0))
-        leg = leg.cut(_cbore(x, strap_t_thin - cbore_depth, strap_t_thin + 1.0))
+        leg = leg.cut(_slot(x, screw_d, -1.0, strap_t_thin + 1.0))
+        leg = leg.cut(_slot(x, cbore_d, strap_t_thin - cbore_depth,
+                            strap_t_thin + 1.0))
 
     bb = leg.val().BoundingBox()
     return leg, (f"tilt {tilt:.0f} deg: {bb.xlen:.1f} x {bb.ylen:.1f} x "

@@ -83,8 +83,8 @@ the stands stronger layer adhesion.
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
 | `case_bottom_pi4.stl` *or* `_pi5` | 1 | 126 × 76 × 13.5 | 23 g | plate **flat**, wall up |
 | `case_top_pi4.stl` *or* `_pi5` | 1 | 95 × 71 × 19.9 | 36 g | outer face **down** (as exported) |
-| `stand_20_usb.stl` | 1 | 103.3 × 42.3 × 14.0 | 11 g | **flat** on the profile |
-| `stand_20_dsi.stl` | 1 | 103.3 × 42.3 × 14.0 | 11 g | **flat** on the profile |
+| `stand_20_usb.stl` | 1 | 105.4 × 42.3 × 14.0 | 11 g | **flat** on the profile |
+| `stand_20_dsi.stl` | 1 | 105.4 × 42.3 × 14.0 | 11 g | **flat** on the profile |
 
 `shell.stl` and the stands are the same for both boards — only `case_bottom`
 and `case_top` are cut per model, and they must be a matching pair.
@@ -93,17 +93,18 @@ Pick one lean angle and print **both** files for it — one per side:
 
 | Files | Lean | Stand size (mm) | Assembly depth on the desk |
 |---|---|---|---|
-| `stand_15_usb` + `stand_15_dsi` | 15° | 102.9 × 43.5 × 14.0 | 68.5 mm |
-| `stand_20_usb` + `stand_20_dsi` | 20° | 103.3 × 42.3 × 14.0 | 73.9 mm |
-| `stand_30_usb` + `stand_30_dsi` | 30° | 105.7 × 39.0 × 14.0 | 83.1 mm |
+| `stand_15_usb` + `stand_15_dsi` | 15° | 104.9 × 43.5 × 14.0 | 68.5 mm |
+| `stand_20_usb` + `stand_20_dsi` | 20° | 105.4 × 42.3 × 14.0 | 73.9 mm |
+| `stand_30_usb` + `stand_30_dsi` | 30° | 108.0 × 39.0 × 14.0 | 83.1 mm |
 
 **30° is the marginal option.** Raising the case moves the centre of mass back,
-so the rear tipping margin falls: 25.7 mm at 20° but only 12.7 mm at 30°, where
+so the rear tipping margin falls: 25.0 mm at 20° but only 11.5 mm at 30°, where
 the strut tip also stops level with the case's own rear edge. It passes, but 15°
 and 20° have far more room. Pick 30° for the viewing angle, not for stability.
+It is also the angle that limits any further lift — it will fail there first.
 
-The stands hold the case **23 mm** clear of the desk — 3 mm so it never rests on
-its own corner, plus a deliberate 20 mm to get the power lead out (see below).
+The stands hold the case **25 mm** clear of the desk — 3 mm so it never rests on
+its own corner, plus a deliberate 22 mm to get the power lead out (see below).
 The depth on the desk is unchanged by that lift: it is set by the leaning case's
 own silhouette, and the lift moves the case straight up, not backward. The strut
 simply tucks a little further underneath.
@@ -195,7 +196,7 @@ grille holes still vent.
 | M2.5 × 16 screw | 4 | case screws: stand → case-bottom → shell → display |
 | 40 × 40 × 10 mm 5 V fan | 1 | **optional** |
 | M3 self-tapping screw | 4 | fan, from outside through the lid — optional |
-| USB-C power lead | 1 | the **official Raspberry Pi PSU fits** — the stands lift the case 20 mm specifically so it does. See below; a right-angle lead needs only half that |
+| USB-C power lead | 1 | the **official Raspberry Pi PSU fits** — the stands lift the case 22 mm specifically so it does. See below; a right-angle lead needs about half that |
 | Display Adapter Cable for Pi 5 (22-way → 15-way) | 1 | **Pi 5 only.** Replaces the panel's own cable. Must say `DISPLAY` — camera cables look the same and do not work |
 
 **No heat-set inserts and no soldering iron** — everything threads into a
@@ -234,11 +235,13 @@ re-run that script after changing any part.
 3. Fit the **case-bottom** over the extenders, lay a **stand** on each side
    flange with its strut pointing down and back — `_usb` on the USB/Ethernet
    side, `_dsi` on the other — and run the four **case screws** (103.7 × 51
-   pattern) through both into the display's screw bosses. Each stand's
-   counterbore slots open toward the **middle** of the case; if they face
-   outward you have the pair swapped. A driver reaches all four screws even with the
-   Pi and lid fitted, provided the +X cables are unplugged, so you can change
-   the lean angle later without taking the case apart.
+   pattern) through both into the display's screw bosses. Each stand's screw
+   slots open toward the **middle** of the case; if they face outward you have
+   the pair swapped. A driver reaches all four screws even with the Pi and lid
+   fitted, provided the +X cables are unplugged, so you can change the lean
+   angle later without taking the case apart — and because the slots are open,
+   **slacken the screws by a few turns and slide the stand off sideways**
+   rather than removing them.
 4. Plug the **DSI ribbon** into the display, then seat the Pi on the extenders.
    The display's socket sits under the board, so bring the ribbon up through
    the bay, **wrap it around the board's DSI edge** and fold it onto the socket
@@ -290,11 +293,26 @@ tolerance lifts the toe slightly and the strap does have to take it.
 Screw heads sit in **Ø5.4 × 2 mm counterbores**, which puts the head top at
 Z 6.00 against the plugs at 6.65 even for a tall socket-cap head. The
 counterbore is 0.7 mm wider than the head because it is a horizontal bore in
-print orientation and its roof droops a little. Each counterbore is **opened
-out through the strap's inboard edge**: the screw axis is only 2.85 mm from
-that edge, so a plain circular pocket would leave a 0.15 mm fin standing 2 mm
-tall, which would just break off. The head still lands on the full 1 mm floor,
-and the Ø2.9 through-hole is what locates the screw.
+print orientation and its roof droops a little.
+
+**Both screw features are open slots, not holes**, running out through the
+strap's **inboard** edge — the side facing the middle of the case. The
+counterbore has to be: the screw axis is only 2.85 mm from that edge, so a
+plain circular pocket would leave a 0.15 mm fin standing 2 mm tall, which would
+just break off. The Ø2.9 through-hole is slotted for a different reason — so a
+stand can be **slid on and off with the case screws merely slackened**, rather
+than withdrawn. Taking them right out means holding the display, shell and
+case-bottom together unaided, which is the awkward part of changing the lean
+angle.
+
+The mouths face inboard because that is the only direction that works: the
+stand is offered up about 3 mm outboard of its seated position, overhanging the
+free edge of the plate, and slid inward onto the screws. Mouths on the outboard
+edge would need it to start 2.85 mm further *in*, driving its inboard edge
+straight into the case's −X wall. The consequence is that nothing locates the
+stand along X any more except friction under the screw heads — which is fine in
+service, because the case's weight acts across the slots rather than along
+them, but do tighten both screws before letting go.
 
 Nothing here is compliant — no spring, no latch, no sustained strain — so
 unlike the snap-on design it replaces, there is no creep to design around and
@@ -314,37 +332,41 @@ The power socket faces down toward the desk. On the original 7-inch case the
 body is tall enough to swallow a straight plug; at 5 inches it is not, and this
 is the one place the smaller scale really bites. Before the lift there was only:
 
-| Lean | Room from the socket face to the desk | With the 20 mm lift |
+| Lean | Room from the socket face to the desk | With the 22 mm lift |
 |---|---|---|
-| 15° | 17.4 mm | **38.1 mm** |
-| 20° | 16.6 mm | **37.9 mm** |
-| 30° | 15.7 mm | **38.8 mm** |
+| 15° | 17.4 mm | **40.2 mm** |
+| 20° | 16.6 mm | **40.0 mm** |
+| 30° | 15.7 mm | **41.1 mm** |
 
 A straight plug's overmould, plus the bend the lead needs before it can run
 flat, is far longer than the original figures — in practice **even a right-angle
 adaptor's overmould did not fit**. So the stands raise the whole case by a
-deliberate 20 mm (`lift` in `stand.py`), on top of the 3 mm that keeps it off
+deliberate 22 mm (`lift` in `stand.py`), on top of the 3 mm that keeps it off
 its own corner.
 
-Both figures were set on hardware, not modelled. 10 mm cleared a right-angle
-adaptor; **20 mm is what the official Raspberry Pi power supply needs**, because
-its captive cable has very little flex and cannot turn tightly, so it wants
-roughly another 10 mm before it will run flat. It is sized for the supplied PSU
-deliberately — most people printing this case will have one.
+Every one of those figures was set on hardware, not modelled. 10 mm cleared a
+right-angle adaptor. 20 mm got the **official Raspberry Pi power supply** in but
+only just — its captive cable is thick and has very little flex, so it cannot
+turn tightly and was still working against the desk. **22 mm is the printed and
+fitted answer.** It is sized for the supplied PSU deliberately — most people
+printing this case will have one, and "the power supply in the box does not fit"
+is a bad thing to discover after a print.
 
 Two things worth understanding about that fix:
 
 - **Leaning further back makes the problem worse, not better** — it brings the
   socket closer to the desk. The lift is perpendicular to the desk, so it buys
   `lift / cos(tilt)` along the plug axis. That is why all three angles land at
-  about the same 27 mm: the lift cancels the penalty for leaning back.
-- **It improves the front tipping margin** rather than hurting it, from 12.0 to
-  15.7 mm at 20°. The strap lies on the *tilted* rear face, so extending it moves
-  the toe down **and forward**, widening the front contact faster than the rising
-  centre of mass eats it. The rear margin gives up the same amount and still has
-  29 mm. Don't assume raising a leaning case costs stability.
+  about the same 40 mm: the lift cancels the penalty for leaning back.
+- **It improves the front tipping margin** rather than hurting it, from 12.0 mm
+  unlifted to 20.0 mm at 20°. The strap lies on the *tilted* rear face, so
+  extending it moves the toe down **and forward**, widening the front contact
+  faster than the rising centre of mass eats it. The rear margin gives up the
+  same amount and still has 25 mm at 20°. Don't assume raising a leaning case
+  costs stability — but see the 30° warning above, because that is where the
+  rear margin runs out first.
 
-The toe still sits 15.7 mm behind the glass edge at 20°, so nothing protrudes in
+The toe still sits 11.3 mm behind the glass edge at 20°, so nothing protrudes in
 front of the display.
 
 To change the lean angle, unplug the +X cables, undo the four case screws, swap
