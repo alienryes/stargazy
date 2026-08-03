@@ -35,7 +35,7 @@ import sys
 import cadquery as cq
 import pi_models as pm
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 # Which board this lid is cut for; "python case_top.py pi5" for the other.
 PI_MODEL = sys.argv[1] if len(sys.argv) > 1 else "pi4"

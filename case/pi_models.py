@@ -25,6 +25,12 @@ both corrections are baked into the numbers below:
     so the USB-C splits into two blobs 7mm apart and reads as two ports. A
     stray vertex row at z ~ 8.0 spanning the whole board then bridges the real
     gaps. The -Y ports were taken above z 8.4 and re-merged by inspection.
+
+And the reference can simply be WRONG, which no amount of careful clustering
+will catch: it models the Pi 5's usb3 can 1.32mm taller than the usb2 can, and
+the Pi 4's 0.48mm taller. They are the same part in both cases. The Pi 5 one
+was corrected after it showed up on a printed lid; the Pi 4 entries are left
+as measured, because that lid is validated on hardware and 0.48mm never showed.
 """
 
 # --- shared board geometry (identical on both models) ---
@@ -61,15 +67,23 @@ PI_MODELS = {
     "pi5": {
         "label": "Raspberry Pi 5",
         "short": "Raspberry Pi 5",
-        "max_z": 25.14,          # the active cooler adds nothing: it sits below
+        "max_z": 23.82,          # the active cooler adds nothing: it sits below
                                  # the USB cans, which still set the maximum
+                                 # (was 25.14, from the bad usb3 top below)
         "fan_zone_z": 16.30,
         # ...but it is 20.90 tall where the lid's optional 40mm fan hangs
         # (underside 17.40), so the cooler and that fan cannot both be fitted.
         "cooler_fan_zone_z": 20.90,
         "side": [
             ("eth", -25.75, -9.85, 8.00, 21.50, 46.90, 8.00),
-            ("usb3", -5.70, 7.90, 9.18, 25.14, 47.48, 9.18),
+            # usb3 CORRECTED from the mesh (was z 9.18..25.14, underside 9.18).
+            # The reference models this can 1.32mm taller than the usb2 one
+            # beside it - not a stray vertex, a real modelled surface with ~90
+            # vertices on it - but on a real Pi 5 the two are the same stacked
+            # dual-A receptacle. The printed lid showed it plainly: a wide gap
+            # over the blue can, none over the black one. usb2's numbers are
+            # the ones validated on hardware, so they are used for both.
+            ("usb3", -5.70, 7.90, 8.00, 23.82, 47.48, 8.00),
             ("usb2", 11.55, 26.45, 8.00, 23.82, 47.69, 8.00),
         ],
         "bottom": [

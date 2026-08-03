@@ -145,9 +145,16 @@ drift apart.
 | 3.5 mm audio jack | yes | none |
 | Display FPC connector | −X short edge | **−Y long edge** (x 6.7…15.2) |
 | Display FPC type | 15-pin | 22-pin (0.5 mm) |
-| Tallest point above the PCB | 16.8 mm | 17.7 mm |
-| Clearance under the lid | 3.20 mm | 2.26 mm |
+| Tallest point above the PCB | 16.8 mm | 16.4 mm |
+| Clearance under the lid | 3.20 mm | 3.58 mm |
 | Works with the optional 40 mm fan | yes | only **without** the active cooler |
+
+Both boards carry the same stacked dual USB-A cans, so the tallest points above
+should really be identical. The reference meshes disagree with themselves about
+this — each models one USB block taller than the other beside it. The Pi 5's was
+corrected to the measured-and-fitted value after a printed lid showed a visible
+gap over the USB3 can and none over the USB2 one; the Pi 4's 0.4 mm is left as
+measured, because that lid is validated on hardware and it has never shown.
 
 Build the pair for your board:
 
