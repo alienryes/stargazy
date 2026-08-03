@@ -29,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.2.0"
+FIRMWARE_VERSION = "3.2.1"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 FONT_DIR = Path("/usr/share/fonts/truetype/dejavu")
@@ -924,18 +924,23 @@ def _draw_timeline(draw, states, y, f_xs):
     draw.rectangle([x0, y, x1, y + h], fill=BG, outline=STEEL)
 
     # Astronomical dark: the hours that actually count, not civil twilight.
-    a0 = _tl_x(_tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_setting_astronomical")), dawn),
-               dusk, dawn, x0, x1)
-    a1 = _tl_x(_tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_rising_astronomical")), dawn),
-               dusk, dawn, x0, x1)
+    t_a0 = _tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_setting_astronomical")), dawn)
+    t_a1 = _tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_rising_astronomical")), dawn)
+    a0 = _tl_x(t_a0, dusk, dawn, x0, x1)
+    a1 = _tl_x(t_a1, dusk, dawn, x0, x1)
     if a0 is not None and a1 is not None and a1 > a0:
         draw.rectangle([a0, y + 1, a1, y + h - 1], fill=ELECTRIC)
         # Label it, the same way the moon strip is labelled. This is the more
         # important of the two windows and it was the only unexplained mark on
         # the page - the bar cannot be read without knowing what the blue means.
-        lab = "astronomical dark"
-        if draw.textlength(lab, font=f_xs) + 12 < a1 - a0:
-            draw.text((a0 + 6, y + 3), lab, font=f_xs, fill=BG)
+        # The times ride in the same label rather than sitting under the
+        # boundaries: one element cannot collide with the Dusk/Dawn row below,
+        # and it degrades by dropping detail rather than by overlapping.
+        span = f"{t_a0.strftime('%H:%M')} - {t_a1.strftime('%H:%M')}"
+        for lab in (f"astronomical dark   {span}", "astronomical dark", span):
+            if draw.textlength(lab, font=f_xs) + 12 < a1 - a0:
+                draw.text((a0 + 6, y + 3), lab, font=f_xs, fill=BG)
+                break
 
     # Moon up washes the sky out. Shown as its own strip ABOVE the bar rather
     # than a translucent overlay - amber over the electric segment just turned
