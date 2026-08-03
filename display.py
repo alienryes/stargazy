@@ -29,7 +29,7 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.3.1"
+FIRMWARE_VERSION = "3.4.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 # IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
@@ -56,7 +56,14 @@ BG       = (10, 12, 28)      # opaque fills (bar troughs) — matches the night 
 WHITE    = (230, 232, 240)   # data text
 ICE      = (165, 243, 252)   # #A5F3FC — best conditions
 ELECTRIC = (56, 189, 248)    # #38BDF8 — good conditions, bar fills
-AMBER    = (245, 158, 11)    # #F59E0B — moon, and fair/caution
+AMBER    = (245, 158, 11)    # #F59E0B — fair/caution. STATUS ONLY.
+# The moon is an object, not a state, and it used to share AMBER with the FAIR
+# verdict - so on a fair night the two matched and implied a link that is not
+# there. Ivory rather than gold: every warm gold tested came out under the
+# ΔE 15 normal-vision floor against AMBER, i.e. hard to tell from it even with
+# full colour vision. Ivory is warm AND very light, so it clears amber, and it
+# is what the Moon actually looks like.
+MOON     = (240, 226, 196)   # #F0E2C4 — the moon, wherever it appears
 ROSE     = (244, 63, 94)     # #F43F5E — poor conditions
 STEEL    = (29, 94, 128)     # muted electric — bar trough frame
 MOON_DARK = (27, 36, 64)     # unlit lunar disc, just above the sky navy
@@ -439,13 +446,13 @@ def _bar_colour(value, good, warn):
 
 def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
     """Draw moon phase using parametric geometry."""
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=MOON_DARK, outline=AMBER, width=3)
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=MOON_DARK, outline=MOON, width=3)
 
     if illumination < 1:
         return  # new moon -- dark circle only
 
     if illumination > 99:
-        draw.ellipse([cx - r + 3, cy - r + 3, cx + r - 3, cy + r - 3], fill=AMBER)
+        draw.ellipse([cx - r + 3, cy - r + 3, cx + r - 3, cy + r - 3], fill=MOON)
         return
 
     phase_angle = math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * illumination / 100.0)))
@@ -463,7 +470,7 @@ def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
     if not waxing:
         pts = [(2 * cx - px, py) for px, py in pts]
 
-    draw.polygon(pts, fill=AMBER)
+    draw.polygon(pts, fill=MOON)
 
 
 # ── Animated sky ──────────────────────────────────────────────────────────
@@ -839,7 +846,7 @@ def render_foreground(states):
         moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title()
     )
     pn_w = int(draw.textlength(phase_name, font=f_sm))
-    draw.text((MCX - pn_w // 2, MCY + MR + 8), phase_name, fill=AMBER, font=f_sm)
+    draw.text((MCX - pn_w // 2, MCY + MR + 8), phase_name, fill=MOON, font=f_sm)
 
     if moon_const:
         mc_text = f"in {moon_const}"
@@ -1005,10 +1012,10 @@ def _draw_timeline(draw, states, y, f_xs):
     else:
         m0 = m1 = None
     if m0 is not None and m1 is not None and m1 > m0:
-        draw.rectangle([m0, y - 12, m1, y - 5], fill=AMBER)
+        draw.rectangle([m0, y - 12, m1, y - 5], fill=MOON)
         # Sits clear of the strip: the label's descenders reached it once the
         # type grew, so the offset is measured from the text, not guessed.
-        draw.text((m0 + 6, y - 16 - f_xs.size), "moon up", font=f_xs, fill=AMBER)
+        draw.text((m0 + 6, y - 16 - f_xs.size), "moon up", font=f_xs, fill=MOON)
 
     # Only mark "now" while it is actually within tonight; clamping it to an end
     # would draw a marker that reads as a real time when it is not.
@@ -1050,7 +1057,10 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
     for b in bodies:
         alt, az = _f(b.get("max altitude"), -99), _f(b.get("azimuth"), -1)
         name = str(b.get("target name", "?"))
-        col = AMBER if name.lower() == "moon" else ICE
+        # Planets were ICE, which is also the EXCELLENT verdict colour - a
+        # status hue doing duty as a data series. MUTED keeps them clearly
+        # apart from the ivory Moon (ΔE 22.9) and leaves ICE meaning one thing.
+        col = MOON if name.lower() == "moon" else MUTED
         marks.append((az, alt, name, col, _f(b.get("visual magnitude"), 5)))
     for c in comets:
         marks.append((_f(c.get("azimuth"), -1), _f(c.get("altitude"), -99),
