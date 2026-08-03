@@ -32,7 +32,7 @@ forecast_model = "ecmwf_ifs025"
 
 # Only needed when weather.source = "homeassistant".
 [ha]
-url = "http://192.168.1.167:8123"
+url = "http://192.168.1.x:8123"
 token = "your-long-lived-access-token-here"
 
 # Your observing site. This is the single source of truth for location: setup.sh

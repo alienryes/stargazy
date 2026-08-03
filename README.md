@@ -31,7 +31,7 @@ Rendered with Pillow at 1280×720 landscape and written straight to the Linux fr
 │───────────────────────────────────────────────────────────────│
 │ Tomorrow: Cloudy (5%)               New 12 Aug  -  Full 29 Jul  │
 │ LI: Over 6, very stable             Dusk 21:50  -  Dawn 04:39   │
-│ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 6.5 m/s        │
+│ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 4.0 mph        │
 └───────────────────────────────────────────────────────────────┘
         ...behind everything: a living sky — stars, clouds, meteors
 ```
@@ -57,9 +57,20 @@ Meteors streak occasionally through the night sky (rarer when cloudy). Star and 
 
 ## 🛠️ Requirements
 
-**Hardware**
-- Raspberry Pi 4 — what this is built and proven on. A **Pi 5 is untested**: it needs a longer 22-pin DSI FFC plus a 22-to-15-pin adapter, and `display.py` assumes a 16-bit RGB565 `/dev/fb0`, which a Pi 5 may not provide. There is also no performance reason to move — the render loop is single-threaded and uses about one core of four.
-- Raspberry Pi Touch Display 2, 5" variant (720×1280 DSI), connected via the DSI FFC
+**Hardware** — the whole build, and roughly what it costs:
+
+| Item | Qty | Notes |
+|---|---|---|
+| Raspberry Pi 4 Model B (2GB is plenty) | 1 | What this is built and proven on. See the Pi 5 note below |
+| Raspberry Pi Touch Display 2, **5-inch** | 1 | 720×1280 DSI, ~£36. Ships with a Pi 4 DSI cable |
+| Official Raspberry Pi USB-C PSU (5.1V/3A) | 1 | The printed stand is sized so this one's stiff cable clears the desk |
+| microSD card, 16GB+ | 1 | Raspberry Pi OS Lite 64-bit |
+| 3D-printed case and stands | 1 set | Optional — see [`case/`](case/README.md). ~150g of PETG |
+| M2.5 screws and standoffs | 1 set | Only for the case; full list in [`case/README.md`](case/README.md) |
+
+No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all screws and standoffs.
+
+> **A Pi 5 is untested for the software.** It needs a Display Adapter Cable for Pi 5 (22-way → 15-way, the one marked `DISPLAY`), and `display.py` assumes a 16-bit RGB565 `/dev/fb0` — a Pi 5 gets its framebuffer from DRM emulation, which commonly comes up 32bpp, so the packing code would need a format branch. There is no performance reason to move either: the render loop is single-threaded and uses about one core of four. The case *does* have a printable Pi 5 variant.
 
 **Software**
 - Raspberry Pi OS Lite 64-bit (Trixie / Bookworm), headless (`multi-user.target`)
@@ -147,7 +158,7 @@ python3 display.py --compare  # fetch from both weather sources and diff them
 
 A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](case/README.md) — four parametric CadQuery parts (shell, Pi clamshell, twin bolt-on stands at a 20° lean, optional 40 mm fan). A Pi 5 variant of the two clamshell parts is also generated, though it has not been built on hardware and its display ribbon routes differently. It's a **CC BY remix of [RonnyS's Touch Display 2 case](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)**, which targets the 7" panel; this one is re-drawn for the 5". See [`case/README.md`](case/README.md) for print settings, hardware and assembly.
 
-The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke stand (CadQuery frame + riser + WS2812B LED bezel ring). After moving to the self-lit Touch Display 2 that design was retired and archived, with full history, at [`adminfor/inky-impression-case`](https://forgejo.home.neilsayer.co.uk/adminfor/inky-impression-case).
+The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke stand (CadQuery frame + riser + WS2812B LED bezel ring). After moving to the self-lit Touch Display 2 that design was retired and archived, with its full history, to a separate private repository.
 
 ---
 
@@ -179,7 +190,7 @@ The daemon uses roughly 80% of one Pi 4 core at 20 fps; lower `fps` in `config.t
 ```
 display.py              Main script (render + animation + framebuffer daemon)
 config.toml             Local config (gitignored)
-config.example.toml     Template ([ha] + [display])
+config.example.toml     Template ([weather] + [location] + [display])
 deploy.ps1              Windows → Pi deploy script
 setup.sh                One-time Pi setup (run with sudo)
 systemd/
@@ -193,3 +204,21 @@ case/
   case_top.py             Ventilated lid (ports, fan grille + mounting)
   stand.py                Bolt-on desk stand — print 2
 ```
+
+---
+
+## 🙏 Acknowledgements
+
+This project is a thin dashboard over other people's hard work.
+
+- **[AstroWeather](https://github.com/mawinkler/astroweather) and [pyastroweatherio](https://github.com/mawinkler/pyastroweatherio)** by Markus Winkler (MIT). The seeing, transparency, calm and deep-sky figures are its model, not a reimplementation of it — the display calls the same library the Home Assistant integration wraps.
+- **[UpTonight](https://github.com/mawinkler/uptonight)**, also by Markus Winkler, computes the target lists on the Pi.
+- **Weather data** from [MET Norway](https://www.met.no/) and [Open-Meteo](https://open-meteo.com/), via the above.
+- **Sky imagery** from the [`hips2fits` service](https://alasky.cds.unistra.fr/hips-image-services/hips2fits) at **CDS, Strasbourg Observatory, France**, rendering the **DSS2 colour** HiPS survey. The Digitized Sky Survey was produced at the Space Telescope Science Institute under U.S. Government grant NAG W-2166, from photographic data of the Oschin Schmidt Telescope on Palomar Mountain and the UK Schmidt Telescope.
+- **The case** is a remix of **"Raspberry Pi Touch Display 2 Case" by RonnyS** ([Printables 1377047](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)), used under CC BY.
+
+## 📄 Licence
+
+**GPL-3.0** — see [LICENSE](LICENSE). Chosen to match [pilomar](https://github.com/Short-bus/pilomar), the Pi miniature-observatory project this one keeps company with.
+
+**Except `case/`**, which is **CC BY** rather than GPL, because it is a remix of RonnyS's CC-BY model and that licence carries forward. Credit RonnyS and this project if you remix it further.
