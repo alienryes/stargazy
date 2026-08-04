@@ -73,3 +73,21 @@ page_seconds = 20
 #            no reading on this display is carried by colour alone.
 night_mode = "off"
 night_dim = 45
+
+# Touch controls. Tap the panel once and a control strip appears along the
+# bottom for strip_seconds; tap a button to use it, or leave it and it goes
+# away again. Nothing is drawn until you touch the screen, and nothing fires on
+# that first tap - this is a display to look at, not a control panel.
+#
+# The buttons are: night mode (cycles off/dim/red), pause or resume the page
+# rotation, jump to the next page, dimmer, brighter, and blank. Blanking turns
+# the backlight off and stops compositing until the next touch, which is the
+# only state in which the display is not using a core.
+#
+# Everything here is transient - the settings above are restored on restart.
+# Dimmer and brighter need write access to /sys/class/backlight, which setup.sh
+# arranges by putting the account in the "video" group. Touch needs "input",
+# from the same place. Requires display.mode = "animated".
+[touch]
+enabled = true
+strip_seconds = 6

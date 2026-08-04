@@ -13,6 +13,7 @@ UpTonight's target reports, which are produced locally by a daily systemd timer.
 """
 
 import argparse
+import glob
 import json
 import logging
 import math
@@ -29,7 +30,9 @@ import requests
 import tomllib
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-FIRMWARE_VERSION = "3.5.0"
+import touch
+
+FIRMWARE_VERSION = "3.6.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 # IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
@@ -86,6 +89,14 @@ HLINE2 = 252                # verdict bottom
 HLINE3 = 548                # footer top
 DIV_X  = 800                # vertical divider: conditions | moon
 RIGHT_CX = (DIV_X + W) // 2  # centre of right (moon) panel = 1040
+
+# Touch control strip. Hidden until the panel is tapped, because this is an
+# ambient display and permanent on-screen buttons would cost content space on
+# every one of the thousands of frames nobody is touching.
+STRIP_H  = 64
+STRIP_Y  = H - STRIP_H - 16
+BTN_GAP  = 8
+NIGHT_CYCLE = ("off", "dim", "red")
 
 # Every value the dashboard needs, as HA entity suffix -> pyastroweatherio
 # property. ONE table, because the two weather sources must stay in step: the
@@ -1269,6 +1280,16 @@ def to_fb_bytes(img, night="off", dim=45):
     return packed.astype("<u2").tobytes()
 
 
+def inside_window(window):
+    """True when the clock is between real dusk and dawn."""
+    if not window:
+        return False
+    dusk, dawn = window
+    if dusk is None or dawn is None:
+        return False
+    return dusk <= datetime.now().astimezone() <= dawn
+
+
 def night_mode_now(mode, window):
     """The mode to apply right now - "off" outside the dusk-to-dawn window.
 
@@ -1276,12 +1297,7 @@ def night_mode_now(mode, window):
     point is to stop the panel wrecking your dark adaptation, and that starts
     when the sky does.
     """
-    if mode == "off" or not window:
-        return "off"
-    dusk, dawn = window
-    if dusk is None or dawn is None:
-        return "off"
-    return mode if dusk <= datetime.now().astimezone() <= dawn else "off"
+    return mode if mode != "off" and inside_window(window) else "off"
 
 
 NIGHT_BASE = None
@@ -1311,7 +1327,33 @@ def draw_clock(draw):
     draw.text((W - ts_w - MARGIN, 28), now_str, fill=MUTED, font=f_sm)
 
 
-def compose(fg, params, t, meteors, clouds):
+def button_rects(n):
+    """The n control-strip buttons, left to right, as (x0, y0, x1, y1)."""
+    w = (W - 2 * MARGIN - (n - 1) * BTN_GAP) // n
+    return [(MARGIN + i * (w + BTN_GAP), STRIP_Y,
+             MARGIN + i * (w + BTN_GAP) + w, STRIP_Y + STRIP_H)
+            for i in range(n)]
+
+
+def button_at(x, y, n):
+    """Index of the button under a tap, or None."""
+    for i, (x0, y0, x1, y1) in enumerate(button_rects(n)):
+        if x0 <= x <= x1 and y0 <= y <= y1:
+            return i
+    return None
+
+
+def draw_strip(draw, labels):
+    """Stamp the control strip over a composed frame."""
+    f = _font("IBMPlexSans-SemiBold.ttf", 26)
+    for (x0, y0, x1, y1), label in zip(button_rects(len(labels)), labels):
+        draw.rounded_rectangle((x0, y0, x1, y1), radius=10,
+                               fill=BG, outline=STEEL, width=2)
+        tw = int(draw.textlength(label, font=f))
+        draw.text(((x0 + x1 - tw) // 2, y0 + 16), label, fill=WHITE, font=f)
+
+
+def compose(fg, params, t, meteors, clouds, labels=None):
     """One composited frame: sky + drifting clouds + meteors + dashboard on top."""
     night, twi = _bases()
     frame = (twi if params["twilight"] else night).copy()
@@ -1323,7 +1365,141 @@ def compose(fg, params, t, meteors, clouds):
         draw_meteor(d, m)
     frame.paste(fg, (0, 0), fg)
     draw_clock(d)
+    # Drawn per frame alongside the clock rather than into the cached overlay:
+    # it appears and disappears on its own timer, and the overlay only changes
+    # when the data does.
+    if labels:
+        draw_strip(d, labels)
     return frame
+
+
+# ── Backlight and touch controls ──────────────────────────────────────────
+
+def _backlight(name):
+    """Path to a backlight sysfs attribute, or None if the panel has none."""
+    dirs = sorted(glob.glob("/sys/class/backlight/*"))
+    return Path(dirs[0]) / name if dirs else None
+
+
+def read_brightness(name="brightness"):
+    p = _backlight(name)
+    try:
+        return int(p.read_text()) if p else 0
+    except OSError:
+        return 0
+
+
+def set_brightness(value):
+    """Set the panel backlight. Does nothing, loudly, if it is not writable.
+
+    bl_power would be the natural way to blank the panel, but on this kernel it
+    is root-only while brightness is writable by group video - which the daemon
+    is already in - so brightness 0 is what blanking uses.
+    """
+    p = _backlight("brightness")
+    if not p:
+        return
+    try:
+        p.write_text(str(value))
+    except OSError as e:
+        log.warning("Backlight not writable: %s", e)
+
+
+class Controls:
+    """What the control strip shows, and what a tap on it does.
+
+    None of this is persisted: config.toml stays the source of truth for the
+    defaults, so a restart always comes back to a known state rather than to
+    whatever was last poked at in the dark.
+    """
+
+    def __init__(self, night, strip_seconds):
+        self.config_night   = night
+        self.strip_seconds  = strip_seconds
+        self.override       = None   # night mode chosen by hand, or None
+        self.override_dark  = None   # dusk-to-dawn state when it was chosen
+        self.paused         = False
+        self.next_page      = False
+        self.blanked        = False
+        self.shown_until    = 0.0
+        self.max_brightness = read_brightness("max_brightness")
+        self.brightness     = read_brightness() or self.max_brightness
+
+    @property
+    def visible(self):
+        return time.time() < self.shown_until
+
+    def show(self):
+        self.shown_until = time.time() + self.strip_seconds
+
+    def labels(self):
+        return [f"Night: {self.override or self.config_night}",
+                "Resume" if self.paused else "Pause",
+                "Next", "Dimmer", "Brighter", "Blank"]
+
+    def night_now(self, window):
+        """The night mode to apply right now, honouring a manual override.
+
+        An override applies immediately whatever the hour - being able to see
+        red mode in the afternoon is most of the point of a button - but it
+        lapses the next time the sky crosses dusk or dawn. It is a change of
+        mind about tonight, not a second schedule competing with the real one.
+        """
+        dark = inside_window(window)
+        if self.override is not None and dark != self.override_dark:
+            self.override = None
+        if self.override is not None:
+            return self.override
+        return night_mode_now(self.config_night, window)
+
+    def take_next(self):
+        """True once after the Next button is pressed."""
+        stepped, self.next_page = self.next_page, False
+        return stepped
+
+    def _step_brightness(self, direction):
+        # Never down to 0: going fully dark is what Blank is for, and a strip
+        # you cannot see is a strip you cannot undo.
+        step = max(1, self.max_brightness // 8)
+        self.brightness = max(1, min(self.max_brightness,
+                                     self.brightness + direction * step))
+        set_brightness(self.brightness)
+
+    def blank(self):
+        self.blanked = True
+        self.shown_until = 0.0
+        set_brightness(0)
+
+    def wake(self):
+        self.blanked = False
+        set_brightness(self.brightness)
+
+    def touched(self, x, y, window):
+        """Handle one tap, in render coordinates."""
+        if self.blanked:
+            self.wake()
+            return
+        if not self.visible:
+            # First tap only reveals the controls. Nothing on an ambient
+            # display should fire from a tap you cannot see the target of.
+            self.show()
+            return
+        self.show()
+        idx = button_at(x, y, len(self.labels()))
+        if idx == 0:
+            cur = self.night_now(window)
+            self.override = NIGHT_CYCLE[(NIGHT_CYCLE.index(cur) + 1) % len(NIGHT_CYCLE)]
+            self.override_dark = inside_window(window)
+        elif idx == 1:
+            self.paused = not self.paused
+        elif idx == 2:
+            self.next_page = True
+        elif idx == 3:
+            self._step_brightness(-1)
+        elif idx == 4:
+            self._step_brightness(+1)
+        elif idx == 5:
+            self.blank()
 
 
 # ── Run modes ─────────────────────────────────────────────────────────────
@@ -1337,7 +1513,8 @@ def _install_signal_handlers():
 
 
 def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
-               page_seconds, demo=False, night="off", night_dim=45):
+               page_seconds, demo=False, night="off", night_dim=45,
+               touch_enabled=True, strip_seconds=6):
     """Long-running loop: animate the panel while a thread refreshes the data."""
     state = {"pages": [], "params": None, "window": None}
 
@@ -1373,6 +1550,13 @@ def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
 
     threading.Thread(target=refresher, daemon=True).start()
 
+    controls = None
+    reader = touch.TouchReader(W, H, FB_W, FB_H) if touch_enabled and animated else None
+    if reader and reader.start():
+        controls = Controls(night, strip_seconds)
+    else:
+        reader = None
+
     fb = open(FB_DEV, "wb")
     try:
         if not animated:
@@ -1395,10 +1579,27 @@ def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
         meteors = []
         clouds = initial_clouds(state["params"])
         next_meteor = t0 + random.uniform(1.0, 3.0)
+        page_i, next_flip = 0, t0 + page_seconds
+        dark_frame = b"\x00" * (FB_W * FB_H * 2)
+        blanked = False
         while _RUNNING:
             now = time.time()
             t = now - t0
             params = state["params"]
+            if controls:
+                tap = reader.get()
+                if tap:
+                    controls.touched(tap[0], tap[1], state["window"])
+                if controls.blanked:
+                    # Backlight off and nothing composited: the one state in
+                    # which this display is not using a whole core.
+                    if not blanked:
+                        fb.seek(0)
+                        fb.write(dark_frame)
+                        blanked = True
+                    time.sleep(0.05)
+                    continue
+                blanked = False
             # Clouds: match the count to cover, drift across, recycle off the right edge.
             tgt = round(params["cloud"] / 100 * MAX_CLOUDS)
             while len(clouds) > tgt:
@@ -1420,11 +1621,21 @@ def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
                 if m["life"] >= m["max"] or m["y"] > H + 20 or m["x"] < -20:
                     meteors.remove(m)
             pages = state["pages"]
-            page = pages[int(t / page_seconds) % len(pages)]
-            frame = compose(page, params, t, meteors, clouds)
+            if controls and controls.take_next():
+                page_i, next_flip = page_i + 1, now + page_seconds
+            elif now >= next_flip:
+                # A paused page holds; the deadline still moves, so resuming
+                # gives a full turn on the page rather than an instant flip.
+                if not (controls and controls.paused):
+                    page_i += 1
+                next_flip = now + page_seconds
+            page = pages[page_i % len(pages)]
+            frame = compose(page, params, t, meteors, clouds,
+                            controls.labels() if controls and controls.visible else None)
+            mode = controls.night_now(state["window"]) if controls \
+                else night_mode_now(night, state["window"])
             fb.seek(0)
-            fb.write(to_fb_bytes(frame, night_mode_now(night, state["window"]),
-                                 night_dim))
+            fb.write(to_fb_bytes(frame, mode, night_dim))
             dt = time.time() - now
             if dt < frame_dt:
                 time.sleep(frame_dt - dt)
@@ -1452,9 +1663,10 @@ def main():
     page_seconds = float(disp.get("page_seconds", 20))
     night = disp.get("night_mode", "off")
     night_dim = int(disp.get("night_dim", 45))
-    if night not in ("off", "dim", "red"):
+    if night not in NIGHT_CYCLE:
         raise ValueError(f'display.night_mode is "{night}"; '
                          'expected "off", "dim" or "red"')
+    tch = config.get("touch", {})
 
     if args.compare:
         return compare_sources(config)
@@ -1494,7 +1706,9 @@ def main():
     _install_signal_handlers()
     run_daemon(fetch, out_dir, lat, animated=(mode != "static"), fps=fps,
                refresh_min=refresh_min, page_seconds=page_seconds, demo=args.demo,
-               night=night, night_dim=night_dim)
+               night=night, night_dim=night_dim,
+               touch_enabled=bool(tch.get("enabled", True)),
+               strip_seconds=float(tch.get("strip_seconds", 6)))
 
 
 if __name__ == "__main__":

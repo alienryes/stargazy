@@ -15,8 +15,11 @@ echo "==> Installing system packages..."
 apt-get install -y fonts-dejavu-core fonts-ibm-plex python3-pil python3-numpy \
     python3-requests python3-pip python3-venv
 
-echo "==> Ensuring $USER can write the framebuffer..."
+echo "==> Ensuring $USER can write the framebuffer and read the touchscreen..."
+# video also carries write access to /sys/class/backlight, which the touch
+# controls use for brightness and for blanking the panel.
 adduser "$USER" video || true
+adduser "$USER" input || true
 
 echo "==> Freeing the framebuffer console (fbcon=map:2)..."
 # Keep the text console off /dev/fb0 so it never overdraws the dashboard.

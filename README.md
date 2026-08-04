@@ -55,6 +55,26 @@ Meteors streak occasionally through the night sky (rarer when cloudy). Star and 
 
 ---
 
+## 👆 Touch controls
+
+The panel is a touchscreen, and the display reads it directly from `/dev/input/eventN` — no X, no Wayland, no extra packages.
+
+Nothing is drawn until you touch the screen. **The first tap only reveals a control strip** along the bottom, which goes away again after six seconds; a second tap presses a button. That way an ambient display stays uncluttered, and a brush past the panel in the dark cannot change anything.
+
+| Button | What it does |
+|---|---|
+| **Night** | Cycles the night filter off → dim → red, immediately, whatever the hour |
+| **Pause** / **Resume** | Holds the current page instead of rotating |
+| **Next** | Jumps to the next page straight away |
+| **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
+| **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until you touch it again. The one setting that matters at the eyepiece |
+
+A night mode picked by hand lapses the next time the sky crosses dusk or dawn: it is a change of mind about tonight, not a second schedule competing with the automatic one. Nothing else here is persisted either — `config.toml` is restored on restart, so the display always comes back to a known state.
+
+Requires `display.mode = "animated"`, and an account in the `input` and `video` groups (`setup.sh` arranges both). Set `touch.enabled = false` to turn the whole thing off.
+
+---
+
 ## 🛠️ Requirements
 
 **Hardware** — the whole build, and roughly what it costs:
@@ -191,8 +211,9 @@ The daemon uses roughly 80% of one Pi 4 core at 20 fps; lower `fps` in `config.t
 
 ```
 display.py              Main script (render + animation + framebuffer daemon)
+touch.py                Touchscreen reader (evdev; run alone to check mapping)
 config.toml             Local config (gitignored)
-config.example.toml     Template ([weather] + [location] + [display])
+config.example.toml     Template ([weather] + [location] + [display] + [touch])
 deploy.ps1              Windows → Pi deploy script
 setup.sh                One-time Pi setup (run with sudo)
 systemd/

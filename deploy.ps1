@@ -30,6 +30,7 @@ Invoke-Pi "mkdir -p $REMOTE_DIR"
 # Copy files
 Write-Host "--> Copying files..."
 Copy-ToPi "display.py"    "$REMOTE_DIR/display.py"
+Copy-ToPi "touch.py"      "$REMOTE_DIR/touch.py"
 Copy-ToPi "requirements.txt" "$REMOTE_DIR/requirements.txt"
 Copy-ToPi "render_uptonight_config.py" "$REMOTE_DIR/render_uptonight_config.py"
 Copy-ToPi "uptonight\config.yaml.template" "$REMOTE_DIR/uptonight-config.yaml.template"
