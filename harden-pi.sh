@@ -5,18 +5,18 @@
 #   sudo bash harden-pi.sh <username>   # or name the account explicitly
 #
 # Neither change is required to run the display, and neither is done by
-# setup.sh - they alter how you log into the machine, which is not something an
-# application installer should decide for you. They are here because the README
-# recommends both and advice you cannot act on is not much use.
+# setup.sh - they alter how the machine is logged into, which is not a decision
+# an application installer should make. They are provided here because the
+# README recommends both.
 #
 # Safe by construction: it refuses to disable passwords unless a key is already
 # installed, validates the sshd config before applying it, rolls back if that
-# validation fails, and RELOADS rather than restarts sshd, so the session you
-# are running this from survives either outcome.
+# validation fails, and RELOADS rather than restarts sshd, so the invoking
+# session survives either outcome.
 #
-# READ THIS FIRST: afterwards, root is reachable only via your SSH key plus
-# your account password. If the Pi has no keyboard attached and you lose both,
-# recovery means taking the SD card to another machine.
+# READ THIS FIRST: afterwards, root is reachable only via the SSH key plus the
+# account password. On a Pi with no keyboard attached, losing both means
+# recovering via the SD card in another machine.
 set -e
 
 # As setup.sh: infer the invoking account rather than defaulting to a name.
@@ -38,8 +38,9 @@ echo "==> Hardening for user: $USER"
 
 echo "==> Checking key-based login is viable before disabling passwords..."
 if [ ! -s "$KEYS" ]; then
-    echo "REFUSING: $KEYS is missing or empty - disabling passwords would lock you out." >&2
-    echo "Copy your key over first (ssh-copy-id $USER@<host>) and rerun." >&2
+    echo "REFUSING: $KEYS is missing or empty - disabling passwords would" >&2
+    echo "lock this account out. Install a key first (ssh-copy-id $USER@<host>)" >&2
+    echo "and rerun." >&2
     exit 1
 fi
 echo "    $(grep -c . "$KEYS") key(s) present in $KEYS"
@@ -89,6 +90,6 @@ systemctl is-enabled apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
 
 echo
 echo "==> Done. SSH is key-only; security updates apply automatically."
-echo "    Verify from another terminal before closing this one:"
+echo "    Verify from a second terminal before closing this one:"
 echo "      ssh -o PubkeyAuthentication=no $USER@<host>   # must be refused"
 echo "      ssh $USER@<host>                              # must still work"

@@ -85,7 +85,7 @@ No controls are drawn until the screen is touched. **The first tap only reveals 
 | **Pause** / **Resume** | Holds the current page instead of rotating |
 | **Next** | Jumps to the next page straight away |
 | **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
-| **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until it's touch it again. |
+| **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until it is touched again. |
 
 A night mode picked by hand lapses the next time the sky crosses dusk or dawn: it is a change of mind about tonight, not a second schedule competing with the automatic one. Nothing else here is persisted either — `config.toml` is restored on restart, so the display always comes back to a known state.
 

@@ -12,8 +12,8 @@ set -e
 USER="${1:-${SUDO_USER:-}}"
 if [ -z "$USER" ] || [ "$USER" = "root" ]; then
     echo "Usage: sudo bash setup.sh <username>" >&2
-    echo "  (could not infer the account - SUDO_USER is unset, so you are" >&2
-    echo "   probably running as root directly rather than through sudo)" >&2
+    echo "  (could not infer the account - SUDO_USER is unset, which happens" >&2
+    echo "   when running as root directly rather than through sudo)" >&2
     exit 1
 fi
 if ! id "$USER" >/dev/null 2>&1; then
@@ -107,7 +107,7 @@ if [ -f "$DISPLAY_DIR/systemd/install-units.sh" ]; then
     echo "==> Installing systemd units from $DISPLAY_DIR/systemd..."
     bash "$DISPLAY_DIR/systemd/install-units.sh"
 else
-    echo "==> Units not staged yet - the first deploy.ps1 run will tell you how to install them."
+    echo "==> Units not staged yet - the first deploy.ps1 run prints the install command."
 fi
 
 echo "==> Done. You can now run deploy.ps1 from Windows."

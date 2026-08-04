@@ -12,7 +12,7 @@ param(
 # accept-new, not no: the first connect trusts the key it sees (as before), but
 # after that a changed key aborts instead of silently connecting - this script
 # ships config.toml, the one file carrying a real credential, so it should not
-# be talkable-to by an impostor. If you reflash the Pi, clear the stale key
+# be talkable-to by an impostor. After reflashing the Pi, clear the stale key
 # with: ssh-keygen -R <host>.
 $PI = "$User@$PiHost"
 $REMOTE_DIR = "/home/$User/touch2-stargazing"
@@ -86,7 +86,7 @@ if ($changed) {
     Write-Host ""
     Write-Host "      ssh -4 -t ${PI} `"sudo bash $REMOTE_DIR/systemd/install-units.sh`""
     Write-Host ""
-    Write-Host "    The display keeps running on the old units until you do."
+    Write-Host "    The display keeps running on the old units until then."
 } else {
     Write-Host "--> Units unchanged; restarting display..."
     Invoke-Pi "sudo -n systemctl restart touch2-stargazing.service"

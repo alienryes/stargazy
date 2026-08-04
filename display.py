@@ -707,8 +707,9 @@ def moon_image():
     thread only; never call this from the render loop.
 
     Deliberately does NOT fall back to a cached older frame: the phase moves
-    about 12 degrees a day, so yesterday's picture is simply wrong. A correct
-    drawing beats a beautiful lie, and that is what returning None gets you.
+    about 12 degrees a day, so yesterday's picture would be wrong. Returning
+    None instead selects the parametric drawing, which is computed from current
+    data and therefore correct, if simpler.
     """
     MOON_CACHE.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")
@@ -716,9 +717,10 @@ def moon_image():
         meta = requests.get(DIALAMOON_URL + stamp, timeout=20)
         meta.raise_for_status()
         url  = meta.json()["image"]["url"]
-        # The filename comes from a network response, so keep it boring: strip
-        # anything a path could be built from ("\" would traverse on Windows,
-        # and a bare ".." names the cache dir itself).
+        # The filename comes from a network response, so constrain it to
+        # known-safe characters: anything a path could be built from is
+        # stripped ("\" would traverse on Windows, and a bare ".." names the
+        # cache directory itself).
         name = re.sub(r"[^A-Za-z0-9._-]+", "_", url.rsplit("/", 1)[-1])
         if not name.strip("._-"):
             name = "frame.jpg"
@@ -779,7 +781,7 @@ def _glyph(draw, cx, cy, r, otype):
 # then in use dropped the field; running UpTonight locally made both unnecessary.)
 def peak(dec, lat):
     """(altitude, compass letter) at meridian transit. An object north of the
-    zenith culminates due north, not south - which is where you actually face."""
+    zenith culminates due north, not south, which is the direction to face."""
     return 90.0 - abs(lat - dec), ("N" if dec > lat else "S")
 
 
@@ -1383,8 +1385,8 @@ def night_mode_now(mode, window):
     """The mode to apply right now - "off" outside the dusk-to-dawn window.
 
     Tied to real dusk and dawn rather than a clock schedule, because the whole
-    point is to stop the panel wrecking your dark adaptation, and that starts
-    when the sky does.
+    point is to stop the panel wrecking dark adaptation, and that starts when
+    the sky does.
     """
     return mode if mode != "off" and inside_window(window) else "off"
 
@@ -1547,8 +1549,8 @@ class Controls:
         return stepped
 
     def _step_brightness(self, direction):
-        # Never down to 0: going fully dark is what Blank is for, and a strip
-        # you cannot see is a strip you cannot undo.
+        # Never down to 0: going fully dark is what Blank is for, and the strip
+        # must stay visible for the change to be reversible.
         step = max(1, self.max_brightness // 8)
         self.brightness = max(1, min(self.max_brightness,
                                      self.brightness + direction * step))
@@ -1570,7 +1572,7 @@ class Controls:
             return
         if not self.visible:
             # First tap only reveals the controls. Nothing on an ambient
-            # display should fire from a tap you cannot see the target of.
+            # display should fire from a tap whose target was not visible.
             self.show()
             return
         self.show()
