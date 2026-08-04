@@ -5,7 +5,7 @@ Raspberry Pi 4 or Pi 5 mounted behind it, used landscape. Four printed parts, an
 easel stand at a 20° lean, and an optional 40 mm fan.
 
 The two boards share an outline and a mounting pattern, so only the port
-openings differ. Print the files for your board — see
+openings differ. Print the files for the chosen board — see
 [Choosing the board variant](#choosing-the-board-variant), and read it before
 committing to a Pi 5: **the Pi 5 variant has not been built on hardware**, and
 its display ribbon routing is genuinely different.
@@ -156,7 +156,7 @@ corrected to the measured-and-fitted value after a printed lid showed a visible
 gap over the USB3 can and none over the USB2 one; the Pi 4's 0.4 mm is left as
 measured, because that lid is validated on hardware and it has never shown.
 
-Build the pair for your board:
+Build the pair for that board:
 
 ```bash
 python case_bottom.py pi5 && python case_top.py pi5
@@ -176,10 +176,10 @@ further along — so the ribbon has to run across the top of the board to reach
 one. There is room above the PCB for it, but the panel's own cable will not
 reach and will not fit.
 
-What you need is a single **Raspberry Pi Display Adapter Cable for Pi 5** —
+The part required is a single **Raspberry Pi Display Adapter Cable for Pi 5** —
 22-way 0.5 mm pitch at the Pi end, 15-way 1 mm pitch at the display end — which
 replaces the panel's cable outright. It is one part, not a cable plus an
-adapter. Sold in 200 / 300 / 500 mm lengths; measure your routing before
+adapter. Sold in 200 / 300 / 500 mm lengths; measure the routing before
 choosing, as the run climbs through the bay and then crosses the board.
 
 **Display and camera adapter cables are not interchangeable.** The Pi 5's two
@@ -208,13 +208,13 @@ grille holes still vent.
 
 **No heat-set inserts and no soldering iron** — everything threads into a
 standoff. Screw lengths are calculated from the stack-up; confirm the
-M2.5 × 16 against your panel, since the thread depth of the display's own
-screw bosses is not published.
+M2.5 × 16 against the panel in hand, since the thread depth of the display's
+own screw bosses is not published.
 
 The stands add only **1.0 mm** to the case-screw stack — the strap is 3 mm
 thick but 2 mm of that is counterbore, so the head drops most of the way in.
 The same M2.5 × 16 therefore still works, with about 10 mm of thread in the
-display's boss instead of 11 mm. If yours feel short, go to × 18.
+display's boss instead of 11 mm. If they feel short, go to × 18.
 
 The Pi is **not** carried by the case. The display's four built-in 15.9 mm
 standoffs carry it, via the extenders. One screw chain runs the whole stack:
@@ -247,10 +247,10 @@ re-run that script after changing any part.
    flange with its strut pointing down and back — `_usb` on the USB/Ethernet
    side, `_dsi` on the other — and run the four **case screws** (103.7 × 51
    pattern) through both into the display's screw bosses. Each stand's screw
-   slots open toward the **middle** of the case; if they face outward you have
-   the pair swapped. A driver reaches all four screws even with the Pi and lid
-   fitted, provided the +X cables are unplugged, so you can change the lean
-   angle later without taking the case apart — and because the slots are open,
+   slots open toward the **middle** of the case; if they face outward the pair
+   is swapped. A driver reaches all four screws even with the Pi and lid
+   fitted, provided the +X cables are unplugged, so the lean angle can be
+   changed later without taking the case apart — and because the slots are open,
    **slacken the screws by a few turns and slide the stand off sideways**
    rather than removing them.
 4. Plug the **DSI ribbon** into the display, then seat the Pi on the extenders.
@@ -270,7 +270,7 @@ re-run that script after changing any part.
 
 The spigots are a Ø3.0 pin in a Ø3.5 socket, so the lid can still shift about
 0.25 mm before they bite — enough to assemble reliably in PETG, which prints
-slightly proud. If yours end up too tight to seat, or too loose to feel like
+slightly proud. If they end up too tight to seat, or too loose to feel like
 they are doing anything, change `spigot_fit` in `case_top.py` and re-print the
 lid; the pin is not affected.
 
@@ -396,8 +396,8 @@ on the panel. Measured on a real 5-inch unit:
 
 That gives `ext_off_x = -8.7`, `ext_off_y = 0` in `case_bottom.py` and
 `shell.py`, placing the Pi board at x −41.2 … 43.8. Everything downstream — the
-bay, the wall positions and the lid's port apertures — follows from it, so if
-your panel measures differently, change those two values and re-run all three
+bay, the wall positions and the lid's port apertures — follows from it, so if a
+panel measures differently, change those two values and re-run all three
 scripts.
 
 Do not confuse these with the **103.7 × 51 screw bosses**, which sit 5.5 mm
@@ -443,8 +443,8 @@ deliberately generous **2.0 mm**, putting the sill top at Z 5.35 on a Pi 4 and
 One flat sill spans the whole opening, so this is the margin under the **lowest**
 socket — the **USB-C** on both boards, which is the one to check first if
 anything fouls. Every other port on that edge gets at least as much: on a Pi 4
-the micro-HDMIs and the audio jack clear the sill by 2.65 mm. If a cable of
-yours still will not seat, raise this value and re-print the case-bottom.
+the micro-HDMIs and the audio jack clear the sill by 2.65 mm. If a particular
+cable still will not seat, raise this value and re-print the case-bottom.
 
 The USB/Ethernet sill needs no such margin (0.35 mm), since no plug ever reaches
 it.

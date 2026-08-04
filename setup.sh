@@ -110,4 +110,4 @@ else
     echo "==> Units not staged yet - the first deploy.ps1 run prints the install command."
 fi
 
-echo "==> Done. You can now run deploy.ps1 from Windows."
+echo "==> Done. deploy.ps1 can now be run from Windows."
