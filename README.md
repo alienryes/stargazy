@@ -270,6 +270,17 @@ case/
 
 ---
 
+## 💬 Feedback and contributions
+
+Bug reports, questions and build photos are all welcome via [Issues](https://github.com/alienryes/touch2-stargazing-display/issues).
+
+Two areas where reports are especially useful, because they cannot be verified here:
+
+- **The Pi 5 case variant has never been built on hardware.** It is derived from the board model and checked in software only, and its display ribbon routes differently — see [`case/README.md`](case/README.md) before committing to a print.
+- **Other latitudes.** The reference build sits at 51°N. The targets page caps its altitude axis at 70° because nothing near the ecliptic rises higher from there; much further south that will clip real objects, and `PAN_ALT_MAX` in `display.py` is the value to raise.
+
+---
+
 ## 🙏 Acknowledgements
 
 This project is a thin dashboard over other people's hard work.
