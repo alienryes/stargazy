@@ -18,6 +18,20 @@ Rendered with Pillow at 1280×720 landscape and written straight to the Linux fr
 
 ## 📸 Display layout
 
+Two pages rotate over the same continuous animated sky. Both shots are real frames from a Pi 4, rendered from live data:
+
+**Page 1 — tonight's conditions**
+
+![The conditions page: a large FAIR verdict in amber, four labelled condition bars with percentages, and a photographic waning gibbous Moon captioned Waning Gibbous in Pisces. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind.](screenshots/conditions.png)
+
+**Page 2 — tonight's targets**
+
+![The targets page: a dusk-to-dawn timeline with the astronomical dark window highlighted and a moon-up strip above it; an altitude-versus-bearing plot of the Moon and planets; and four deep-sky cards, each with a real sky photograph, object type, constellation, peak altitude and time.](screenshots/targets.png)
+
+The page-2 timeline only appears once UpTonight has run, and the page leaves the rotation entirely if it has produced nothing — better one page than a dead one.
+
+The schematic below labels the regions of page 1:
+
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │ STARGAZING                                     Fri 24 Jul 21:58 │
@@ -235,6 +249,7 @@ The daemon uses roughly 80% of one Pi 4 core at 20 fps; lower `fps` in `config.t
 ```
 display.py              Main script (render + animation + framebuffer daemon)
 touch.py                Touchscreen reader (evdev; run alone to check mapping)
+screenshots/            README images, regenerated with display.py --save
 config.toml             Local config (gitignored)
 config.example.toml     Template ([weather] + [location] + [display] + [touch])
 deploy.ps1              Windows → Pi deploy script
