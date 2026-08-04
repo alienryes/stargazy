@@ -759,11 +759,12 @@ def _glyph(draw, cx, cy, r, otype):
         draw.ellipse([cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy + r * 0.45], outline=STEEL)
 
 
-# Declination, so the cards can say how high each object actually gets. UpTonight
-# publishes no coordinates over MQTT, but CDS's Sesame resolver returns them for
-# any catalogue name - including the LBN/LDN entries an image library has never
-# heard of. One small text response per object, cached forever: the sky does not
-# move. Peak altitude is then 90 - |latitude - declination|.
+# How high each object actually gets. UpTonight gives alt/az for the planets and
+# comets but nothing positional for deep-sky objects, so the cards derive it:
+# peak altitude is 90 - |latitude - declination|, with declination coming
+# straight out of UpTonight's own report file. (Until v3.0.0 that number was
+# looked up from CDS's Sesame resolver and cached, because the MQTT transport
+# then in use dropped the field; running UpTonight locally made both unnecessary.)
 def peak(dec, lat):
     """(altitude, compass letter) at meridian transit. An object north of the
     zenith culminates due north, not south - which is where you actually face."""

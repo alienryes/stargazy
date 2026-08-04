@@ -229,7 +229,11 @@ length means changing `standoff` in `case_top.py` and re-running it.
 
 ## Assembly
 
-![Exploded assembly diagram](assembly_pi4.png)
+![Exploded assembly diagram, Pi 4 variant](assembly_pi4.png)
+
+*Building the Pi 5 variant instead? The same diagram for that board is
+[`assembly_pi5.png`](assembly_pi5.png) — the assembly steps below are identical,
+only the port openings differ.*
 
 The numbered callouts match the steps below. The diagram is generated from the
 part STLs by `assembly_diagram.py`, so it cannot drift from the geometry —

@@ -50,6 +50,10 @@ if [ ! -d "$UT_DIR/.venv" ]; then
     sudo -u "$USER" python3 -m venv "$UT_DIR/.venv"
 fi
 sudo -u "$USER" "$UT_DIR/.venv/bin/pip" install -q --upgrade pip
+# paho-mqtt is NOT optional and NOT a leftover, however much it looks like one
+# here: this build never publishes anything, but UpTonight's report.py imports
+# uptonight.mqtthandler unconditionally, which imports paho at module level.
+# Drop it and the nightly run dies on ImportError. Leave it alone.
 sudo -u "$USER" "$UT_DIR/.venv/bin/pip" install -q --only-binary=:all: \
     astroplan astropy skyfield numpy pandas matplotlib pillow h5py \
     PyYAML pytz requests paho-mqtt
