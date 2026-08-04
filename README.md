@@ -1,6 +1,6 @@
 # 🌌 touch2-stargazing-display
 
-A stargazing conditions display for the [Raspberry Pi Touch Display 2 (5")](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html), driven by a Raspberry Pi 4. It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if you run it — and renders a colour-coded overnight forecast over a live, data-reactive animated night sky — no interaction required.
+A stargazing conditions display for the [Raspberry Pi Touch Display 2 (5")](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html), driven by a Raspberry Pi 4. It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if available — and renders a colour-coded overnight forecast over a live, data-reactive animated night sky — no interaction required.
 
 Rendered with Pillow at 1280×720 landscape and written straight to the Linux framebuffer (`/dev/fb0`, RGB565) — no X, no display server, no `inky` library.
 
@@ -11,8 +11,8 @@ Rendered with Pillow at 1280×720 landscape and written straight to the Linux fr
 - **A real image of the Moon** for the current hour — true phase, libration and terminator — with constellation and next new/full moon dates
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
-- **Live animated night sky** behind the dashboard: twinkling starfield, drifting clouds and occasional meteors, all **reactive to the actual conditions**
-- **Touch controls** hidden until you tap: night mode, page rotation, brightness, and a true blank that drops the display to 0% CPU
+- **Live animated night sky** behind the dashboard: twinkling starfield, drifting clouds and occasional, random meteors, all **reactive to the actual conditions**
+- **Touch controls** hidden until the screen is tapped: night mode, page rotation, brightness and a true blank that drops the display to 0% CPU
 
 ---
 
@@ -48,8 +48,8 @@ The schematic below labels the regions of page 1:
 │ LI: Over 6, very stable           Dusk 21:50  -  Dawn 04:39   │
 │ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 4.0 mph      │
 └───────────────────────────────────────────────────────────────┘
-        ...behind everything: a living sky — stars, clouds, meteors
-        ...and on a tap, a control strip along the bottom edge
+  ...behind everything: a living sky — stars, clouds, meteors
+  ...and on a screen tap, a control strip along the bottom edge
 ```
 
 > **Dusk / Dawn**, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
@@ -67,7 +67,7 @@ The sky is a live layer composited behind the dashboard each frame (~20 fps); th
 | Wind speed | Drift speed of stars and clouds |
 | No astronomical darkness | Sky washes to twilight blue; meteors suppressed |
 
-The moon card shows **a real image of the Moon** (set `display.moon_ring = true` to outline the full disc), fetched hourly from NASA SVS's Dial-a-Moon and cached on disk — actual phase, libration and terminator rather than a drawn approximation. If it can't be reached the display falls back to drawing the phase geometrically, so it degrades rather than breaks. It deliberately will not reuse an older cached frame: the phase moves about 12° a day, so yesterday's picture is simply wrong, and a correct drawing beats a beautiful lie.
+The moon card shows **a real image of the Moon** (set `display.moon_ring = true` to outline the full disc), fetched hourly from NASA SVS's Dial-a-Moon and cached on disk — actual phase, libration and terminator rather than a drawn approximation. If it can't be reached the display falls back to drawing the phase geometrically, so it degrades rather than breaks. It deliberately will not reuse an older cached frame: the phase moves about 12° a day, so yesterday's picture is simply wrong and the correct drawing is better than an attractive inaccuracy.
 
 Meteors streak occasionally through the night sky (rarer when cloudy). Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
 
@@ -77,7 +77,7 @@ Meteors streak occasionally through the night sky (rarer when cloudy). Star and 
 
 The panel is a touchscreen, and the display reads it directly from `/dev/input/eventN` — no X, no Wayland, no extra packages.
 
-Nothing is drawn until you touch the screen. **The first tap only reveals a control strip** along the bottom, which goes away again after six seconds; a second tap presses a button. That way an ambient display stays uncluttered, and a brush past the panel in the dark cannot change anything.
+No controls are drawn until the screen is touched. **The first tap only reveals a control strip** along the bottom, which goes away again after six seconds; a second tap presses a button. That way an ambient display stays uncluttered, and a brush past the panel in the dark cannot change anything.
 
 | Button | What it does |
 |---|---|
@@ -85,7 +85,7 @@ Nothing is drawn until you touch the screen. **The first tap only reveals a cont
 | **Pause** / **Resume** | Holds the current page instead of rotating |
 | **Next** | Jumps to the next page straight away |
 | **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
-| **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until you touch it again. The one setting that matters at the eyepiece |
+| **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until it's touch it again. |
 
 A night mode picked by hand lapses the next time the sky crosses dusk or dawn: it is a change of mind about tonight, not a second schedule competing with the automatic one. Nothing else here is persisted either — `config.toml` is restored on restart, so the display always comes back to a known state.
 
@@ -113,8 +113,8 @@ No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all 
 **Software**
 - Raspberry Pi OS Lite 64-bit (Trixie / Bookworm), headless (`multi-user.target`)
 - Python 3.11+
-- **No Home Assistant required.** Weather comes from [pyastroweatherio](https://github.com/mawinkler/pyastroweatherio) — the library the Home Assistant [AstroWeather](https://github.com/mawinkler/astroweather) integration itself wraps — talking straight to MET Norway and Open-Meteo. If you do run Home Assistant with that integration, set `weather.source = "homeassistant"` and the display reads its sensors instead.
-- **An internet connection**, but nothing else on your network. Three public services are used: the weather above, NASA SVS for the lunar image, and CDS Strasbourg for the deep-sky cutouts. No broker, no container, no server of your own. Each one degrades on its own if it's unreachable — the moon falls back to a drawn phase, the cutouts to drawn glyphs, and cached weather keeps the dashboard up.
+- **No Home Assistant required.** Weather comes from [pyastroweatherio](https://github.com/mawinkler/pyastroweatherio) — the library the Home Assistant [AstroWeather](https://github.com/mawinkler/astroweather) integration itself wraps — talking straight to MET Norway and Open-Meteo. If Home Assistant is available with that integration, then set `weather.source = "homeassistant"` and the display reads its sensors instead.
+- **An internet connection**, but nothing else on the local network. Three public services are used: the weather above, NASA SVS for the lunar image, and CDS Strasbourg for the deep-sky cutouts. No broker, no container, no local servers. Each one degrades on its own if it's unreachable — the moon falls back to a drawn phase, the cutouts to drawn glyphs, and cached weather keeps the dashboard up.
 
 ---
 
@@ -130,7 +130,7 @@ sudo bash setup.sh          # or: sudo bash setup.sh <username>
 sudo reboot                 # required: setup.sh adds fbcon=map:2 to the kernel cmdline
 ```
 
-With no argument it sets everything up for the account that invoked `sudo`, which is almost always what you want. Pass a username only if you are installing on behalf of a different account.
+With no argument it sets everything up for the account that invoked `sudo`, which is almost always what is required. Pass a username only if installing on behalf of a different account.
 
 `setup.sh`:
 - installs `fonts-ibm-plex` (the display's typeface), `fonts-dejavu-core` (fallback), `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`, `python3-venv`
@@ -145,7 +145,7 @@ With no argument it sets everything up for the account that invoked `sudo`, whic
 cp config.example.toml config.toml
 ```
 
-Set your observing site in `[location]`; that is the only thing you must edit. The default `weather.source = "direct"` fetches the forecast on the Pi itself and needs no credentials at all:
+Set the desired observing site in `[location]`; that is the only thing that MUST be edited (unless the site is Greenwich, London, UK, which is the default). The default `weather.source = "direct"` fetches the forecast on the Pi itself and needs no credentials at all:
 
 ```toml
 [weather]
@@ -165,9 +165,9 @@ data_refresh_min = 15
 
 The `[display]` section is optional; the values above are the defaults.
 
-**Night mode** (`night_mode = "off" | "dim" | "red"`) applies between real dusk and dawn rather than on a clock schedule, because the point is to stop the panel ruining your dark adaptation and that starts when the sky does. `"dim"` keeps the colours at `night_dim`% brightness; `"red"` goes monochrome red, which is what observers use because long wavelengths leave scotopic vision alone. Nothing is lost by going red — no reading on this display is carried by colour alone, so the verdict word, the numbers and the bar lengths all still say what they said. It is applied to the finished frame, so it covers the animated sky and the sky photographs too, and it costs no measurable CPU. To read from Home Assistant instead, set `source = "homeassistant"` and add an `[ha]` section with your URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens).
+**Night mode** (`night_mode = "off" | "dim" | "red"`) applies between real dusk and dawn rather than on a clock schedule, because the point is to stop the panel ruining dark adaptation and that starts when the dark sky does. `"dim"` keeps the colours at `night_dim`% brightness; `"red"` goes monochrome red because long wavelengths leave low-light vision alone. Nothing is lost by going red — no reading is carried by colour alone, so the verdict word, the numbers and the bar lengths all still say what they said. It is applied to the finished frame, so it covers the animated sky and the sky photographs too, and it costs no measurable CPU. To read from Home Assistant instead, set `source = "homeassistant"` and add an `[ha]` section with the HA URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens).
 
-Both sources are the same underlying model, so they agree — `display.py --compare` fetches from each back to back and prints a per-value diff if you want to confirm it on your own site.
+Both sources are the same underlying model, so they agree — `display.py --compare` fetches from each back to back and prints a per-value diff if local confirmation is required.
 
 ### 3. Deploy
 
@@ -177,19 +177,19 @@ From Windows:
 .\deploy.ps1 -User <pi-username> -PiHost <hostname-or-ip>
 ```
 
-Both default to the reference build's values (`operations` and `astro-pi.local`), so `.\deploy.ps1` alone works once yours match — otherwise pass them. Unlike `setup.sh`, this runs on your PC and talks to the Pi over SSH, so it cannot infer the remote account name. The host is resolved by mDNS, which works on either the wired or the wireless interface; give an explicit address if mDNS is unavailable.
+Both default to the reference build's values (username `operations` and hostname `astro-pi.local`), so `.\deploy.ps1` alone works once the local ones match — otherwise pass them. Unlike `setup.sh`, this runs on a PC and talks to the Pi over SSH, so it cannot infer the remote account name. The host is resolved by mDNS, which works on either the wired or the wireless interface; use an explicit address if mDNS is unavailable.
 
 This copies the files, installs the Python dependencies, stages the systemd units, and restarts the always-on animated display. **The very first deploy (and any later one that changes a unit file) will print one extra command to run** — installing a systemd unit is done under interactive sudo on the Pi, not automatically.
 
 ### A note on security
 
-- **The NOPASSWD sudoers rules cover exactly two commands**: restarting the display service and kicking a first UpTonight run. In particular the deploy account **cannot** install unit files unattended — a unit executes as root, so `systemd/install-units.sh` asks for a password instead. If you widen these rules for convenience, understand that you are handing root to anything that ever compromises the deploy account.
-- **Check for `/etc/sudoers.d/90-cloud-init-users`.** A Pi provisioned with Raspberry Pi Imager gets its first user `NOPASSWD:ALL` from cloud-init, which silently defeats the scoped rules above — `sudo -l` will show it. If your account has a usable password (`passwd -S <user>` says `P` — confirm this first, or you lose easy root), remove that file and sudo goes back to asking.
-- **`deploy.ps1` uses `StrictHostKeyChecking=accept-new`**: first contact trusts the key it sees, after which a changed host key aborts the deploy. If you reflash the Pi, clear the stale key with `ssh-keygen -R astro-pi.local`.
+- **The NOPASSWD sudoers rules cover exactly two commands**: restarting the display service and kicking a first UpTonight run. In particular the deploy account **cannot** install unit files unattended — a unit executes as root, so `systemd/install-units.sh` asks for a password instead. If these rules are widened for convenience, understand that root is being handed to anything that ever compromised the deploy account.
+- **Check for `/etc/sudoers.d/90-cloud-init-users`.** A Pi provisioned with Raspberry Pi Imager gets its first user `NOPASSWD:ALL` from cloud-init, which silently defeats the scoped rules above — `sudo -l` will show it. If the account has a usable password (`passwd -S <user>` says `P` — confirm this first, or lose easy root), remove that file and sudo goes back to asking.
+- **`deploy.ps1` uses `StrictHostKeyChecking=accept-new`**: first contact trusts the key it sees, after which a changed host key aborts the deploy. If the Pi is reflashed, clear the stale key with `ssh-keygen -R astro-pi.local`.
 - `config.toml` is deployed with mode 600, since it can carry a Home Assistant token.
-- Python dependencies install **unpinned** (current Pi OS ships Python versions the upstream pins predate). That is a supply-chain trade-off: you get current wheels, not vetted ones. Pin them if your threat model minds. The riskiest parsers — Pillow, requests, urllib3, NumPy — deliberately come from **apt**, not pip, so Debian's security team patches them; keep that working by running `apt upgrade` occasionally or installing `unattended-upgrades`.
+- Python dependencies install **unpinned** (current Pi OS ships Python versions the upstream pins predate). That is a supply-chain trade-off: current wheels are used, not vetted ones. Pin them if that suits the threat model. The riskiest parsers — Pillow, requests, urllib3, NumPy — deliberately come from **apt**, not pip, so Debian's security team patches them; keep that working by running `apt upgrade` occasionally or installing `unattended-upgrades`.
 - **Both services run sandboxed** (`NoNewPrivileges`, `ProtectSystem=full` and friends): they parse data fetched from the internet, so the units assume compromise and bound it — code inside the service cannot invoke sudo at all, whatever the sudoers file says. The unit comments record which protections are deliberately absent and why.
-- **`sudo bash harden-pi.sh` does the last two**, and neither is done for you by `setup.sh` — they change how you log into the machine, which an application installer has no business deciding. It switches SSH to key-only (once passwordless sudo is off, your account password is the box's root gate and shouldn't be guessable over the network) and installs `unattended-upgrades`. It refuses to run unless your key is already installed, validates the config, rolls back on failure, and reloads rather than restarts sshd so it cannot strand you mid-session. **Afterwards root needs your key *and* your password — on a Pi with no keyboard, losing both means pulling the SD card.**
+- **`sudo bash harden-pi.sh` does the last two**, and neither is completed by `setup.sh` — they change the machine logon mode, which an application installer should not affect. It switches SSH to key-only (once passwordless sudo is off, the account password is the box's root gate and shouldn't be guessable over the network) and installs `unattended-upgrades`. It refuses to run unless the key is already installed, validates the config, rolls back on failure, and reloads rather than restarts sshd so it cannot strand the access mid-session. **Afterwards root needs the key *and* the password — on a Pi with no keyboard, losing both means pulling the SD card.**
 
 ---
 
@@ -227,8 +227,8 @@ The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke s
 | Dashboard upside down / mirrored | Flip `ROTATE` in `display.py` between `Image.ROTATE_90` and `Image.ROTATE_270` |
 | `ModuleNotFoundError: numpy` | `sudo apt install python3-numpy` (or rerun `setup.sh`) |
 | Tapping the panel does nothing | The log will say `No touchscreen found` if the account isn't in the `input` group — rerun `setup.sh`, or `sudo adduser <user> input` and reboot. Also check `touch.enabled` is true and `display.mode` is `animated`; touch is not wired into static mode |
-| Taps land a quarter-turn away from your finger | The touch mapping follows `ROTATE`, so if you flipped that, flip it here too. Check it directly with `python3 touch.py`, which prints raw and mapped coordinates for each tap |
-| Buttons fire when you meant to wake the strip | They shouldn't — the first tap only reveals it. If the strip was already up (it stays for `touch.strip_seconds`), the tap counts as a press; raise or lower that value to taste |
+| Taps land a quarter-turn away from a finger | The touch mapping follows `ROTATE`, so if that is flipped, flip it here too. Check it directly with `python3 touch.py`, which prints raw and mapped coordinates for each tap |
+| Buttons fire when it was just required to wake the strip | They shouldn't — the first tap only reveals it. If the strip was already up (it stays for `touch.strip_seconds`), the tap counts as a press; raise or lower that value to taste |
 | Drawn moon instead of a photograph | The Dial-a-Moon fetch failed — the log says why. It will not substitute an older cached frame, because the phase moves ~12°/day and yesterday's picture would be wrong |
 | `KeyError: 'ha'` in config | Only applies with `weather.source = "homeassistant"`: `config.toml` is missing the `[ha]` section header |
 | 401 Unauthorized from HA | Likewise — the token in `config.toml` is wrong or expired |
@@ -283,6 +283,6 @@ This project is a thin dashboard over other people's hard work.
 
 ## 📄 Licence
 
-**GPL-3.0** — see [LICENSE](LICENSE). Chosen to match [pilomar](https://github.com/Short-bus/pilomar), the Pi miniature-observatory project this one keeps company with.
+**GPL-3.0** — see [LICENSE](LICENSE). Chosen to match [pilomar](https://github.com/Short-bus/pilomar), the Pi miniature-observatory project by Short-bus that this display was inspired by.
 
-**Except `case/`**, which is **CC BY** rather than GPL, because it is a remix of RonnyS's CC-BY model and that licence carries forward. Credit RonnyS and this project if you remix it further.
+**Except `case/`**, which is **CC BY** rather than GPL, because it is a remix of RonnyS's CC-BY model and that licence carries forward. Credit RonnyS and this project if remixed further.
