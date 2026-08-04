@@ -51,6 +51,8 @@ The sky is a live layer composited behind the dashboard each frame (~20 fps); th
 | Wind speed | Drift speed of stars and clouds |
 | No astronomical darkness | Sky washes to twilight blue; meteors suppressed |
 
+The moon card shows **a real image of the Moon** (set `display.moon_ring = true` to outline the full disc), fetched hourly from NASA SVS's Dial-a-Moon and cached on disk — actual phase, libration and terminator rather than a drawn approximation. If it can't be reached the display falls back to drawing the phase geometrically, so it degrades rather than breaks. It deliberately will not reuse an older cached frame: the phase moves about 12° a day, so yesterday's picture is simply wrong, and a correct drawing beats a beautiful lie.
+
 Meteors streak occasionally through the night sky (rarer when cloudy). Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
 
 ---
@@ -238,6 +240,7 @@ This project is a thin dashboard over other people's hard work.
 - **[UpTonight](https://github.com/mawinkler/uptonight)**, also by Markus Winkler, computes the target lists on the Pi.
 - **Weather data** from [MET Norway](https://www.met.no/) and [Open-Meteo](https://open-meteo.com/), via the above.
 - **Sky imagery** from the [`hips2fits` service](https://alasky.cds.unistra.fr/hips-image-services/hips2fits) at **CDS, Strasbourg Observatory, France**, rendering the **DSS2 colour** HiPS survey. The Digitized Sky Survey was produced at the Space Telescope Science Institute under U.S. Government grant NAG W-2166, from photographic data of the Oschin Schmidt Telescope on Palomar Mountain and the UK Schmidt Telescope.
+- **Lunar imagery** from **[Dial-a-Moon](https://svs.gsfc.nasa.gov/4442)**, by **Ernie Wright** at **NASA's Scientific Visualization Studio**, rendered from Lunar Reconnaissance Orbiter data. SVS content is public domain. Each frame shows the Moon's real phase, libration and terminator for that hour — the display is compositing an actual render, not drawing an approximation.
 - **The case** is a remix of **"Raspberry Pi Touch Display 2 Case" by RonnyS** ([Printables 1377047](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)), used under CC BY.
 
 ## 📄 Licence

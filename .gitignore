@@ -1,4 +1,5 @@
 config.toml
+cache/
 .claude/agents/
 case/reference/
 __pycache__/

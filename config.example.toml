@@ -74,6 +74,12 @@ page_seconds = 20
 night_mode = "off"
 night_dim = 45
 
+# Draw a thin ivory circle around the moon image, marking the full disc rather
+# than only the lit part. Off by default - the photograph looks better without
+# it - but worth turning on if you find the card too empty near new moon, when
+# almost nothing of the Moon is lit and there is very little left to see.
+moon_ring = false
+
 # Touch controls. Tap the panel once and a control strip appears along the
 # bottom for strip_seconds; tap a button to use it, or leave it and it goes
 # away again. Nothing is drawn until you touch the screen, and nothing fires on

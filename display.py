@@ -22,7 +22,7 @@ import re
 import signal
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +32,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 import touch
 
-FIRMWARE_VERSION = "3.6.0"
+FIRMWARE_VERSION = "3.7.0"
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 # IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
@@ -673,6 +673,73 @@ def cutout(obj_id, size_arcmin, px=200):
         return None
 
 
+# Real lunar imagery from NASA's Scientific Visualization Studio (Ernie Wright's
+# Dial-a-Moon). The API resolves the frame for a given hour, so the phase, the
+# libration and the terminator are all as they actually are that night -
+# including WHICH LIMB IS LIT, which is why nothing here mirrors anything. Like
+# the DSS2 cutouts it renders on black, so it composites onto the sky cleanly.
+MOON_CACHE = Path(__file__).parent / "cache" / "moon"
+DIALAMOON_URL = "https://svs.gsfc.nasa.gov/api/dialamoon/"
+MOON_CACHE_KEEP = 4
+# The disc is 658px across, centred, in a 730px frame. Scaling by the frame
+# rather than by a measured bounding box keeps the Moon's real change of
+# apparent size with distance - and a thin crescent has no bounding box worth
+# measuring anyway, since most of the disc is only lit by earthshine.
+MOON_DISC_FRAC = 658 / 730
+
+
+def _prune(d, keep):
+    files = sorted(d.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for p in files[keep:]:
+        p.unlink(missing_ok=True)
+
+
+def moon_image():
+    """The Moon as it actually looks this hour, or None. NETWORK - background
+    thread only; never call this from the render loop.
+
+    Deliberately does NOT fall back to a cached older frame: the phase moves
+    about 12 degrees a day, so yesterday's picture is simply wrong. A correct
+    drawing beats a beautiful lie, and that is what returning None gets you.
+    """
+    MOON_CACHE.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")
+    try:
+        meta = requests.get(DIALAMOON_URL + stamp, timeout=20)
+        meta.raise_for_status()
+        url  = meta.json()["image"]["url"]
+        path = MOON_CACHE / url.rsplit("/", 1)[-1]
+        if not path.exists():
+            r = requests.get(url, timeout=30)
+            r.raise_for_status()
+            path.write_bytes(r.content)
+            log.info("Moon frame fetched: %s", path.name)
+            _prune(MOON_CACHE, MOON_CACHE_KEEP)
+        return Image.open(path).convert("RGB")
+    except Exception as e:
+        log.warning("Moon frame unavailable (%s); drawing the phase instead.", e)
+        return None
+
+
+def _paste_moon(img, photo, cx, cy, r, ring=True):
+    """Composite a Dial-a-Moon frame as the moon disc.
+
+    The mask edge is feathered because the disc does not always fill it: the
+    Moon is nearer at perigee than at apogee by about 4%, and a hard edge would
+    show that as a black rim against the navy sky on the far weeks.
+    """
+    d     = int(2 * r / MOON_DISC_FRAC)
+    disc  = photo.resize((d, d), Image.LANCZOS)
+    mask  = Image.new("L", (d, d), 0)
+    inset = (d - 2 * r) // 2
+    ImageDraw.Draw(mask).ellipse([inset, inset, d - inset, d - inset], fill=255)
+    mask  = mask.filter(ImageFilter.GaussianBlur(2))
+    img.paste(disc, (cx - d // 2, cy - d // 2), mask)
+    if ring:
+        ImageDraw.Draw(img).ellipse([cx - r, cy - r, cx + r, cy + r],
+                                    outline=MOON, width=3)
+
+
 def _glyph(draw, cx, cy, r, otype):
     """Fallback mark when no cutout is available (offline, or a failed fetch)."""
     t = (otype or "").lower()
@@ -723,8 +790,12 @@ def load_cutouts(targets, limit):
     return images
 
 
-def render_foreground(states):
-    """Render the dashboard as an RGBA overlay: opaque content, transparent sky."""
+def render_foreground(states, moon_photo=None, moon_ring=False):
+    """Render the dashboard as an RGBA overlay: opaque content, transparent sky.
+
+    moon_photo is a Dial-a-Moon frame fetched by the caller (network, so never
+    from the render loop); without one the phase is drawn parametrically.
+    """
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
@@ -857,7 +928,10 @@ def render_foreground(states):
     MCX = RIGHT_CX
     MR  = 100
     MCY = 364
-    _draw_moon(draw, MCX, MCY, MR, moon_phase, waxing)
+    if moon_photo is not None:
+        _paste_moon(img, moon_photo, MCX, MCY, MR, ring=moon_ring)
+    else:
+        _draw_moon(draw, MCX, MCY, MR, moon_phase, waxing)
 
     phase_name = PHASE_NAMES.get(
         moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title()
@@ -1514,14 +1588,14 @@ def _install_signal_handlers():
 
 def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
                page_seconds, demo=False, night="off", night_dim=45,
-               touch_enabled=True, strip_seconds=6):
+               touch_enabled=True, strip_seconds=6, moon_ring=False):
     """Long-running loop: animate the panel while a thread refreshes the data."""
     state = {"pages": [], "params": None, "window": None}
 
     def load():
         states = fetch()
         targets = read_targets(out_dir)
-        pages = [render_foreground(states)]
+        pages = [render_foreground(states, moon_image(), moon_ring)]
         # Targets page joins the rotation only when there is something on it -
         # better a single page than a dead one before UpTonight's first run.
         page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS), lat)
@@ -1666,6 +1740,7 @@ def main():
     if night not in NIGHT_CYCLE:
         raise ValueError(f'display.night_mode is "{night}"; '
                          'expected "off", "dim" or "red"')
+    moon_ring = bool(disp.get("moon_ring", False))
     tch = config.get("touch", {})
 
     if args.compare:
@@ -1678,7 +1753,7 @@ def main():
         states = fetch()
         targets = read_targets(out_dir)
         params = sky_params(states)
-        fg = render_foreground(states)
+        fg = render_foreground(states, moon_image(), moon_ring)
         # A saved preview should look like the panel does right now, night mode
         # included - otherwise --save quietly lies once the sun goes down.
         now_mode = night_mode_now(night, _night_window(states))
@@ -1708,7 +1783,8 @@ def main():
                refresh_min=refresh_min, page_seconds=page_seconds, demo=args.demo,
                night=night, night_dim=night_dim,
                touch_enabled=bool(tch.get("enabled", True)),
-               strip_seconds=float(tch.get("strip_seconds", 6)))
+               strip_seconds=float(tch.get("strip_seconds", 6)),
+               moon_ring=moon_ring)
 
 
 if __name__ == "__main__":
