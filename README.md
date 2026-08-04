@@ -166,6 +166,7 @@ This copies the files, installs the Python dependencies, stages the systemd unit
 ### A note on security
 
 - **The NOPASSWD sudoers rules cover exactly two commands**: restarting the display service and kicking a first UpTonight run. In particular the deploy account **cannot** install unit files unattended — a unit executes as root, so `systemd/install-units.sh` asks for a password instead. If you widen these rules for convenience, understand that you are handing root to anything that ever compromises the deploy account.
+- **Check for `/etc/sudoers.d/90-cloud-init-users`.** A Pi provisioned with Raspberry Pi Imager gets its first user `NOPASSWD:ALL` from cloud-init, which silently defeats the scoped rules above — `sudo -l` will show it. If your account has a usable password (`passwd -S <user>` says `P` — confirm this first, or you lose easy root), remove that file and sudo goes back to asking.
 - **`deploy.ps1` uses `StrictHostKeyChecking=accept-new`**: first contact trusts the key it sees, after which a changed host key aborts the deploy. If you reflash the Pi, clear the stale key with `ssh-keygen -R astro-pi.local`.
 - `config.toml` is deployed with mode 600, since it can carry a Home Assistant token.
 - Python dependencies install **unpinned** (current Pi OS ships Python versions the upstream pins predate). That is a supply-chain trade-off: you get current wheels, not vetted ones. Pin them if your threat model minds.
