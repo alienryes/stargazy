@@ -34,19 +34,19 @@ The schematic below labels the regions of page 1:
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ STARGAZING                                     Fri 24 Jul 21:58 │
+│ STARGAZING                                   Fri 24 Jul 21:58 │
 │───────────────────────────────────────────────────────────────│
-│ EXCELLENT                                                       │
-│ Deep sky: 94%  -  Clear sky night                               │
+│ EXCELLENT                                                     │
+│ Deep sky: 94%  -  Clear sky night                             │
 │───────────────────────────────────────────────────────────────│
-│ Cloudless    [█░░░░░░░]  0%   │      (photo of the Moon)        │
-│ Seeing       [███░░░░░] 34%   │         Waxing Gibbous          │
-│ Transparency [██░░░░░░] 12%   │           in Scorpius           │
-│ Calm         [███████░] 89%   │                                 │
+│ Cloudless    [█░░░░░░░]  0%   │    (photo of the Moon)        │
+│ Seeing       [███░░░░░] 34%   │       Waxing Gibbous          │
+│ Transparency [██░░░░░░] 12%   │         in Scorpius           │
+│ Calm         [███████░] 89%   │                               │
 │───────────────────────────────────────────────────────────────│
-│ Tomorrow: Cloudy (5%)               New 12 Aug  -  Full 29 Jul  │
-│ LI: Over 6, very stable             Dusk 21:50  -  Dawn 04:39   │
-│ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 4.0 mph        │
+│ Tomorrow: Cloudy (5%)             New 12 Aug  -  Full 29 Jul  │
+│ LI: Over 6, very stable           Dusk 21:50  -  Dawn 04:39   │
+│ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 4.0 mph      │
 └───────────────────────────────────────────────────────────────┘
         ...behind everything: a living sky — stars, clouds, meteors
         ...and on a tap, a control strip along the bottom edge
