@@ -169,7 +169,9 @@ This copies the files, installs the Python dependencies, stages the systemd unit
 - **Check for `/etc/sudoers.d/90-cloud-init-users`.** A Pi provisioned with Raspberry Pi Imager gets its first user `NOPASSWD:ALL` from cloud-init, which silently defeats the scoped rules above — `sudo -l` will show it. If your account has a usable password (`passwd -S <user>` says `P` — confirm this first, or you lose easy root), remove that file and sudo goes back to asking.
 - **`deploy.ps1` uses `StrictHostKeyChecking=accept-new`**: first contact trusts the key it sees, after which a changed host key aborts the deploy. If you reflash the Pi, clear the stale key with `ssh-keygen -R astro-pi.local`.
 - `config.toml` is deployed with mode 600, since it can carry a Home Assistant token.
-- Python dependencies install **unpinned** (current Pi OS ships Python versions the upstream pins predate). That is a supply-chain trade-off: you get current wheels, not vetted ones. Pin them if your threat model minds.
+- Python dependencies install **unpinned** (current Pi OS ships Python versions the upstream pins predate). That is a supply-chain trade-off: you get current wheels, not vetted ones. Pin them if your threat model minds. The riskiest parsers — Pillow, requests, urllib3, NumPy — deliberately come from **apt**, not pip, so Debian's security team patches them; keep that working by running `apt upgrade` occasionally or installing `unattended-upgrades`.
+- **Both services run sandboxed** (`NoNewPrivileges`, `ProtectSystem=full` and friends): they parse data fetched from the internet, so the units assume compromise and bound it — code inside the service cannot invoke sudo at all, whatever the sudoers file says. The unit comments record which protections are deliberately absent and why.
+- Consider key-only SSH (`PasswordAuthentication no`): once passwordless sudo is off, your account password is the box's root gate, and it shouldn't be guessable over the network.
 
 ---
 

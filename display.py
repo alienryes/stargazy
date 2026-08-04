@@ -34,7 +34,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 import touch
 
-FIRMWARE_VERSION = "3.7.1"
+FIRMWARE_VERSION = "3.7.2"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile

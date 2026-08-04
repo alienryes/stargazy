@@ -14,5 +14,21 @@ Nice=10
 StandardOutput=journal
 StandardError=journal
 
+# Containment, as for the display service - this one downloads the MPC comet
+# database each run, so it too parses internet data. It touches no devices and
+# no sysfs, so it can go further; only ProtectHome stays off, because the
+# install tree, venv and out/ all live there.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
 [Install]
 WantedBy=multi-user.target
