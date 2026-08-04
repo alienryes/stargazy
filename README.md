@@ -171,7 +171,7 @@ This copies the files, installs the Python dependencies, stages the systemd unit
 - `config.toml` is deployed with mode 600, since it can carry a Home Assistant token.
 - Python dependencies install **unpinned** (current Pi OS ships Python versions the upstream pins predate). That is a supply-chain trade-off: you get current wheels, not vetted ones. Pin them if your threat model minds. The riskiest parsers — Pillow, requests, urllib3, NumPy — deliberately come from **apt**, not pip, so Debian's security team patches them; keep that working by running `apt upgrade` occasionally or installing `unattended-upgrades`.
 - **Both services run sandboxed** (`NoNewPrivileges`, `ProtectSystem=full` and friends): they parse data fetched from the internet, so the units assume compromise and bound it — code inside the service cannot invoke sudo at all, whatever the sudoers file says. The unit comments record which protections are deliberately absent and why.
-- Consider key-only SSH (`PasswordAuthentication no`): once passwordless sudo is off, your account password is the box's root gate, and it shouldn't be guessable over the network.
+- **`sudo bash harden-pi.sh` does the last two**, and neither is done for you by `setup.sh` — they change how you log into the machine, which an application installer has no business deciding. It switches SSH to key-only (once passwordless sudo is off, your account password is the box's root gate and shouldn't be guessable over the network) and installs `unattended-upgrades`. It refuses to run unless your key is already installed, validates the config, rolls back on failure, and reloads rather than restarts sshd so it cannot strand you mid-session. **Afterwards root needs your key *and* your password — on a Pi with no keyboard, losing both means pulling the SD card.**
 
 ---
 
@@ -235,6 +235,7 @@ config.toml             Local config (gitignored)
 config.example.toml     Template ([weather] + [location] + [display] + [touch])
 deploy.ps1              Windows → Pi deploy script
 setup.sh                One-time Pi setup (run with sudo)
+harden-pi.sh            Optional: key-only SSH + automatic security updates
 systemd/
   touch2-stargazing.service   Always-on animated display daemon
   fbcon-detach.service        Frees /dev/fb0 from the text console
