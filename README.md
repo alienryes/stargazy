@@ -8,10 +8,11 @@ Rendered with Pillow at 1280×720 landscape and written straight to the Linux fr
 
 - Tonight's deep-sky verdict (EXCELLENT → NONE) in bold colour
 - Condition bars: cloudless %, seeing, transparency, calm
-- Moon phase geometry with constellation and next new/full moon dates
+- **A real image of the Moon** for the current hour — true phase, libration and terminator — with constellation and next new/full moon dates
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
 - **Live animated night sky** behind the dashboard: twinkling starfield, drifting clouds and occasional meteors, all **reactive to the actual conditions**
+- **Touch controls** hidden until you tap: night mode, page rotation, brightness, and a true blank that drops the display to 0% CPU
 
 ---
 
@@ -24,9 +25,9 @@ Rendered with Pillow at 1280×720 landscape and written straight to the Linux fr
 │ EXCELLENT                                                       │
 │ Deep sky: 94%  -  Clear sky night                               │
 │───────────────────────────────────────────────────────────────│
-│ Cloudless    [█░░░░░░░]  0%   │                                 │
-│ Seeing       [███░░░░░] 34%   │        ◑  Waxing Gibbous        │
-│ Transparency [██░░░░░░] 12%   │            in Scorpius          │
+│ Cloudless    [█░░░░░░░]  0%   │      (photo of the Moon)        │
+│ Seeing       [███░░░░░] 34%   │         Waxing Gibbous          │
+│ Transparency [██░░░░░░] 12%   │           in Scorpius           │
 │ Calm         [███████░] 89%   │                                 │
 │───────────────────────────────────────────────────────────────│
 │ Tomorrow: Cloudy (5%)               New 12 Aug  -  Full 29 Jul  │
@@ -34,6 +35,7 @@ Rendered with Pillow at 1280×720 landscape and written straight to the Linux fr
 │ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 4.0 mph        │
 └───────────────────────────────────────────────────────────────┘
         ...behind everything: a living sky — stars, clouds, meteors
+        ...and on a tap, a control strip along the bottom edge
 ```
 
 > **Dusk / Dawn**, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
@@ -98,6 +100,7 @@ No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all 
 - Raspberry Pi OS Lite 64-bit (Trixie / Bookworm), headless (`multi-user.target`)
 - Python 3.11+
 - **No Home Assistant required.** Weather comes from [pyastroweatherio](https://github.com/mawinkler/pyastroweatherio) — the library the Home Assistant [AstroWeather](https://github.com/mawinkler/astroweather) integration itself wraps — talking straight to MET Norway and Open-Meteo. If you do run Home Assistant with that integration, set `weather.source = "homeassistant"` and the display reads its sensors instead.
+- **An internet connection**, but nothing else on your network. Three public services are used: the weather above, NASA SVS for the lunar image, and CDS Strasbourg for the deep-sky cutouts. No broker, no container, no server of your own. Each one degrades on its own if it's unreachable — the moon falls back to a drawn phase, the cutouts to drawn glyphs, and cached weather keeps the dashboard up.
 
 ---
 
@@ -195,8 +198,12 @@ The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke s
 | Sky looks static / no visible animation | Heavy cloud legitimately calms the sky. Confirm with `python3 display.py --demo`; check the computed mood with `python3 -c "import tomllib,display; c=tomllib.load(open('config.toml','rb')); print(display.sky_params(display.make_fetcher(c)()))"` |
 | Dashboard upside down / mirrored | Flip `ROTATE` in `display.py` between `Image.ROTATE_90` and `Image.ROTATE_270` |
 | `ModuleNotFoundError: numpy` | `sudo apt install python3-numpy` (or rerun `setup.sh`) |
-| `KeyError: 'ha'` in config | `config.toml` is missing the `[ha]` section header |
-| 401 Unauthorized from HA | Token in `config.toml` is wrong or expired |
+| Tapping the panel does nothing | The log will say `No touchscreen found` if the account isn't in the `input` group — rerun `setup.sh`, or `sudo adduser <user> input` and reboot. Also check `touch.enabled` is true and `display.mode` is `animated`; touch is not wired into static mode |
+| Taps land a quarter-turn away from your finger | The touch mapping follows `ROTATE`, so if you flipped that, flip it here too. Check it directly with `python3 touch.py`, which prints raw and mapped coordinates for each tap |
+| Buttons fire when you meant to wake the strip | They shouldn't — the first tap only reveals it. If the strip was already up (it stays for `touch.strip_seconds`), the tap counts as a press; raise or lower that value to taste |
+| Drawn moon instead of a photograph | The Dial-a-Moon fetch failed — the log says why. It will not substitute an older cached frame, because the phase moves ~12°/day and yesterday's picture would be wrong |
+| `KeyError: 'ha'` in config | Only applies with `weather.source = "homeassistant"`: `config.toml` is missing the `[ha]` section header |
+| 401 Unauthorized from HA | Likewise — the token in `config.toml` is wrong or expired |
 
 **Check logs / CPU:**
 

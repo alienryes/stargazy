@@ -4,8 +4,10 @@
 Renders a 1280x720 landscape dashboard over a live, data-reactive animated night
 sky (twinkling starfield + drift + meteors) and writes frames to the Linux
 framebuffer (/dev/fb0, RGB565). Runs as a long-lived daemon; a background thread
-refetches AstroWeather conditions from the Home Assistant REST API and rereads
-UpTonight's target reports, which are produced locally by a daily systemd timer.
+refetches the AstroWeather conditions - computed here via pyastroweatherio, or
+read from Home Assistant when weather.source says so - rereads UpTonight's
+target reports, which are produced locally by a daily systemd timer, and fetches
+the hour's real lunar image. Touch controls live in touch.py.
 
   python3 display.py                 # daemon (mode from config, default animated)
   python3 display.py --once          # render a single frame to the panel and exit
