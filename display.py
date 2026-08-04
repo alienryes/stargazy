@@ -34,7 +34,13 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 import touch
 
-FIRMWARE_VERSION = "3.7.0"
+FIRMWARE_VERSION = "3.7.1"
+
+# The largest image this program legitimately opens is a 730x730 moon frame.
+# PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
+# response balloon to a ~500MB decode before tripping - enough to OOM a 2GB Pi.
+# Cap it far above anything real and far below anything dangerous.
+Image.MAX_IMAGE_PIXELS = 3_000 * 3_000
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 # IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
@@ -710,7 +716,13 @@ def moon_image():
         meta = requests.get(DIALAMOON_URL + stamp, timeout=20)
         meta.raise_for_status()
         url  = meta.json()["image"]["url"]
-        path = MOON_CACHE / url.rsplit("/", 1)[-1]
+        # The filename comes from a network response, so keep it boring: strip
+        # anything a path could be built from ("\" would traverse on Windows,
+        # and a bare ".." names the cache dir itself).
+        name = re.sub(r"[^A-Za-z0-9._-]+", "_", url.rsplit("/", 1)[-1])
+        if not name.strip("._-"):
+            name = "frame.jpg"
+        path = MOON_CACHE / name
         if not path.exists():
             r = requests.get(url, timeout=30)
             r.raise_for_status()

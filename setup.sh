@@ -72,19 +72,25 @@ if [ ! -d "$DISPLAY_DIR/.venv" ]; then
 fi
 sudo -u "$USER" "$DISPLAY_DIR/.venv/bin/pip" install -q --upgrade pip
 
-echo "==> Adding sudoers rule for $USER..."
+echo "==> Adding sudoers rules for $USER..."
+# Only the two routine actions a deploy needs. Nothing here may write a file
+# root will execute: the old rules let $USER cp unit files from /tmp into
+# /etc/systemd/system unattended, which meant anything that compromised this
+# account could install its own root service. Unit installs now go through
+# systemd/install-units.sh under interactive sudo instead.
 cat > /etc/sudoers.d/touch2-stargazing <<EOF
-$USER ALL=(ALL) NOPASSWD: /usr/bin/cp /tmp/touch2-stargazing.service /tmp/fbcon-detach.service /etc/systemd/system/
-$USER ALL=(ALL) NOPASSWD: /usr/bin/cp /tmp/uptonight.service /tmp/uptonight.timer /etc/systemd/system/
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable touch2-stargazing.service
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart touch2-stargazing.service
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable fbcon-detach.service
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start fbcon-detach.service
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable uptonight.timer
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start uptonight.timer
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start uptonight.service
 EOF
 chmod 440 /etc/sudoers.d/touch2-stargazing
+
+# On a rerun the staged units from an earlier deploy are already present, and
+# we are already root - install them now so the rerun leaves everything current.
+if [ -f "$DISPLAY_DIR/systemd/install-units.sh" ]; then
+    echo "==> Installing systemd units from $DISPLAY_DIR/systemd..."
+    bash "$DISPLAY_DIR/systemd/install-units.sh"
+else
+    echo "==> Units not staged yet - the first deploy.ps1 run will tell you how to install them."
+fi
 
 echo "==> Done. You can now run deploy.ps1 from Windows."

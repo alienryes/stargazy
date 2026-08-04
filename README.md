@@ -119,9 +119,9 @@ sudo reboot   # required: setup.sh adds fbcon=map:2 to the kernel cmdline
 `setup.sh`:
 - installs `fonts-ibm-plex` (the display's typeface), `fonts-dejavu-core` (fallback), `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`, `python3-venv`
 - builds the display's virtualenv (`--system-site-packages`, so apt's Pillow and NumPy are reused rather than rebuilt). The direct weather source brings pandas, which carries its own NumPy — keeping that out of the system Python is what stops it shadowing the one the framebuffer path uses
-- adds the user to the `video` group so it can write `/dev/fb0` without sudo
+- adds the user to the `video` group (framebuffer + backlight) and `input` group (touchscreen)
 - adds `fbcon=map:2` to `/boot/firmware/cmdline.txt` so the text console never draws over the display
-- installs a scoped sudoers rule for the deploy script
+- installs a deliberately narrow sudoers rule for the deploy script — see the security note below
 
 ### 2. Create config
 
@@ -161,7 +161,14 @@ From Windows (the deploy resolves the Pi by mDNS as `astro-pi.local`, so it work
 .\deploy.ps1
 ```
 
-This copies the files, installs the Python dependencies, installs the `fbcon-detach` and display services, retires any legacy timer, and starts the always-on animated display.
+This copies the files, installs the Python dependencies, stages the systemd units, and restarts the always-on animated display. **The very first deploy (and any later one that changes a unit file) will print one extra command to run** — installing a systemd unit is done under interactive sudo on the Pi, not automatically.
+
+### A note on security
+
+- **The NOPASSWD sudoers rules cover exactly two commands**: restarting the display service and kicking a first UpTonight run. In particular the deploy account **cannot** install unit files unattended — a unit executes as root, so `systemd/install-units.sh` asks for a password instead. If you widen these rules for convenience, understand that you are handing root to anything that ever compromises the deploy account.
+- **`deploy.ps1` uses `StrictHostKeyChecking=accept-new`**: first contact trusts the key it sees, after which a changed host key aborts the deploy. If you reflash the Pi, clear the stale key with `ssh-keygen -R astro-pi.local`.
+- `config.toml` is deployed with mode 600, since it can carry a Home Assistant token.
+- Python dependencies install **unpinned** (current Pi OS ships Python versions the upstream pins predate). That is a supply-chain trade-off: you get current wheels, not vetted ones. Pin them if your threat model minds.
 
 ---
 
@@ -228,6 +235,7 @@ setup.sh                One-time Pi setup (run with sudo)
 systemd/
   touch2-stargazing.service   Always-on animated display daemon
   fbcon-detach.service        Frees /dev/fb0 from the text console
+  install-units.sh            Installs the units - interactive sudo, by design
 case/
   README.md               Print settings, hardware, assembly
   shell.py                Display shell (front frame + back plate)
