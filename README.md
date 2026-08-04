@@ -48,8 +48,8 @@ The schematic below labels the regions of page 1:
 │ LI: Over 6, very stable           Dusk 21:50  -  Dawn 04:39   │
 │ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 4.0 mph      │
 └───────────────────────────────────────────────────────────────┘
-  ...behind everything: a living sky — stars, clouds, meteors
-  ...and on a screen tap, a control strip along the bottom edge
+  behind everything: a living sky with stars, clouds and meteors
+  ..and on a screen tap, a control strip along the bottom edge
 ```
 
 > **Dusk / Dawn**, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
