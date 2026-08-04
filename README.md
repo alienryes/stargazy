@@ -112,9 +112,11 @@ The Touch Display 2 is auto-detected over DSI — no SPI or device-tree overlay 
 
 ```bash
 # Copy setup.sh to the Pi, then:
-sudo bash setup.sh operations
-sudo reboot   # required: setup.sh adds fbcon=map:2 to the kernel cmdline
+sudo bash setup.sh          # or: sudo bash setup.sh <username>
+sudo reboot                 # required: setup.sh adds fbcon=map:2 to the kernel cmdline
 ```
+
+With no argument it sets everything up for the account that invoked `sudo`, which is almost always what you want. Pass a username only if you are installing on behalf of a different account.
 
 `setup.sh`:
 - installs `fonts-ibm-plex` (the display's typeface), `fonts-dejavu-core` (fallback), `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`, `python3-venv`
@@ -155,11 +157,13 @@ Both sources are the same underlying model, so they agree — `display.py --comp
 
 ### 3. Deploy
 
-From Windows (the deploy resolves the Pi by mDNS as `astro-pi.local`, so it works on either the wired or the wireless interface — if mDNS is unavailable, pass an explicit address with `-PiHost`):
+From Windows:
 
 ```powershell
-.\deploy.ps1
+.\deploy.ps1 -User <pi-username> -PiHost <hostname-or-ip>
 ```
+
+Both default to the reference build's values (`operations` and `astro-pi.local`), so `.\deploy.ps1` alone works once yours match — otherwise pass them. Unlike `setup.sh`, this runs on your PC and talks to the Pi over SSH, so it cannot infer the remote account name. The host is resolved by mDNS, which works on either the wired or the wireless interface; give an explicit address if mDNS is unavailable.
 
 This copies the files, installs the Python dependencies, stages the systemd units, and restarts the always-on animated display. **The very first deploy (and any later one that changes a unit file) will print one extra command to run** — installing a systemd unit is done under interactive sudo on the Pi, not automatically.
 

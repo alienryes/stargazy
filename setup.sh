@@ -1,9 +1,26 @@
 #!/bin/bash
 # One-time setup for touch2-stargazing-display on a Raspberry Pi driving the
-# Touch Display 2 via the framebuffer (/dev/fb0). Run once as: sudo bash setup.sh <username>
+# Touch Display 2 via the framebuffer (/dev/fb0). Run once as:
+#
+#   sudo bash setup.sh              # sets up for whoever invoked sudo
+#   sudo bash setup.sh <username>   # or name the account explicitly
 set -e
 
-USER="${1:-operations}"
+# SUDO_USER is the account that invoked sudo, which is the one that will own
+# and run all of this. No default account name: guessing wrong would silently
+# build the whole install under a user that does not exist.
+USER="${1:-${SUDO_USER:-}}"
+if [ -z "$USER" ] || [ "$USER" = "root" ]; then
+    echo "Usage: sudo bash setup.sh <username>" >&2
+    echo "  (could not infer the account - SUDO_USER is unset, so you are" >&2
+    echo "   probably running as root directly rather than through sudo)" >&2
+    exit 1
+fi
+if ! id "$USER" >/dev/null 2>&1; then
+    echo "No such user: $USER" >&2
+    exit 1
+fi
+echo "==> Setting up for user: $USER"
 
 # UpTonight is not published to PyPI and its repo carries no package metadata
 # (pyproject.toml holds lint settings only), so it is installed as a source tree

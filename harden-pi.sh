@@ -1,7 +1,8 @@
 #!/bin/bash
 # Optional host hardening: key-only SSH and automatic security updates.
 #
-#   sudo bash harden-pi.sh [username]     # default: operations
+#   sudo bash harden-pi.sh              # hardens for whoever invoked sudo
+#   sudo bash harden-pi.sh <username>   # or name the account explicitly
 #
 # Neither change is required to run the display, and neither is done by
 # setup.sh - they alter how you log into the machine, which is not something an
@@ -18,9 +19,22 @@
 # recovery means taking the SD card to another machine.
 set -e
 
-USER="${1:-operations}"
+# As setup.sh: infer the invoking account rather than defaulting to a name.
+# Getting this wrong here is worse than there - it would check the wrong
+# account's keys and then disable password login for everyone.
+USER="${1:-${SUDO_USER:-}}"
+if [ -z "$USER" ] || [ "$USER" = "root" ]; then
+    echo "Usage: sudo bash harden-pi.sh <username>" >&2
+    echo "  (could not infer the account from SUDO_USER)" >&2
+    exit 1
+fi
+if ! id "$USER" >/dev/null 2>&1; then
+    echo "No such user: $USER" >&2
+    exit 1
+fi
 CONF=/etc/ssh/sshd_config.d/10-hardening.conf
 KEYS="/home/$USER/.ssh/authorized_keys"
+echo "==> Hardening for user: $USER"
 
 echo "==> Checking key-based login is viable before disabling passwords..."
 if [ ! -s "$KEYS" ]; then
