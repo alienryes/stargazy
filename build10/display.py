@@ -57,7 +57,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -501,7 +501,7 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
         draw.text((x - 9, PAN_BASE + 14), lab, font=f_xs, fill=MUTED)
     for alt in (30, 60, 90):
         y = PAN_BASE - (alt / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
-        draw.line([(PAN_X0, y), (PAN_X1, y)], fill=(29, 94, 128, 70))
+        draw.line([(PAN_X0, y), (PAN_X1, y)], fill=STEEL + (70,))
         draw.text((PAN_X1 + 6, y - 14), f"{alt}", font=f_xs, fill=MUTED)
     draw.text((PAN_X1 + 6, PAN_TOP - 38), "alt°", font=f_xs, fill=MUTED)
 

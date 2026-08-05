@@ -63,7 +63,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # which nothing here can be confirmed against real hardware again, so 3.7.2 marks
 # the last state that was. Repo releases are versioned separately in
 # pyproject.toml and will keep moving; the two were never going to line up.
-FIRMWARE_VERSION = "3.9.0"
+FIRMWARE_VERSION = "3.9.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -525,7 +525,7 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
         draw.text((x - 8, PAN_BASE + 12), lab, font=f_xs, fill=MUTED)
     for alt in (20, 40, 60):
         y = PAN_BASE - (alt / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
-        draw.line([(PAN_X0, y), (PAN_X1, y)], fill=(29, 94, 128, 70))
+        draw.line([(PAN_X0, y), (PAN_X1, y)], fill=STEEL + (70,))
         draw.text((PAN_X1 + 4, y - 12), f"{alt}", font=f_xs, fill=MUTED)
     # The axis numbers were unitless; one marker at the top says what they are.
     draw.text((PAN_X1 + 4, PAN_TOP - 6), "alt°", font=f_xs, fill=MUTED)
