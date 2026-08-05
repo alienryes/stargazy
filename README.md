@@ -1,6 +1,6 @@
 # 🌌 touch2-stargazing-display
 
-A stargazing conditions display for the [Raspberry Pi Touch Display 2](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html). It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if available — and renders a colour-coded overnight forecast over a live, data-reactive animated night sky — no interaction required.
+A stargazing conditions display for the [Raspberry Pi Touch Display 2](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html). It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if available — and renders an overnight forecast over a live, data-reactive animated night sky — no interaction required.
 
 Rendered with Pillow and written straight to the Linux framebuffer (`/dev/fb0`, RGB565) — no X, no display server, no `inky` library.
 
@@ -18,8 +18,8 @@ Everything that is not layout — both weather sources, the target reports, the 
 
 **Highlights**
 
-- Tonight's deep-sky verdict (EXCELLENT → NONE) in bold colour
-- Condition bars: cloudless %, seeing, transparency, calm
+- Tonight's deep-sky verdict (EXCELLENT → NONE) spelled out in bold display type
+- Condition bars: cloudless %, seeing, transparency, calm — a reading below its warning mark is drawn hollow instead of filled
 - **A real image of the Moon** for the current hour — true phase, libration and terminator — with constellation and next new/full moon dates
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
@@ -52,7 +52,15 @@ The page-2 timeline only appears once UpTonight has run, and the page leaves the
 
 Between real dusk and dawn — not on a clock schedule — the finished frame is put through a red filter, because long wavelengths leave dark-adapted vision alone. Filtering the frame rather than swapping the palette is what keeps the lunar photograph and the deep-sky cutouts from glowing white, and it costs nothing measurable: the transform runs on the array the framebuffer path already builds.
 
-Nothing is lost to it, because no reading on this display is carried by colour alone — the verdict is a word as well as a hue, and every bar has a number. The one real consequence is that the status colours collapse to brightness, so a POOR verdict renders dimmer than an EXCELLENT one rather than differently coloured. `night_mode = "dim"` keeps the colours at reduced brightness instead.
+Nothing is lost to it, and since the redesign below nothing can be: no state on this display is encoded in hue at all. The verdict is a word, every bar has a number and a length, and a reading below its threshold is hollow rather than a different colour — all of which survive a red filter untouched. `night_mode = "dim"` keeps full colour at reduced brightness instead.
+
+### Colour marks real objects; state is neutral
+
+If something here is coloured it is a thing that is actually up there — the Moon, a planet, a comet, a photograph of a nebula. If it is a judgement about tonight it is the same neutral blue-white as everything else, and it says what it means by size, length, position, or the word itself.
+
+This replaced a four-step cool-to-warm ramp, which turned out to be over-constrained rather than badly chosen. Four ordinal steps encoded in hue, on a blue background, two of them necessarily blue, each clearing WCAG AA against two different sky gradients, each separated by ΔE 15, and still ordered by luminance once the red filter discards the hue — there is no solution. The original fell to 2.95:1 at the POOR end; a careful replacement put EXCELLENT and GOOD ΔE 6.8 apart.
+
+The ramp was also redundant. A bar already encodes magnitude by length, the number is printed beside it, and the verdict is spelled out in 90px letters. Colour was a fourth copy of what the panel already said three times, and it was the copy that cost the design.
 
 ### The 10.1-inch build
 

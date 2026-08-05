@@ -36,18 +36,15 @@ from core.meteors import (
 )
 from core.night import NIGHT_CYCLE, apply_night, night_mode_now, night_window, tonight
 from core.palette import (
-    AMBER,
     BG,
     DIM,
-    ELECTRIC,
-    ICE,
     MOON,
     MOON_DARK,
     MUTED,
-    ROSE,
+    NOMINAL,
+    OBJECT,
     STEEL,
     WHITE,
-    bar_colour,
     verdict,
 )
 from core.panel import Framebuffer, Strip
@@ -60,7 +57,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -177,10 +174,10 @@ def _glyph(draw, cx, cy, r, otype):
             draw.point((cx + d * math.cos(a), cy + d * math.sin(a)), fill=WHITE)
         draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=STEEL)
     elif "galaxy" in t:
-        draw.ellipse([cx - r, cy - r * 0.45, cx + r, cy + r * 0.45], outline=ICE, width=3)
-        draw.ellipse([cx - r * 0.28, cy - r * 0.16, cx + r * 0.28, cy + r * 0.16], fill=ICE)
+        draw.ellipse([cx - r, cy - r * 0.45, cx + r, cy + r * 0.45], outline=OBJECT, width=3)
+        draw.ellipse([cx - r * 0.28, cy - r * 0.16, cx + r * 0.28, cy + r * 0.16], fill=OBJECT)
     else:                                            # nebulae and everything else
-        draw.ellipse([cx - r, cy - r * 0.8, cx + r, cy + r * 0.8], outline=ELECTRIC)
+        draw.ellipse([cx - r, cy - r * 0.8, cx + r, cy + r * 0.8], outline=OBJECT)
         draw.ellipse([cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy + r * 0.45], outline=STEEL)
 
 
@@ -287,14 +284,14 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None)
 
     # ── Verdict ───────────────────────────────────────────────────────
     if no_dark:
-        v_text, v_colour = "NO DARK SKY", AMBER
+        v_text = "NO DARK SKY"
         v_sub = f"Next dark night: {next_dark.strftime('%d %b') if next_dark else 'unknown'}"
     else:
-        v_text, v_colour = verdict(dsky_today)
+        v_text = verdict(dsky_today)
         v_sub = f"Deep sky: {dsky_today}%  -  {dsky_today_desc}"
     # Optical, not metric: heavy display type reads as indented beside regular
     # text even when the stems are flush, so it gets a small pull left.
-    draw.text((MARGIN - 5, 146), v_text, fill=v_colour, font=f["xl"])
+    draw.text((MARGIN - 5, 146), v_text, fill=NOMINAL, font=f["xl"])
     draw.text((MARGIN, 288), v_sub, fill=WHITE, font=f["sm"])
     draw.line([(0, HLINE2), (W, HLINE2)], fill=DIM, width=2)
 
@@ -326,14 +323,14 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None)
     if no_dark and next_dark:
         days = max(0, (next_dark.date() - datetime.now().date()).days)
         big, sub = ("Tonight", "dark sky returns") if days == 0 else (str(days), "days until dark sky")
-        _centre(draw, big, BAR_Y0 + 20, AMBER, f["xl"])
+        _centre(draw, big, BAR_Y0 + 20, NOMINAL, f["xl"])
         _centre(draw, sub, BAR_Y0 + 170, WHITE, f["sm"])
     else:
         barx = MARGIN + BAR_LBLW
         valx = barx + BAR_W + 20
         # (label, value, good, warn) - the thresholds are drawn as ticks as well
-        # as driving the colour. Without them the fill changes hue at an
-        # invisible boundary, and the colour reads as decoration.
+        # as deciding whether the bar is filled or hollow, so the boundary the
+        # form changes at is visible rather than implied.
         for i, (label, value, good, warn) in enumerate([
             ("Cloudless",    100 - cloud, 60, 40),
             ("Seeing",       seeing,      60, 40),
@@ -345,8 +342,14 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None)
             # Coloured border > opaque trough > coloured fill (opaque over sky).
             draw.rectangle([barx - 2, y + 2, barx + BAR_W + 2, y + BAR_H + 6], fill=STEEL)
             draw.rectangle([barx, y + 4, barx + BAR_W, y + BAR_H + 4], fill=BG)
-            draw.rectangle([barx, y + 4, barx + max(2, int(BAR_W * value / 100)),
-                            y + BAR_H + 4], fill=bar_colour(value, good, warn))
+            # Below the warning mark the bar is hollow. Form, not colour: exact
+            # rather than a gradient to read, and unaffected by the red filter.
+            box = [barx, y + 4, barx + max(2, int(BAR_W * value / 100)),
+                   y + BAR_H + 4]
+            if value >= warn:
+                draw.rectangle(box, fill=NOMINAL)
+            else:
+                draw.rectangle(box, outline=NOMINAL, width=3)
             for t in (warn, good):
                 tx = barx + int(BAR_W * t / 100)
                 draw.line([(tx, y + 4), (tx, y + 13)], fill=DIM)
@@ -363,7 +366,7 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None)
     desc = f"{dsky_tmrw_desc}  "
     draw.text((MARGIN + tm_w, y), desc, fill=WHITE, font=f["sm"])
     draw.text((MARGIN + tm_w + int(draw.textlength(desc, font=f["sm"])), y),
-              f"({dsky_tmrw}%)", fill=verdict(dsky_tmrw)[1], font=f["sm"])
+              f"({dsky_tmrw}%)", fill=NOMINAL, font=f["sm"])
 
     # AstroWeather's sun rise/set entities are civil twilight bounds (sun 6 deg
     # below the horizon), not the geometric crossing - so they read dusk/dawn.
@@ -431,7 +434,7 @@ def _draw_timeline(draw, states, y, f_xs):
     a0 = _tl_x(t_a0, dusk, dawn, x0, x1)
     a1 = _tl_x(t_a1, dusk, dawn, x0, x1)
     if a0 is not None and a1 is not None and a1 > a0:
-        draw.rectangle([a0, y + 1, a1, y + h - 1], fill=ELECTRIC)
+        draw.rectangle([a0, y + 1, a1, y + h - 1], fill=NOMINAL)
         # The blue segment is the most important mark on the page and would
         # otherwise be the only unexplained one. Each time sits at the end of
         # the window it bounds with the name centred between them, so the strip
@@ -598,8 +601,13 @@ def _draw_cards(img, draw, objects, images, lat, obs, f):
         frac = max(0.0, min(1.0, _f(o.get("foto"))))
         draw.rectangle([bar_x, y + 128, bar_x + bar_w, y + 146], fill=BG, outline=STEEL)
         if frac > 0:
-            draw.rectangle([bar_x + 1, y + 129, bar_x + 1 + frac * (bar_w - 2), y + 145],
-                           fill=ELECTRIC if frac >= 0.75 else AMBER)
+            # Same threshold convention as the conditions bars: short of the
+            # mark is hollow. One rule across every page.
+            box = [bar_x + 1, y + 129, bar_x + 1 + frac * (bar_w - 2), y + 145]
+            if frac >= 0.75:
+                draw.rectangle(box, fill=NOMINAL)
+            else:
+                draw.rectangle(box, outline=NOMINAL, width=2)
         y += tile + CARD_GAP
 
 
@@ -632,9 +640,10 @@ def render_targets(states, targets, images, lat=None, lon=None):
             continue
         alt, az = alt_az(obs, ra, dec)
         name = str(b.get("target name", "?"))
-        # Planets are MUTED, not ICE: ICE is the EXCELLENT verdict colour, and a
-        # status hue doing duty as a data series next to the ivory Moon reads as
-        # a relationship that is not there.
+        # Three populations share this plot, so each gets its own ink: the Moon
+        # ivory, the planets MUTED, and everything further out - comets and deep
+        # sky alike - the OBJECT green. Comet against deep sky is not a
+        # distinction anyone needs at a glance, and both carry their name.
         col = MOON if name.lower() == "moon" else MUTED
         mag = _f(b.get("visual magnitude"), 5)
         marks.append((az, alt, name, col, max(5.0, min(15.0, 11.0 - mag * 0.8))))
@@ -642,7 +651,7 @@ def render_targets(states, targets, images, lat=None, lon=None):
         ra, dec = c.get("right ascension"), c.get("declination")
         if ra is not None and dec is not None:
             alt, az = alt_az(obs, ra, dec)
-            marks.append((az, alt, str(c.get("target name", "?")), ROSE, 7.0))
+            marks.append((az, alt, str(c.get("target name", "?")), OBJECT, 7.0))
 
     ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
     for o in ranked[:P2_CARDS]:
@@ -650,12 +659,12 @@ def render_targets(states, targets, images, lat=None, lon=None):
         if ra is None or dec is None:
             continue
         alt, az = alt_az(obs, ra, dec)
-        marks.append((az, alt, str(o.get("id", "?")), ICE, 6.0))
+        marks.append((az, alt, str(o.get("id", "?")), OBJECT, 6.0))
 
     # The instant rides beside the heading, on its baseline: as a floating note
     # above the plot it landed on top of the heading itself. Without it the plot
     # silently reads as "now", which it is not once the sun is up.
-    draw.text((MARGIN, 258), "WHERE TO LOOK", font=f["med"], fill=ELECTRIC)
+    draw.text((MARGIN, 258), "WHERE TO LOOK", font=f["med"], fill=NOMINAL)
     draw.text((MARGIN + draw.textlength("WHERE TO LOOK", font=f["med"]) + 20, 272),
               when_label, font=f["sm"], fill=MUTED)
     _draw_panorama(draw, marks, when_label, f["sm"], f["xs"])
@@ -663,7 +672,7 @@ def render_targets(states, targets, images, lat=None, lon=None):
     shown = min(P2_CARDS, len(objects))
     count = (f"first {shown} of {len(objects)}" if shown < len(objects)
              else f"all {len(objects)}")
-    draw.text((MARGIN, CARD_Y0 - 60), f"DEEP SKY  ({count})", font=f["med"], fill=ELECTRIC)
+    draw.text((MARGIN, CARD_Y0 - 60), f"DEEP SKY  ({count})", font=f["med"], fill=NOMINAL)
     _draw_cards(img, draw, ranked, images, lat, obs, f)
 
     draw.text((MARGIN, H - 44), "Sky imagery: DSS2 / CDS Strasbourg",
@@ -740,9 +749,12 @@ def render_meteors(states, lat, lon):
         draw.rectangle([MARGIN, by, MARGIN + MET_BAR_W, by + MET_BAR_H], fill=BG)
         frac = max(0.0, min(1.0, rate / MET_RATE_FULL))
         if frac > 0:
-            draw.rectangle([MARGIN, by, MARGIN + max(2, int(MET_BAR_W * frac)),
-                            by + MET_BAR_H],
-                           fill=ELECTRIC if rate >= 10 else AMBER)
+            box = [MARGIN, by, MARGIN + max(2, int(MET_BAR_W * frac)),
+                   by + MET_BAR_H]
+            if rate >= 10:
+                draw.rectangle(box, fill=NOMINAL)
+            else:
+                draw.rectangle(box, outline=NOMINAL, width=2)
         draw.text((MARGIN + MET_BAR_W + 20, by - 4),
                   f"~{rate:.0f}/hr", font=f["med"],
                   fill=WHITE if rate >= 1 else DIM)

@@ -38,18 +38,15 @@ from core.night import (
     tonight,
 )
 from core.palette import (
-    AMBER,
     BG,
     DIM,
-    ELECTRIC,
-    ICE,
     MOON,
     MOON_DARK,
     MUTED,
-    ROSE,
+    NOMINAL,
+    OBJECT,
     STEEL,
     WHITE,
-    bar_colour,
     verdict,
 )
 from core.panel import Framebuffer, Strip
@@ -66,7 +63,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # which nothing here can be confirmed against real hardware again, so 3.7.2 marks
 # the last state that was. Repo releases are versioned separately in
 # pyproject.toml and will keep moving; the two were never going to line up.
-FIRMWARE_VERSION = "3.8.0"
+FIRMWARE_VERSION = "3.9.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -182,10 +179,10 @@ def _glyph(draw, cx, cy, r, otype):
             draw.point((cx + d * math.cos(a), cy + d * math.sin(a)), fill=WHITE)
         draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=STEEL)
     elif "galaxy" in t:
-        draw.ellipse([cx - r, cy - r * 0.45, cx + r, cy + r * 0.45], outline=ICE, width=2)
-        draw.ellipse([cx - r * 0.28, cy - r * 0.16, cx + r * 0.28, cy + r * 0.16], fill=ICE)
+        draw.ellipse([cx - r, cy - r * 0.45, cx + r, cy + r * 0.45], outline=OBJECT, width=2)
+        draw.ellipse([cx - r * 0.28, cy - r * 0.16, cx + r * 0.28, cy + r * 0.16], fill=OBJECT)
     else:                                            # nebulae and everything else
-        draw.ellipse([cx - r, cy - r * 0.8, cx + r, cy + r * 0.8], outline=ELECTRIC)
+        draw.ellipse([cx - r, cy - r * 0.8, cx + r, cy + r * 0.8], outline=OBJECT)
         draw.ellipse([cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy + r * 0.45], outline=STEEL)
 
 
@@ -245,11 +242,10 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
 
     # ── Verdict ───────────────────────────────────────────────────────
     if no_dark:
-        v_text   = "NO DARK SKY"
-        v_colour = AMBER
-        v_sub    = f"Next dark night: {next_dark.strftime('%d %b') if next_dark else 'unknown'}"
+        v_text = "NO DARK SKY"
+        v_sub  = f"Next dark night: {next_dark.strftime('%d %b') if next_dark else 'unknown'}"
     else:
-        v_text, v_colour = verdict(dsky_today)
+        v_text = verdict(dsky_today)
         v_sub = f"Deep sky: {dsky_today}%  -  {dsky_today_desc}"
 
     # Measured, not guessed: at (MARGIN, 92) the verdict's ink already started
@@ -258,7 +254,7 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
     # reads as indented beside 32px regular even when the stems are flush, so
     # it gets a small pull left. Vertically it sat 46px below the rule and only
     # 12px above the subtitle; 74 evens that to 28 above and 30 below.
-    draw.text((MARGIN - 4, 74), v_text, fill=v_colour, font=f_large)
+    draw.text((MARGIN - 4, 74), v_text, fill=NOMINAL, font=f_large)
     draw.text((MARGIN, 202), v_sub, fill=WHITE, font=f_sm)
     draw.line([(0, HLINE2), (W, HLINE2)], fill=DIM, width=2)
 
@@ -275,16 +271,16 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
                 big_text = str(days_until)
                 sub_text = "days until dark sky"
             big_w = int(draw.textlength(big_text, font=f_large))
-            draw.text((LP_CX - big_w // 2, 300), big_text, fill=AMBER, font=f_large)
+            draw.text((LP_CX - big_w // 2, 300), big_text, fill=NOMINAL, font=f_large)
             sub_w = int(draw.textlength(sub_text, font=f_sm))
             draw.text((LP_CX - sub_w // 2, 410), sub_text, fill=WHITE, font=f_sm)
             dt_text = next_dark.strftime("%d %b %Y")
             dt_w = int(draw.textlength(dt_text, font=f_xs))
-            draw.text((LP_CX - dt_w // 2, 452), dt_text, fill=AMBER, font=f_xs)
+            draw.text((LP_CX - dt_w // 2, 452), dt_text, fill=NOMINAL, font=f_xs)
         else:
             msg = "No dark sky"
             msg_w = int(draw.textlength(msg, font=f_med))
-            draw.text((LP_CX - msg_w // 2, 380), msg, fill=AMBER, font=f_med)
+            draw.text((LP_CX - msg_w // 2, 380), msg, fill=NOMINAL, font=f_med)
     else:
         # LBLW was 200 and "Transparency" measured 200 - the label was touching
         # the bar. Plex buys the room back; 216 spends a little of it so the
@@ -310,8 +306,14 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
             draw.rectangle([BARX - 2, y + 2, BARX + BARW + 2, y + BARH + 6], fill=STEEL)
             draw.rectangle([BARX,     y + 4, BARX + BARW,     y + BARH + 4], fill=BG)
             filled = max(2, int(BARW * value / 100))
-            draw.rectangle([BARX, y + 4, BARX + filled, y + BARH + 4],
-                           fill=bar_colour(value, good, warn))
+            # A reading below its warning mark is drawn hollow. Form, not
+            # colour: it reads at a glance, it is exact rather than a gradient
+            # to interpret, and it survives the red night filter intact.
+            box = [BARX, y + 4, BARX + filled, y + BARH + 4]
+            if value >= warn:
+                draw.rectangle(box, fill=NOMINAL)
+            else:
+                draw.rectangle(box, outline=NOMINAL, width=3)
             # Ticks at the top and bottom edges only, so they never fight the
             # fill. DIM reads darker than any fill colour and lighter than the
             # empty trough, so one colour works on both sides of the boundary.
@@ -355,7 +357,7 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
     desc = f"{dsky_tmrw_desc}  "
     draw.text((MARGIN + tm_w, 560), desc, fill=WHITE, font=f_sm)
     draw.text((MARGIN + tm_w + int(draw.textlength(desc, font=f_sm)), 560),
-              f"({dsky_tmrw}%)", fill=verdict(dsky_tmrw)[1], font=f_sm)
+              f"({dsky_tmrw}%)", fill=NOMINAL, font=f_sm)
 
     moon_date_parts = []
     if next_new:
@@ -435,7 +437,7 @@ def _draw_timeline(draw, states, y, f_xs):
     a0 = _tl_x(t_a0, dusk, dawn, x0, x1)
     a1 = _tl_x(t_a1, dusk, dawn, x0, x1)
     if a0 is not None and a1 is not None and a1 > a0:
-        draw.rectangle([a0, y + 1, a1, y + h - 1], fill=ELECTRIC)
+        draw.rectangle([a0, y + 1, a1, y + h - 1], fill=NOMINAL)
         # Label it, the same way the moon strip is labelled. This is the more
         # important of the two windows and it was the only unexplained mark on
         # the page - the bar cannot be read without knowing what the blue means.
@@ -631,8 +633,13 @@ def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
         frac = max(0.0, min(1.0, _f(o.get("foto"))))
         draw.rectangle([bx, y + 68, bx + bw, y + 82], fill=BG, outline=STEEL)
         if frac > 0:
-            draw.rectangle([bx + 1, y + 69, bx + 1 + frac * (bw - 2), y + 81],
-                           fill=ELECTRIC if frac >= 0.75 else AMBER)
+            # Same threshold convention as the conditions bars: short of the
+            # mark is hollow. One rule on both pages rather than two.
+            box = [bx + 1, y + 69, bx + 1 + frac * (bw - 2), y + 81]
+            if frac >= 0.75:
+                draw.rectangle(box, fill=NOMINAL)
+            else:
+                draw.rectangle(box, outline=NOMINAL, width=2)
         y += tile + gap
 
 
@@ -645,9 +652,8 @@ def _panorama_marks(bodies, comets, obs):
             continue
         alt, az = alt_az(obs, ra, dec)
         name = str(b.get("target name", "?"))
-        # Planets were ICE, which is also the EXCELLENT verdict colour - a
-        # status hue doing duty as a data series. MUTED keeps them clearly
-        # apart from the ivory Moon (ΔE 22.9) and leaves ICE meaning one thing.
+        # MUTED keeps the planets clearly apart from the ivory Moon (ΔE 22.9)
+        # and from the OBJECT green the comets carry.
         col = MOON if name.lower() == "moon" else MUTED
         marks.append((az, alt, name, col, _f(b.get("visual magnitude"), 5)))
     for c in comets:
@@ -655,7 +661,7 @@ def _panorama_marks(bodies, comets, obs):
         if ra is None or dec is None:
             continue
         alt, az = alt_az(obs, ra, dec)
-        marks.append((az, alt, str(c.get("target name", "?")), ROSE,
+        marks.append((az, alt, str(c.get("target name", "?")), OBJECT,
                       _f(c.get("visual magnitude"), 8)))
     return marks
 
@@ -680,13 +686,13 @@ def render_targets(states, targets, images, lat=None):
     _draw_timeline(draw, states, 128, f_xs)
 
     draw.line([(P2_DIV_X, 190), (P2_DIV_X, 664)], fill=DIM)
-    draw.text((MARGIN, 182), "WHERE TO LOOK", font=f_sm, fill=ELECTRIC)
+    draw.text((MARGIN, 182), "WHERE TO LOOK", font=f_sm, fill=NOMINAL)
     # Say what the column is actually showing. On a dark night the cap lets 40
     # objects through against four cards, so "(40 up)" alone was misleading.
     shown = min(P2_CARDS, len(objects))
     count = (f"first {shown} of {len(objects)}" if shown < len(objects)
              else f"all {len(objects)}")
-    draw.text((P2_DIV_X + 24, 182), f"DEEP SKY  ({count})", font=f_sm, fill=ELECTRIC)
+    draw.text((P2_DIV_X + 24, 182), f"DEEP SKY  ({count})", font=f_sm, fill=NOMINAL)
     # One instant, computed here: the report files are sampled hours apart.
     when, when_label = plot_instant(night_window(states))
     obs = observer(lat or 0.0, LON or 0.0,

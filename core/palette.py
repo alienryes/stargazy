@@ -1,29 +1,63 @@
-"""The display's colours, and the two mappings from a value to one of them.
+"""The display's colours, and the rule that decides which one anything gets.
 
-Conditions run on a cool-to-warm ramp: a clear night reads cold and blue, a
-washed-out one warm. Amber is reserved for the moon and for cautions.
+⇒ COLOUR MARKS REAL OBJECTS. STATE IS NEUTRAL.
 
-Contrast was computed against every background the sky actually paints - the
+If something on this panel is coloured it is a thing that is actually up there -
+the Moon, a planet, a comet, a photograph of a nebula. If it is a judgement
+about tonight - a verdict, a reading, a threshold - it is the same neutral
+blue-white as everything else, and its meaning is carried by size, by length,
+by position, or by the word itself.
+
+This replaces a four-step cool-to-warm ramp, which was over-constrained rather
+than badly chosen. Four ordinal steps encoded in hue, on a blue background, two
+of them necessarily blue, each clearing WCAG AA against two different sky
+gradients, each separated by ΔE 15, and still ordered by luminance once red
+night mode discards the hue: there is no solution. Every attempt failed one of
+those - the original fell to 2.95:1 at the POOR end, and a plausible
+replacement put EXCELLENT and GOOD ΔE 6.8 apart.
+
+The ramp was also redundant. A bar already encodes its magnitude by length, the
+number is printed beside it, and the verdict is spelled out in 90px letters.
+Colour was a fourth copy of information the panel already carried three times,
+and it was the copy that cost the design. What remains is a single threshold,
+carried by form: a reading below its warning mark is drawn hollow rather than
+filled. That reads at a glance, survives the red night filter untouched because
+form has no hue, and it satisfies "colour is never the sole carrier" outright
+rather than approximately.
+
+Contrast is computed against every background the sky actually paints - the
 night gradient (6,8,20 -> 15,17,42) and the twilight one (22,32,62 -> 44,60,100)
-- using the lightest of each for light ink. Colour is never the sole carrier of
-a reading, which is also what makes red night mode viable.
+- using the lightest of each for light ink.
 """
 BG       = (10, 12, 28)      # opaque fills (bar troughs) — matches the night sky
 WHITE    = (230, 232, 240)   # data text
-ICE      = (165, 243, 252)   # #A5F3FC — best conditions
-ELECTRIC = (56, 189, 248)    # #38BDF8 — good conditions, bar fills
-AMBER    = (245, 158, 11)    # #F59E0B — fair/caution. STATUS ONLY.
-# The moon is an object, not a state, and it used to share AMBER with the FAIR
-# verdict - so on a fair night the two matched and implied a link that is not
-# there. Ivory rather than gold: every warm gold tested came out under the
-# ΔE 15 normal-vision floor against AMBER, i.e. hard to tell from it even with
-# full colour vision. Ivory is warm AND very light, so it clears amber, and it
-# is what the Moon actually looks like.
+# Every state, everywhere: verdicts, bar fills, section headings, data bands.
+# One colour, because none of them is a different KIND of thing.
+NOMINAL  = (169, 188, 224)   # #A9BCE0 — 8.1:1 on night, 4.7:1 on twilight
+# Objects beyond the Moon and planets - comets, deep-sky marks, and the drawn
+# stand-ins used when a real cutout cannot be fetched. Cool and pale so it sits
+# with the sky rather than shouting over it, and well clear of both NOMINAL and
+# MUTED. Comet against deep sky is not a distinction the eye needs at a glance,
+# and every mark carries its name, so one colour covers both.
+OBJECT   = (168, 216, 208)   # #A8D8D0
+# The moon is an object, not a state - it used to share a colour with the FAIR
+# verdict, so on a fair night the two matched and implied a link that is not
+# there. Ivory because it is what the Moon actually looks like.
 MOON     = (240, 226, 196)   # #F0E2C4 — the moon, wherever it appears
-ROSE     = (244, 63, 94)     # #F43F5E — poor conditions
-STEEL    = (29, 94, 128)     # muted electric — bar trough frame
+# Bar trough frame and plot axes. Was 2.61:1 on the night sky, below the 3:1
+# bar for graphical objects; 3.30:1 now. Clearing 3:1 on the TWILIGHT gradient
+# as well would need it light enough to compete with NOMINAL, which would make
+# a frame louder than the thing it frames - so it is knowingly short there.
+# It has to stay a clear BLUE: a first attempt lifted the luminance without
+# changing the hue and landed ΔE 13.1 from DIM, so the trough frame and the
+# ticks inside it became hard to tell apart. ΔE 28.9 now.
+STEEL    = (68, 102, 172)    # #4466AC
 MOON_DARK = (27, 36, 64)     # unlit lunar disc, just above the sky navy
-MUTED    = (150, 158, 180)   # secondary TEXT — present, but not competing
+# Secondary TEXT, and the planets on the alt-az plot. A true neutral, which is
+# both the point and the fix: grey is what "not an object" looks like next to a
+# blue NOMINAL, and the previous blue-grey sat ΔE 13.3 from it - close enough
+# that a heading and a caption read as the same ink.
+MUTED    = (162, 162, 163)   # #A2A2A3
 # Rules, ticks and frames - plus the two deliberately recessive marginal notes,
 # the version stamp and the imagery credit. NEVER content: at 3.2:1 on the
 # night sky and 1.8:1 on the twilight one it is below WCAG AA wherever it is
@@ -35,21 +69,18 @@ STAR_COLOUR = (232, 234, 248)
 
 
 def verdict(score):
-    """(label, colour) for a deep-sky forecast score 0-100."""
+    """The label for a deep-sky forecast score 0-100.
+
+    A label only. It used to return a colour alongside, which is what made the
+    verdict a fifth encoding of a number already shown as a percentage; the word
+    at 90px says it better than a hue ever did.
+    """
     if score >= 75:
-        return "EXCELLENT", ICE
+        return "EXCELLENT"
     if score >= 50:
-        return "GOOD", ELECTRIC
+        return "GOOD"
     if score >= 25:
-        return "FAIR", AMBER
+        return "FAIR"
     if score > 0:
-        return "POOR", ROSE
-    return "NONE", ROSE
-
-
-def bar_colour(value, good, warn):
-    if value >= good:
-        return ELECTRIC
-    if value >= warn:
-        return AMBER
-    return ROSE
+        return "POOR"
+    return "NONE"
