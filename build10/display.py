@@ -80,20 +80,21 @@ ROTATE = None
 MARGIN = 40
 HLINE1 = 116                # header bottom
 HLINE2 = 344                # verdict bottom
-HLINE3 = 1200               # moon bottom
-HLINE4 = 1576               # conditions bottom
+HLINE3 = 1240               # moon bottom
+HLINE4 = 1620               # conditions bottom
 
 MOON_CY = 700               # centre of the lunar disc
 MOON_R = 300                # 600px across
-# Three captions hang below the disc. Measured against their own line heights,
+# Four captions hang below the disc. Measured against their own line heights,
 # not eyeballed: the first preview put the constellation line through HLINE3 and
 # pushed the moon dates behind the condition bars entirely.
-MOON_CAP1, MOON_CAP2, MOON_CAP3 = 24, 86, 140   # offsets below the disc edge
+MOON_CAP1, MOON_CAP2 = 24, 86           # offsets below the disc edge
+MOON_CAP3, MOON_CAP4 = 140, 186
 
-BAR_Y0, BAR_GAP = 1240, 88
+BAR_Y0, BAR_GAP = 1284, 88
 BAR_LBLW, BAR_W, BAR_H = 300, 620, 40
 
-FOOT_Y0, FOOT_GAP = 1616, 56
+FOOT_Y0, FOOT_GAP = 1656, 56
 
 # Touch control strip. Hidden until the panel is tapped, because this is an
 # ambient display and permanent on-screen buttons would cost content space on
@@ -183,7 +184,35 @@ def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
     draw.polygon(pts, fill=MOON)
 
 
-def render_conditions(states, moon_photo=None, moon_ring=False):
+def _moon_facts(facts):
+    """The Moon's own numbers, as one line, or "" if the fetch failed.
+
+    Straight from the frame's own metadata, so they describe the picture above
+    them rather than a separate calculation that could disagree with it.
+    Libration is given as the direction the near side is tipped, which is what
+    "you can see a little further round that limb tonight" actually means.
+    """
+    if not facts:
+        return ""
+    bits = []
+    age = facts.get("age")
+    if age is not None:
+        bits.append(f"{age:.1f} days old")
+    dist = facts.get("distance")
+    if dist is not None:
+        bits.append(f"{dist:,.0f} km")
+    diam = facts.get("diameter")
+    if diam is not None:
+        bits.append(f"{diam / 60:.1f}′ across")     # the API reports arcseconds
+    lon, lat = facts.get("subearth_lon"), facts.get("subearth_lat")
+    if lon is not None and lat is not None:
+        ew = "E" if lon >= 0 else "W"
+        ns = "N" if lat >= 0 else "S"
+        bits.append(f"libration {abs(lon):.1f}°{ew} {abs(lat):.1f}°{ns}")
+    return "   ·   ".join(bits)
+
+
+def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None):
     """Page 1 as an RGBA overlay: opaque content, transparent sky."""
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -260,6 +289,9 @@ def render_conditions(states, moon_photo=None, moon_ring=False):
         moon_dates.append(f"Full {next_full.strftime('%d %b')}")
     if moon_dates:
         _centre(draw, "   -   ".join(moon_dates), MOON_CY + MOON_R + MOON_CAP3, MUTED, f["xs"])
+    line = _moon_facts(moon_facts)
+    if line:
+        _centre(draw, line, MOON_CY + MOON_R + MOON_CAP4, MUTED, f["xs"])
     draw.line([(0, HLINE3), (W, HLINE3)], fill=DIM, width=2)
 
     # ── Conditions ────────────────────────────────────────────────────
@@ -318,12 +350,13 @@ def render_conditions(states, moon_photo=None, moon_ring=False):
     if lifted and lifted not in ("unknown", ""):
         _right(draw, f"LI: {lifted}", y, WHITE, f["sm"])
 
-    # wind_spd is km/h internally; the footer is the only place it is converted.
+    # One row, not two: a fourth footer line would sit under the control strip
+    # when it is showing. wind_spd is km/h internally and this is the only place
+    # it is converted.
     y += FOOT_GAP
-    draw.text((MARGIN, y), f"Temp {temp:.1f}°C  -  Dew {dew:.1f}°C  -  RH {humidity}%",
-              fill=WHITE, font=f["sm"])
-    y += FOOT_GAP
-    draw.text((MARGIN, y), f"Wind {wind_dir} {wind_spd * KMH_TO_MPH:.1f} mph",
+    draw.text((MARGIN, y),
+              f"Temp {temp:.1f}°C  -  Dew {dew:.1f}°C  -  RH {humidity}%  -  "
+              f"Wind {wind_dir} {wind_spd * KMH_TO_MPH:.1f} mph",
               fill=WHITE, font=f["sm"])
 
     _right(draw, f"v{VERSION}", H - 44, DIM, f["xs"])
@@ -625,7 +658,8 @@ def draw_clock(draw):
 def build_pages(states, targets, lat, moon_ring=False):
     """Every page as an RGBA overlay. Data thread only: this fetches the hour's
     lunar frame and any deep-sky cutouts not already cached."""
-    pages = [render_conditions(states, moon_image(), moon_ring)]
+    photo, facts = moon_image()
+    pages = [render_conditions(states, photo, moon_ring, facts)]
     # The targets page joins the rotation only when there is something on it -
     # better one live page than two with a dead one.
     page2 = render_targets(states, targets,

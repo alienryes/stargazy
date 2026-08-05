@@ -680,7 +680,9 @@ def build_pages(states, targets, lat, moon_ring=False):
     Data thread only: this fetches the hour's lunar frame and any deep-sky
     cutouts not already cached.
     """
-    pages = [render_foreground(states, moon_image(), moon_ring)]
+    # The 5" layout has no room for the accompanying facts, so it takes the
+    # frame and drops them; the 10" build shows them.
+    pages = [render_foreground(states, moon_image()[0], moon_ring)]
     # The targets page joins the rotation only when there is something on it -
     # better a single page than a dead one before UpTonight's first run.
     page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS), lat)

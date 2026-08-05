@@ -77,20 +77,26 @@ def _prune(d, keep):
 
 
 def moon_image():
-    """The Moon as it actually looks this hour, or None. NETWORK - background
-    thread only; never call this from the render loop.
+    """(image, facts) for the Moon as it actually looks this hour, or (None, {}).
+
+    NETWORK - background thread only; never call this from the render loop.
 
     Deliberately does NOT fall back to a cached older frame: the phase moves
     about 12 degrees a day, so yesterday's picture would be wrong. Returning
     None instead selects the parametric drawing, which is computed from current
     data and therefore correct, if simpler.
+
+    The same response carries age, distance, apparent diameter and the
+    sub-earth point (libration) - all of it already paid for by the request that
+    fetches the picture, and all of it discarded until now.
     """
     MOON_CACHE.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")
     try:
         meta = requests.get(DIALAMOON_URL + stamp, timeout=20)
         meta.raise_for_status()
-        url  = meta.json()["image"]["url"]
+        facts = meta.json()
+        url  = facts["image"]["url"]
         # The filename comes from a network response, so constrain it to
         # known-safe characters: anything a path could be built from is
         # stripped ("\" would traverse on Windows, and a bare ".." names the
@@ -105,10 +111,10 @@ def moon_image():
             path.write_bytes(r.content)
             log.info("Moon frame fetched: %s", path.name)
             _prune(MOON_CACHE, MOON_CACHE_KEEP)
-        return Image.open(path).convert("RGB")
+        return Image.open(path).convert("RGB"), facts
     except Exception as e:
         log.warning("Moon frame unavailable (%s); drawing the phase instead.", e)
-        return None
+        return None, {}
 
 
 def paste_moon(img, photo, cx, cy, r, ring=True):
