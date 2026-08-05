@@ -23,7 +23,7 @@ import time
 
 from core.night import night_mode_now
 from core.panel import Controls
-from core.sky import DEMO_PARAMS, sky_params
+from core.sky import DEMO_PARAMS
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +51,10 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
     def load():
         states = fetch()
         state["pages"] = layout.build_pages(states, read_targets(out_dir), lat, moon_ring)
-        state["params"] = DEMO_PARAMS if demo else sky_params(states)
+        # Through the layout, not core.sky directly: a build that knows what is
+        # actually falling tonight can say so here. The 5" build re-exports
+        # core.sky.sky_params unchanged.
+        state["params"] = DEMO_PARAMS if demo else layout.sky_params(states)
         # Dusk/dawn drive night mode, and they only change when the data does.
         state["window"] = layout.night_window(states)
 

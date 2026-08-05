@@ -50,7 +50,8 @@ from core.palette import (
 )
 from core.panel import Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
-from core.sky import Sky, sky_params
+from core.sky import Sky
+from core.sky import sky_params as core_sky_params
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
@@ -69,7 +70,9 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 # The daemon hands build_pages a latitude, because that is all the 5" build ever
-# needed. Computing alt-az needs a longitude too, so main() records it here.
+# needed. Computing alt-az needs a longitude too, and sky_params needs both
+# without being handed either, so main() records them here.
+LAT = None
 LON = None
 
 # Native portrait: the frame is written to the framebuffer as drawn, with no
@@ -109,6 +112,13 @@ FOOT_Y0, FOOT_GAP = 1656, 56
 STRIP_H = 80
 STRIP_Y = H - STRIP_H - 24
 BTN_GAP = 10
+
+# Meteors are drawn at the real rate, sped up. Three an hour is honest and makes
+# an animated sky look broken, so the panel runs them as though watching for this
+# many minutes per minute. A stated convention, not a fudge - and it scales what
+# is there rather than manufacturing what is not, so a night with nothing falling
+# still shows nothing. Overridable as display.meteor_compression.
+METEOR_COMPRESSION = 20.0
 
 # The engine, sized for this panel. The daemon reads these three off this module
 # as its layout.
@@ -751,6 +761,45 @@ def render_meteors(states, lat, lon):
     return img
 
 
+def sky_params(states):
+    """The sky's mood, with the meteors made real.
+
+    core.sky spawns meteors on a fixed cadence scaled by cloud - so a clear
+    night in March, when almost nothing is falling, shows the same shower as the
+    Perseid peak. This build knows better: page 3 already computes what an
+    observer would actually count tonight, so the same figure sets the cadence.
+
+    NOTHING ACTIVE MEANS NO METEORS. Once a display draws real showers, inventing
+    them on a quiet night is the same class of error as showing yesterday's Moon.
+
+    The rate is TIME-COMPRESSED, and that is a deliberate convention rather than
+    an accident: three an hour is honest and makes an animated sky look broken,
+    so the panel runs meteors as though watching for `meteor_compression` minutes
+    per minute. Zero stays zero - the compression scales what is there and cannot
+    manufacture what is not.
+    """
+    params = core_sky_params(states)
+    when, _ = plot_instant(night_window(states))
+    utc = when.astimezone(timezone.utc).replace(tzinfo=None)
+    obs = observer(LAT or 0.0, LON or 0.0, when=utc)
+    cloud = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+    moon_illum = _f(states.get("sensor.astroweather_backyard_moon_phase")) / 100.0
+
+    rate = visible_rate(SPORADIC_ZHR, 1.0, 45.0, cloud, moon_illum)
+    for s in active(utc):
+        alt, _az = alt_az(obs, s["ra"], s["dec"])
+        rate += visible_rate(s["zhr"], s["strength"], alt, cloud, moon_illum)
+
+    if rate <= 0 or params["twilight"]:
+        params["meteors"] = False
+        return params
+    mean = 3600.0 / (rate * METEOR_COMPRESSION)
+    params["meteors"] = True
+    params["met_min"] = max(1.5, mean * 0.5)
+    params["met_max"] = max(3.0, mean * 1.5)
+    return params
+
+
 def draw_clock(draw):
     """Stamp the header date and time onto a composed frame.
 
@@ -799,11 +848,12 @@ def main():
                         help="Fetch from both weather sources and print a per-value diff")
     args = parser.parse_args()
 
-    global LON
+    global LAT, LON
     config = load_config(CONFIG_PATH)
     out_dir = config.get("uptonight", {}).get("out_dir", "")
     lat    = config.get("location", {}).get("latitude")
     LON    = config.get("location", {}).get("longitude")
+    LAT    = lat
     disp   = config.get("display", {})
     mode   = disp.get("mode", "animated")
     fps    = float(disp.get("fps", 12))
@@ -814,6 +864,8 @@ def main():
     if night not in NIGHT_CYCLE:
         raise ValueError(f'display.night_mode is "{night}"; expected "off", "dim" or "red"')
     moon_ring = bool(disp.get("moon_ring", False))
+    global METEOR_COMPRESSION
+    METEOR_COMPRESSION = float(disp.get("meteor_compression", METEOR_COMPRESSION))
     tch = config.get("touch", {})
 
     if args.compare:

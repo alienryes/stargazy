@@ -83,6 +83,18 @@ night_dim = 45
 # almost nothing of the Moon is lit and there is very little left to see.
 moon_ring = false
 
+# Meteors in the animated sky are drawn at the rate an observer would actually
+# count tonight - shower activity from the solar-longitude table, cut by radiant
+# altitude, cloud and moonlight - rather than on a fixed cadence. On a night when
+# nothing is falling, nothing falls here either.
+#
+# That rate is time-compressed, because three an hour is honest and makes an
+# animated sky look broken: the panel runs meteors as though watching for this
+# many minutes per minute. Raise it for a livelier sky, set it to 1 for real
+# time. It scales what is there and cannot manufacture what is not, so a quiet
+# night stays quiet at any setting.
+meteor_compression = 20
+
 # Touch controls. Tap the panel once and a control strip appears along the
 # bottom for strip_seconds; tap a button to use it, or leave it and it goes
 # away again. No controls are drawn until the screen is touched, and nothing
