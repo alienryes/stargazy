@@ -24,7 +24,6 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-import touch
 from core.daemon import install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
@@ -53,6 +52,7 @@ from core.palette import (
 from core.panel import Framebuffer, Strip
 from core.sky import Sky, sky_params
 from core.targets import load_cutouts, peak, read_targets, ut_dt
+from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
@@ -762,7 +762,7 @@ def main():
         return
 
     install_signal_handlers()
-    reader = touch.TouchReader(W, H, FB_W, FB_H) if tch.get("enabled", True) else None
+    reader = TouchReader(W, H, FB_W, FB_H) if tch.get("enabled", True) else None
     # This module is the layout the daemon draws through: it supplies sky, fb,
     # strip, build_pages, compose and night_window.
     run_daemon(sys.modules[__name__], fetch, read_targets, out_dir, lat,

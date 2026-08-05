@@ -43,7 +43,6 @@ Invoke-Pi "mkdir -p $REMOTE_DIR"
 # Copy files
 Write-Host "--> Copying files..."
 Copy-ToPi "$BUILD\display.py"    "$REMOTE_DIR/display.py"
-Copy-ToPi "$BUILD\touch.py"      "$REMOTE_DIR/touch.py"
 
 # The shared engine sits beside display.py, so the install layout stays flat and
 # the systemd units keep working unchanged.

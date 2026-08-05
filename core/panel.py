@@ -36,7 +36,9 @@ class Framebuffer:
         self.dev = dev
 
     def to_bytes(self, img, night="off", dim=45):
-        rot = img.transpose(self.rotate)
+        # rotate is None for a build drawn in the panel's native portrait, which
+        # is a straight write with no transpose at all.
+        rot = img if self.rotate is None else img.transpose(self.rotate)
         if rot.size != (self.fb_w, self.fb_h):
             rot = rot.resize((self.fb_w, self.fb_h))
         arr = np.asarray(rot, dtype=np.uint16)
