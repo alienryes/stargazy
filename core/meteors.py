@@ -11,10 +11,16 @@ years only because the Gregorian year (365 d) runs against the tropical year
 leap day resets it. That wobble is a property of the calendar, not of the shower.
 Stored this way the table is self-correcting forever and needs no maintenance.
 
-⚠ THE FIGURES BELOW ARE FROM GENERAL REFERENCE AND HAVE NOT BEEN CHECKED AGAINST
-THE IMO WORKING LIST. They are right to about a degree of solar longitude, which
-is fine for "is anything running tonight" and not fine for planning an
-observation. Verify against https://www.imo.net before relying on them.
+SOURCE: the IMO Working List of Visual Meteor Showers
+(https://www.imo.net/members/imo_showers/working_shower_list), checked
+2026-08-05. Peak solar longitudes, radiants (J2000) and ZHRs are taken from it
+directly; the activity limits are the IMO's published activity DATES converted
+to solar longitude here, so nothing in this table is stored as a date.
+
+The falloff B is NOT from the IMO list, which publishes the population index r
+instead. These are conventional values and only shape the curve BETWEEN the
+published activity limits - the limits and the peak, which decide whether a
+shower appears at all, are the IMO's.
 
 Radiants drift roughly a degree a day through a shower's activity period, as the
 Earth's vantage point moves. That is ignored here; the IMO publishes drift rates
@@ -28,17 +34,19 @@ import ephem
 # (J2000, degrees), zenithal hourly rate at peak, falloff B (per degree of solar
 # longitude either side of the peak).
 SHOWERS = [
-    ("Quadrantids",      283.15, 281.0, 284.5, 230.1,  49.5, 110, 2.20),
-    ("Lyrids",            32.32,  29.0,  35.0, 271.4,  33.6,  18, 0.22),
-    ("Eta Aquariids",     45.50,  35.0,  59.0, 338.0,  -1.0,  50, 0.08),
-    ("Delta Aquariids",  125.00, 105.0, 142.0, 340.0, -16.0,  25, 0.09),
-    ("Perseids",         140.00, 123.0, 145.5,  48.2,  58.1, 100, 0.20),
-    ("Orionids",         208.00, 195.0, 220.0,  95.2,  15.8,  20, 0.12),
-    ("Southern Taurids", 196.00, 170.0, 230.0,  32.0,   9.0,   5, 0.026),
-    ("Northern Taurids", 223.00, 190.0, 245.0,  58.0,  22.0,   5, 0.026),
-    ("Leonids",          235.27, 232.0, 240.0, 152.3,  21.8,  15, 0.55),
-    ("Geminids",         262.20, 255.0, 265.0, 112.3,  32.5, 150, 0.39),
-    ("Ursids",           270.70, 268.0, 274.0, 217.0,  75.8,  10, 0.90),
+    ("Quadrantids",           283.2, 274.1, 291.4, 230.0,  49.0, 120, 2.20),
+    ("Lyrids",                 32.3,  25.7,  34.4, 271.0,  34.0,  18, 0.22),
+    ("η-Aquariids",            45.5,  28.6,  66.3, 338.0,  -1.0,  40, 0.08),
+    ("Southern δ-Aquariids",  127.0, 109.3, 149.5, 340.0, -16.0,  25, 0.09),
+    ("Perseids",              140.0, 114.1, 150.5,  48.0,  58.0, 150, 0.20),
+    ("Southern Taurids",      197.0, 166.9, 237.3,  32.0,   9.0,   5, 0.026),
+    ("Orionids",              208.0, 188.5, 224.2,  95.0,  16.0,  15, 0.12),
+    ("Northern Taurids",      230.0, 206.2, 257.6,  58.0,  22.0,   5, 0.026),
+    ("Leonids",               235.3, 223.2, 247.4, 152.0,  22.0,  15, 0.55),
+    ("Geminids",              262.2, 251.5, 267.7, 112.0,  33.0, 120, 0.39),
+    # The IMO gives the Ursids' ZHR as "var"; 10 is the usual quiet-year figure
+    # and the only invented number in this table.
+    ("Ursids",                270.7, 264.7, 273.8, 217.0,  76.0,  10, 0.90),
 ]
 
 # A dark clear sky still shows a handful of meteors belonging to no shower at
