@@ -36,7 +36,7 @@ Two pages rotate over the same continuous animated sky. Both shots are real fram
 
 **Page 1 — tonight's conditions**
 
-![The conditions page: a large FAIR verdict in amber, four labelled condition bars with percentages, and a photographic waning gibbous Moon captioned Waning Gibbous in Pisces. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind.](screenshots/conditions.png)
+![The conditions page: a large EXCELLENT verdict in pale blue-white, four labelled condition bars with percentages, and a photographic last-quarter Moon captioned Last Quarter in Aries. The Seeing bar reads 36% and is drawn as a hollow outline rather than filled, because it falls below its warning mark; the other three are filled. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind.](screenshots/conditions.png)
 
 > **Dusk / Dawn** in that footer, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
 
@@ -48,7 +48,7 @@ The page-2 timeline only appears once UpTonight has run, and the page leaves the
 
 **Night mode — the same page after dark**
 
-![The conditions page in red night mode: the identical layout rendered entirely in shades of red on black, including the photograph of the Moon. The verdict, the condition bars, the percentages and the footer are all still legible; only hue has gone.](screenshots/night-red.png)
+![The conditions page in red night mode: the identical layout rendered entirely in shades of red on black, including the photograph of the Moon. The verdict, the condition bars, the percentages and the footer are all still legible, and the hollow Seeing bar still reads as hollow; only hue has gone.](screenshots/night-red.png)
 
 Between real dusk and dawn — not on a clock schedule — the finished frame is put through a red filter, because long wavelengths leave dark-adapted vision alone. Filtering the frame rather than swapping the palette is what keeps the lunar photograph and the deep-sky cutouts from glowing white, and it costs nothing measurable: the transform runs on the array the framebuffer path already builds.
 
@@ -68,7 +68,7 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 **Page 1 — conditions.** The Moon takes the middle band at 600px across; the source frame is 730px, so this is close to native rather than an enlargement. Under it are the numbers that come with the frame and used to be discarded — age, distance, apparent diameter, and libration as the direction the near side is tipped.
 
-![The 10.1-inch conditions page in portrait: a large EXCELLENT verdict, a 600-pixel photograph of a last-quarter Moon captioned Last Quarter in Aries with its age, distance, diameter and libration, four condition bars, and a footer of forecast, dusk and dawn times and weather.](screenshots/10in-conditions.png)
+![The 10.1-inch conditions page in portrait: a large EXCELLENT verdict, a 600-pixel photograph of a last-quarter Moon captioned Last Quarter in Aries with its age, distance, diameter and libration, four condition bars with the below-threshold Seeing bar drawn hollow, and a footer of forecast, dusk and dawn times and weather.](screenshots/10in-conditions.png)
 
 **Page 2 — targets.** One altitude-versus-bearing plot carries the planets *and* the deep-sky objects on a full 0–90° axis. The 5" build cannot do this: its objects peak at 70–85° while the planets sit below 35°, and one axis holding both would squash the planets flat. Positions are computed for a single stated instant rather than read from the report files, which are written hours apart.
 
@@ -76,7 +76,7 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 **Page 3 — meteors.** Which showers are actually running, from a table of orbital constants indexed by solar longitude, with the rate an observer would really count once radiant altitude, cloud and moonlight are accounted for.
 
-![The 10.1-inch meteor page: solar longitude 133.2 degrees, with Delta Aquariids 8 degrees past peak and Perseids peaking in 7 days, each showing radiant altitude and bearing and an estimated rate of about one per hour, plus a sporadic background figure.](screenshots/10in-meteors.png)
+![The 10.1-inch meteor page: solar longitude 133.2 degrees, with Southern Delta Aquariids 6 degrees past peak and Perseids peaking in 7 days, each showing radiant altitude and bearing and an estimated rate of one to two per hour against its zenithal hourly rate at peak, plus a sporadic background of about two per hour.](screenshots/10in-meteors.png)
 
 ---
 

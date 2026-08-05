@@ -57,7 +57,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -749,12 +749,14 @@ def render_meteors(states, lat, lon):
         draw.rectangle([MARGIN, by, MARGIN + MET_BAR_W, by + MET_BAR_H], fill=BG)
         frac = max(0.0, min(1.0, rate / MET_RATE_FULL))
         if frac > 0:
-            box = [MARGIN, by, MARGIN + max(2, int(MET_BAR_W * frac)),
-                   by + MET_BAR_H]
-            if rate >= 10:
-                draw.rectangle(box, fill=NOMINAL)
-            else:
-                draw.rectangle(box, outline=NOMINAL, width=2)
+            # Always filled, unlike the conditions and deep-sky bars. The hollow
+            # convention marks a reading short of a threshold worth acting on,
+            # and there is no such threshold here: observed rates are low single
+            # digits on almost every night, so nearly every bar would be hollow,
+            # and at a few pixels wide an outline degenerates into a small empty
+            # box that reads as a rendering fault. The rate is printed beside it.
+            draw.rectangle([MARGIN, by, MARGIN + max(2, int(MET_BAR_W * frac)),
+                            by + MET_BAR_H], fill=NOMINAL)
         draw.text((MARGIN + MET_BAR_W + 20, by - 4),
                   f"~{rate:.0f}/hr", font=f["med"],
                   fill=WHITE if rate >= 1 else DIM)
