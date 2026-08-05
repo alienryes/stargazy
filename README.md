@@ -1,8 +1,20 @@
 # 🌌 touch2-stargazing-display
 
-A stargazing conditions display for the [Raspberry Pi Touch Display 2 (5")](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html), driven by a Raspberry Pi 4. It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if available — and renders a colour-coded overnight forecast over a live, data-reactive animated night sky — no interaction required.
+A stargazing conditions display for the [Raspberry Pi Touch Display 2](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html). It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if available — and renders a colour-coded overnight forecast over a live, data-reactive animated night sky — no interaction required.
 
-Rendered with Pillow at 1280×720 landscape and written straight to the Linux framebuffer (`/dev/fb0`, RGB565) — no X, no display server, no `inky` library.
+Rendered with Pillow and written straight to the Linux framebuffer (`/dev/fb0`, RGB565) — no X, no display server, no `inky` library.
+
+**There are two builds**, sharing one engine. Pick the one that matches the hardware:
+
+| | [`build5/`](build5/) | [`build10/`](build10/) |
+|---|---|---|
+| Panel | Touch Display 2, **5"** | Touch Display 2, **10.1"** |
+| Board | Pi 4 | **Pi 5 or CM** — four-lane DSI, a Pi 4 cannot drive it |
+| Canvas | 1280×720 landscape, rotated to the panel | 1200×1920 portrait, no rotation |
+| Pages | Conditions, targets | Conditions, targets, **meteors** |
+| Status | **Proven in service** | **In development — not yet run on hardware** |
+
+Everything that is not layout — both weather sources, the target reports, the imagery, the animated sky, night mode, touch, the framebuffer — lives in [`core/`](core/) and is shared. The rest of this README describes the 5" build unless it says otherwise; substitute `build10/` for `build5/` in the commands to install the other one.
 
 **Highlights**
 
@@ -18,7 +30,9 @@ Rendered with Pillow at 1280×720 landscape and written straight to the Linux fr
 
 ## 📸 Display layout
 
-Two pages rotate over the same continuous animated sky. Both shots are real frames from a Pi 4, rendered from live data:
+### The 5-inch build
+
+Two pages rotate over the same continuous animated sky. Both shots are real frames from the panel's own Pi 4, rendered from live data:
 
 **Page 1 — tonight's conditions**
 
@@ -29,6 +43,30 @@ Two pages rotate over the same continuous animated sky. Both shots are real fram
 ![The targets page: a dusk-to-dawn timeline with the astronomical dark window highlighted and a moon-up strip above it; an altitude-versus-bearing plot of the Moon and planets; and four deep-sky cards, each with a real sky photograph, object type, constellation, peak altitude and time.](screenshots/targets.png)
 
 The page-2 timeline only appears once UpTonight has run, and the page leaves the rotation entirely if it has produced nothing — better one page than a dead one.
+
+**Night mode — the same page after dark**
+
+![The conditions page in red night mode: the identical layout rendered entirely in shades of red on black, including the photograph of the Moon. The verdict, the condition bars, the percentages and the footer are all still legible; only hue has gone.](screenshots/night-red.png)
+
+Between real dusk and dawn — not on a clock schedule — the finished frame is put through a red filter, because long wavelengths leave dark-adapted vision alone. Filtering the frame rather than swapping the palette is what keeps the lunar photograph and the deep-sky cutouts from glowing white, and it costs nothing measurable: the transform runs on the array the framebuffer path already builds.
+
+Nothing is lost to it, because no reading on this display is carried by colour alone — the verdict is a word as well as a hue, and every bar has a number. The one real consequence is that the status colours collapse to brightness, so a POOR verdict renders dimmer than an EXCELLENT one rather than differently coloured. `night_mode = "dim"` keeps the colours at reduced brightness instead.
+
+### The 10.1-inch build
+
+Portrait, 2.5× the pixels at slightly lower density, so the space goes on content rather than on scale. These are real frames rendered from live data, but **on a development Pi, not yet on the panel itself**:
+
+**Page 1 — conditions.** The Moon takes the middle band at 600px across; the source frame is 730px, so this is close to native rather than an enlargement. Under it are the numbers that come with the frame and used to be discarded — age, distance, apparent diameter, and libration as the direction the near side is tipped.
+
+![The 10.1-inch conditions page in portrait: a large EXCELLENT verdict, a 600-pixel photograph of a last-quarter Moon captioned Last Quarter in Aries with its age, distance, diameter and libration, four condition bars, and a footer of forecast, dusk and dawn times and weather.](screenshots/10in-conditions.png)
+
+**Page 2 — targets.** One altitude-versus-bearing plot carries the planets *and* the deep-sky objects on a full 0–90° axis. The 5" build cannot do this: its objects peak at 70–85° while the planets sit below 35°, and one axis holding both would squash the planets flat. Positions are computed for a single stated instant rather than read from the report files, which are written hours apart.
+
+![The 10.1-inch targets page: a dusk-to-dawn timeline, then an altitude-versus-bearing plot showing six deep-sky objects between 60 and 77 degrees and four planets below 30, each labelled with its bearing, above six deep-sky cards with real sky photographs.](screenshots/10in-targets.png)
+
+**Page 3 — meteors.** Which showers are actually running, from a table of orbital constants indexed by solar longitude, with the rate an observer would really count once radiant altitude, cloud and moonlight are accounted for.
+
+![The 10.1-inch meteor page: solar longitude 133.2 degrees, with Delta Aquariids 8 degrees past peak and Perseids peaking in 7 days, each showing radiant altitude and bearing and an estimated rate of about one per hour, plus a sporadic background figure.](screenshots/10in-meteors.png)
 
 The schematic below labels the regions of page 1:
 
@@ -71,13 +109,15 @@ The moon card shows **a real image of the Moon** (set `display.moon_ring = true`
 
 Meteors streak occasionally through the night sky (rarer when cloudy). Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
 
+**In the 10.1-inch build the meteors are real.** Their cadence comes from the same computation that fills its meteor page — which showers are running, how high each radiant sits, and how much of the rate cloud and moonlight remove — so a quiet night in March shows almost nothing and a clear Perseid peak is busy. If nothing is falling, nothing falls here either. The rate is deliberately time-compressed (`meteor_compression`, default 20), because a truthful three-an-hour makes an animated sky look broken; it scales what is there and cannot invent what is not. The *direction* is still arbitrary, and stays that way until the starfield itself is real — a correct radiant over invented stars would be false precision.
+
 ---
 
 ## 👆 Touch controls
 
-The panel is a touchscreen, and the display reads it directly from `/dev/input/eventN` — no X, no Wayland, no extra packages.
+As the panel is a touchscreen, there are some touch controls (which the display reads directly from `/dev/input/eventN` — there's no requirment for X or Wayland.)
 
-No controls are drawn until the screen is touched. **The first tap only reveals a control strip** along the bottom, which goes away again after six seconds; a second tap presses a button. That way an ambient display stays uncluttered, and a brush past the panel in the dark cannot change anything.
+No controls are drawn until the screen is touched. **The first tap only reveals a control strip** along the bottom, which disappears after six seconds; a second tap presses a button. That way the ambient display stays uncluttered and brushing past the panel in the dark can't change anything.
 
 | Button | What it does |
 |---|---|
@@ -87,9 +127,9 @@ No controls are drawn until the screen is touched. **The first tap only reveals 
 | **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
 | **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until it is touched again. |
 
-A night mode picked by hand lapses the next time the sky crosses dusk or dawn: it is a change of mind about tonight, not a second schedule competing with the automatic one. Nothing else here is persisted either — `config.toml` is restored on restart, so the display always comes back to a known state.
+If a night mode picked by hand, it lapses the next time the sky crosses dusk or dawn: it is just a change of state for that night, not a second schedule competing with the automatic one. Nothing else in the touch controls is persisted — `config.toml` is restored on restart, so the display always comes back to a known state.
 
-Requires `display.mode = "animated"`, and an account in the `input` and `video` groups (`setup.sh` arranges both). Set `touch.enabled = false` to turn the whole thing off.
+This finctionality requires `display.mode = "animated"`, and an account in the `input` and `video` groups (`setup.sh` arranges both). Set `touch.enabled = false` to turn the touch controls off.
 
 ---
 
@@ -100,15 +140,22 @@ Requires `display.mode = "animated"`, and an account in the `input` and `video` 
 | Item | Qty | Notes |
 |---|---|---|
 | Raspberry Pi 4 Model B (2GB is plenty) | 1 | What this is built and proven on. See the Pi 5 note below |
-| Raspberry Pi Touch Display 2, **5-inch** | 1 | 720×1280 DSI, ~£36. Ships with a Pi 4 DSI cable |
+| Raspberry Pi Touch Display 2, **5-inch** | 1 | 720×1280 DSI. Ships with a Pi 4 DSI cable |
 | Official Raspberry Pi USB-C PSU (5.1V/3A) | 1 | The printed stand is sized so this one's stiff cable clears the desk |
 | microSD card, 16GB+ | 1 | Raspberry Pi OS Lite 64-bit |
 | 3D-printed case and stands | 1 set | Optional — see [`case/`](case/README.md). ~150g of PETG |
 | M2.5 screws and standoffs | 1 set | Only for the case; full list in [`case/README.md`](case/README.md) |
 
-No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all screws and standoffs.
+No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all screws and standoffs. If a 5v GPIO pin is required then the 0 v pin of the display connector can be shifted to the middle pin and the connector moved right by one pin. This frees up Pin 2. Normally the connector connects via Pin 2 and Pin 6, which blocks pin 4.
 
-> **A Pi 5 is untested for the software.** It needs a Display Adapter Cable for Pi 5 (22-way → 15-way, the one marked `DISPLAY`), and `display.py` assumes a 16-bit RGB565 `/dev/fb0` — a Pi 5 gets its framebuffer from DRM emulation, which commonly comes up 32bpp, so the packing code would need a format branch. There is no performance reason to move either: the render loop is single-threaded and uses about one core of four. The case *does* have a printable Pi 5 variant.
+> **Using a Pi 5 for the 5" build gains nothing.** It needs a Display Adapter Cable for Pi 5 (22-way → 15-way, the one marked `DISPLAY`), and there is no performance reason to move: the render loop is single-threaded and uses about one core of four. The case *does* have a printable Pi 5 variant.
+>
+> The framebuffer format is the thing to check on any new board, for either build. Both packing paths assume 16-bit RGB565, and a Pi 5 gets `/dev/fb0` from DRM's fbdev emulation, which is often 32bpp XRGB8888 — though one Pi 5 measured here came up 16bpp. Confirm rather than assume:
+> ```bash
+> cat /sys/class/graphics/fb0/bits_per_pixel /sys/class/graphics/fb0/virtual_size
+> ```
+
+**For the 10.1" build**, the table changes: a **Raspberry Pi 5** (its DSI is four-lane, which the panel requires), the **10.1-inch** Touch Display 2, and a 27W USB-C PSU. No printed case exists for it yet.
 
 **Software**
 - Raspberry Pi OS Lite 64-bit (Trixie / Bookworm), headless (`multi-user.target`)
@@ -125,7 +172,7 @@ No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all 
 The Touch Display 2 is auto-detected over DSI — no SPI or device-tree overlay needed. Just run the setup script:
 
 ```bash
-# Copy setup.sh to the Pi, then:
+# Copy the build's setup.sh to the Pi, then:
 sudo bash setup.sh          # or: sudo bash setup.sh <username>
 sudo reboot                 # required: setup.sh adds fbcon=map:2 to the kernel cmdline
 ```
@@ -142,7 +189,7 @@ With no argument it sets everything up for the account that invoked `sudo`, whic
 ### 2. Create config
 
 ```bash
-cp config.example.toml config.toml
+cp build5/config.example.toml build5/config.toml
 ```
 
 Set the desired observing site in `[location]`; that is the only thing that MUST be edited (unless the site is Greenwich, London, UK, which is the default). The default `weather.source = "direct"` fetches the forecast on the Pi itself and needs no credentials at all:
@@ -174,16 +221,16 @@ Both sources are the same underlying model, so they agree — `display.py --comp
 From Windows:
 
 ```powershell
-.\deploy.ps1 -User <pi-username> -PiHost <hostname-or-ip>
+.\build5\deploy.ps1 -User <pi-username> -PiHost <hostname-or-ip>
 ```
 
-Both default to the reference build's values (username `operations` and hostname `astro-pi.local`), so `.\deploy.ps1` alone works once the local ones match — otherwise pass them. Unlike `setup.sh`, this runs on a PC and talks to the Pi over SSH, so it cannot infer the remote account name. The host is resolved by mDNS, which works on either the wired or the wireless interface; use an explicit address if mDNS is unavailable.
+Both default to the reference build's values (username `operations` and hostname `astro-pi.local`), so `.\build5\deploy.ps1` alone works once the local ones match — otherwise pass them. Unlike `setup.sh`, this runs on a PC and talks to the Pi over SSH, so it cannot infer the remote account name. The host is resolved by mDNS, which works on either the wired or the wireless interface; use an explicit address if mDNS is unavailable.
 
 This copies the files, installs the Python dependencies, stages the systemd units, and restarts the always-on animated display. **The very first deploy (and any later one that changes a unit file) will print one extra command to run** — installing a systemd unit is done under interactive sudo on the Pi, not automatically.
 
 ### A note on security
 
-- **The NOPASSWD sudoers rules cover exactly two commands**: restarting the display service and kicking a first UpTonight run. In particular the deploy account **cannot** install unit files unattended — a unit executes as root, so `systemd/install-units.sh` asks for a password instead. If these rules are widened for convenience, understand that root is being handed to anything that ever compromised the deploy account.
+- **The NOPASSWD sudoers rules cover exactly two commands**: restarting the display service and kicking a first UpTonight run. In particular the deploy account **cannot** install unit files unattended — a unit executes as root, so `build5/systemd/install-units.sh` asks for a password instead. If these rules are widened for convenience, understand that root is being handed to anything that ever compromised the deploy account.
 - **Check for `/etc/sudoers.d/90-cloud-init-users`.** A Pi provisioned with Raspberry Pi Imager gets its first user `NOPASSWD:ALL` from cloud-init, which silently defeats the scoped rules above — `sudo -l` will show it. If the account has a usable password (`passwd -S <user>` says `P` — confirm this first, or lose easy root), remove that file and sudo goes back to asking.
 - **`deploy.ps1` uses `StrictHostKeyChecking=accept-new`**: first contact trusts the key it sees, after which a changed host key aborts the deploy. If the Pi is reflashed, clear the stale key with `ssh-keygen -R astro-pi.local`.
 - `config.toml` is deployed with mode 600, since it can carry a Home Assistant token.
@@ -246,19 +293,30 @@ The daemon uses roughly 80% of one Pi 4 core at 20 fps; lower `fps` in `config.t
 
 ## 📁 File structure
 
+There are two builds, differing in panel and board. They share one engine in
+`core/`; each build folder holds only what is specific to its hardware — layout,
+config, systemd units and deploy script. A build folder plus `core/` is
+everything that gets installed on a Pi.
+
 ```
-display.py              Main script (render + animation + framebuffer daemon)
-touch.py                Touchscreen reader (evdev; run alone to check mapping)
+core/                   Shared engine: weather sources, target reports, imagery,
+                        animated sky, night filter, framebuffer, touch controls
+build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference build
+  display.py              Entry point and 1280x720 layout
+  touch.py                Touchscreen reader (evdev; run alone to check mapping)
+  config.toml             Local config (gitignored)
+  config.example.toml     Template ([weather] + [location] + [display] + [touch])
+  deploy.ps1              Windows → Pi deploy script
+  setup.sh                One-time Pi setup (run with sudo)
+  systemd/
+    touch2-stargazing.service   Always-on animated display daemon
+    fbcon-detach.service        Frees /dev/fb0 from the text console
+    install-units.sh            Installs the units - interactive sudo, by design
+build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - in progress
 screenshots/            README images, regenerated with display.py --save
-config.toml             Local config (gitignored)
-config.example.toml     Template ([weather] + [location] + [display] + [touch])
-deploy.ps1              Windows → Pi deploy script
-setup.sh                One-time Pi setup (run with sudo)
+                        (night-red.png needs apply_night() forced: --save
+                        renders night mode off outside the dark window)
 harden-pi.sh            Optional: key-only SSH + automatic security updates
-systemd/
-  touch2-stargazing.service   Always-on animated display daemon
-  fbcon-detach.service        Frees /dev/fb0 from the text console
-  install-units.sh            Installs the units - interactive sudo, by design
 case/
   README.md               Print settings, hardware, assembly
   shell.py                Display shell (front frame + back plate)

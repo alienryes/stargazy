@@ -1,0 +1,114 @@
+# Where the weather comes from.
+#
+#   "direct"        - fetch it here, via pyastroweatherio (the same library the
+#                     Home Assistant AstroWeather integration wraps). No Home
+#                     Assistant needed; this is the default.
+#   "homeassistant" - read the AstroWeather sensors from a running HA instance
+#                     over its REST API. Needs the [ha] section below.
+#
+# Both produce identical numbers - `display.py --compare` confirms this
+# locally. "direct" needs the extra packages in requirements.txt (~195MB,
+# mostly pandas); "homeassistant" needs none of them.
+[weather]
+source = "direct"
+
+# Condition weighting, passed straight to pyastroweatherio. These are its own
+# defaults and match what the HA integration uses; they should be left alone
+# without a specific reason. NB the three weakenings are FRACTIONS (the integration's
+# settings screen shows the same numbers as percentages).
+cloudcover_weight = 3
+cloudcover_high_weakening = 0.4
+cloudcover_medium_weakening = 0.7
+cloudcover_low_weakening = 1.0
+fog_weight = 3
+seeing_weight = 2
+transparency_weight = 1
+calm_weight = 2
+# Approximates lifted index, seeing, transparency and ground fog.
+experimental_features = true
+# Open-Meteo model: icon_seamless (DWD), metno_seamless, gfs_seamless,
+# ecmwf_ifs025. Leaving this unset changes the numbers substantially.
+forecast_model = "ecmwf_ifs025"
+
+# Only needed when weather.source = "homeassistant".
+[ha]
+url = "http://192.168.1.x:8123"
+token = "long-lived-access-token-here"
+
+# The observing site. This is the single source of truth for location: setup.sh
+# renders UpTonight's own config.yaml from these values, so they are never
+# entered twice. Latitude is also what turns a target's declination into the
+# altitude it reaches (90 - |lat - dec|).
+[location]
+latitude = 51.4779
+longitude = -0.0015
+elevation = 47
+timezone = "Europe/London"
+
+# UpTonight runs locally on this Pi from a systemd timer and writes its reports
+# here; the display reads them off disk. Nothing else is needed for the targets
+# page - no broker, no container, no Home Assistant.
+[uptonight]
+out_dir = "/home/operations/uptonight/out"
+
+[display]
+# "animated" = live data-reactive night sky behind the dashboard (default);
+# "static"   = redraw only when the data changes (no animation).
+mode = "animated"
+# 12 rather than the 5" build's 20: this panel is 2.5x the pixels, and the render
+# loop is O(pixels). Drift and twinkle are unaffected at 12 - only meteors want
+# frame rate, so fps is in practice a meteor budget. Measure before raising it.
+fps = 12
+data_refresh_min = 15
+# Seconds each page is shown before rotating. The targets page only joins the
+# rotation when UpTonight has produced a report, so before the first run the
+# display simply stays on the conditions page.
+page_seconds = 20
+
+# Night mode, applied between real dusk and dawn - not on a clock schedule,
+# because the point is to stop the panel wrecking dark adaptation and that
+# starts when the sky does.
+#
+#   "off"  - no change (default)
+#   "dim"  - same colours, night_dim% brightness
+#   "red"  - monochrome red. Long wavelengths leave scotopic vision alone,
+#            which is why observers use red torches. Nothing is lost by it:
+#            no reading on this display is carried by colour alone.
+night_mode = "off"
+night_dim = 45
+
+# Draw a thin ivory circle around the moon image, marking the full disc rather
+# than only the lit part. Off by default - the photograph reads better without
+# it - but worth enabling if the card looks too empty near new moon, when
+# almost nothing of the Moon is lit and there is very little left to see.
+moon_ring = false
+
+# Meteors in the animated sky are drawn at the rate an observer would actually
+# count tonight - shower activity from the solar-longitude table, cut by radiant
+# altitude, cloud and moonlight - rather than on a fixed cadence. On a night when
+# nothing is falling, nothing falls here either.
+#
+# That rate is time-compressed, because three an hour is honest and makes an
+# animated sky look broken: the panel runs meteors as though watching for this
+# many minutes per minute. Raise it for a livelier sky, set it to 1 for real
+# time. It scales what is there and cannot manufacture what is not, so a quiet
+# night stays quiet at any setting.
+meteor_compression = 20
+
+# Touch controls. Tap the panel once and a control strip appears along the
+# bottom for strip_seconds; tap a button to use it, or leave it and it goes
+# away again. No controls are drawn until the screen is touched, and nothing
+# fires on that first tap - this is a display to look at, not a control panel.
+#
+# The buttons are: night mode (cycles off/dim/red), pause or resume the page
+# rotation, jump to the next page, dimmer, brighter, and blank. Blanking turns
+# the backlight off and stops compositing until the next touch, which is the
+# only state in which the display is not using a core.
+#
+# Everything here is transient - the settings above are restored on restart.
+# Dimmer and brighter need write access to /sys/class/backlight, which setup.sh
+# arranges by putting the account in the "video" group. Touch needs "input",
+# from the same place. Requires display.mode = "animated".
+[touch]
+enabled = true
+strip_seconds = 6

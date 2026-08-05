@@ -1,0 +1,14 @@
+[Unit]
+Description=Compute tonight's targets each midday
+
+[Timer]
+OnCalendar=*-*-* 12:00:00
+# If the Pi was off at midday, run on the next boot rather than leaving the
+# targets page empty for the night.
+Persistent=true
+# Nudge the start so every installation isn't hitting the catalogue services at
+# exactly the same second.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

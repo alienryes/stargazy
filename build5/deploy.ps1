@@ -18,6 +18,13 @@ $PI = "$User@$PiHost"
 $REMOTE_DIR = "/home/$User/touch2-stargazing"
 $UT_DIR = "/home/$User/uptonight"
 
+# Paths are resolved against this script rather than the caller's location, so
+# deploy works from anywhere in the repo. The shared engine in core/ sits beside
+# the build folders here, and lands beside display.py on the Pi - the install
+# layout stays flat, so the systemd units do not change.
+$BUILD = $PSScriptRoot
+$CORE = Join-Path (Split-Path $PSScriptRoot -Parent) "core"
+
 function Invoke-Pi($cmd) {
     ssh -4 -i $KeyFile -o StrictHostKeyChecking=accept-new $PI $cmd
     if ($LASTEXITCODE -ne 0) { throw "SSH command failed: $cmd" }
@@ -35,16 +42,23 @@ Invoke-Pi "mkdir -p $REMOTE_DIR"
 
 # Copy files
 Write-Host "--> Copying files..."
-Copy-ToPi "display.py"    "$REMOTE_DIR/display.py"
-Copy-ToPi "touch.py"      "$REMOTE_DIR/touch.py"
-Copy-ToPi "requirements.txt" "$REMOTE_DIR/requirements.txt"
-Copy-ToPi "render_uptonight_config.py" "$REMOTE_DIR/render_uptonight_config.py"
-Copy-ToPi "uptonight\config.yaml.template" "$REMOTE_DIR/uptonight-config.yaml.template"
+Copy-ToPi "$BUILD\display.py"    "$REMOTE_DIR/display.py"
+
+# The shared engine sits beside display.py, so the install layout stays flat and
+# the systemd units keep working unchanged.
+Invoke-Pi "mkdir -p $REMOTE_DIR/core"
+foreach ($f in Get-ChildItem "$CORE\*.py") {
+    Copy-ToPi $f.FullName "$REMOTE_DIR/core/$($f.Name)"
+}
+
+Copy-ToPi "$BUILD\requirements.txt" "$REMOTE_DIR/requirements.txt"
+Copy-ToPi "$BUILD\render_uptonight_config.py" "$REMOTE_DIR/render_uptonight_config.py"
+Copy-ToPi "$BUILD\uptonight\config.yaml.template" "$REMOTE_DIR/uptonight-config.yaml.template"
 
 # Always deploy local config.toml (gitignored, contains real token), and keep
 # it readable by its owner only - it can carry a Home Assistant token.
-if (Test-Path "config.toml") {
-    Copy-ToPi "config.toml" "$REMOTE_DIR/config.toml"
+if (Test-Path "$BUILD\config.toml") {
+    Copy-ToPi "$BUILD\config.toml" "$REMOTE_DIR/config.toml"
     Invoke-Pi "chmod 600 $REMOTE_DIR/config.toml"
 } else {
     Write-Host "  WARNING: config.toml not found locally - skipping (Pi will use existing or example)"
@@ -68,13 +82,13 @@ Invoke-Pi "test -d $UT_DIR && python3 $REMOTE_DIR/render_uptonight_config.py $RE
 Write-Host "--> Staging systemd units..."
 Invoke-Pi "mkdir -p $REMOTE_DIR/systemd"
 foreach ($u in @("touch2-stargazing.service", "uptonight.service")) {
-    $txt = (Get-Content "systemd\$u" -Raw) -replace "__USER__", $User
+    $txt = (Get-Content "$BUILD\systemd\$u" -Raw) -replace "__USER__", $User
     $txt | ssh -4 -i $KeyFile -o StrictHostKeyChecking=accept-new $PI "cat > $REMOTE_DIR/systemd/$u"
     if ($LASTEXITCODE -ne 0) { throw "staging failed: $u" }
 }
-Copy-ToPi "systemd\fbcon-detach.service" "$REMOTE_DIR/systemd/fbcon-detach.service"
-Copy-ToPi "systemd\uptonight.timer"      "$REMOTE_DIR/systemd/uptonight.timer"
-Copy-ToPi "systemd\install-units.sh"     "$REMOTE_DIR/systemd/install-units.sh"
+Copy-ToPi "$BUILD\systemd\fbcon-detach.service" "$REMOTE_DIR/systemd/fbcon-detach.service"
+Copy-ToPi "$BUILD\systemd\uptonight.timer"      "$REMOTE_DIR/systemd/uptonight.timer"
+Copy-ToPi "$BUILD\systemd\install-units.sh"     "$REMOTE_DIR/systemd/install-units.sh"
 
 $check = 'for f in touch2-stargazing.service fbcon-detach.service uptonight.service uptonight.timer; do cmp -s ' + $REMOTE_DIR + '/systemd/$f /etc/systemd/system/$f || echo $f; done; true'
 $changed = ssh -4 -i $KeyFile -o StrictHostKeyChecking=accept-new $PI $check

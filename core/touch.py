@@ -72,9 +72,10 @@ class TouchReader:
     so an idle or chattering touchscreen can never hold up the frame loop.
     """
 
-    def __init__(self, w, h, fb_w, fb_h):
+    def __init__(self, w, h, fb_w, fb_h, rotated=True):
         self.w, self.h = w, h
         self.fb_w, self.fb_h = fb_w, fb_h
+        self.rotated = rotated
         self.taps = queue.Queue()
         self.path, self._mx, self._my = find_device()
 
@@ -97,14 +98,20 @@ class TouchReader:
     def _map(self, tx, ty):
         """Controller coordinates -> render coordinates.
 
-        The touchscreen reports in the panel's native portrait frame, while the
-        dashboard is drawn landscape and rotated on its way to the framebuffer.
-        The same rotation has to be undone here or every tap lands a quarter
-        turn away from the finger.
+        The touchscreen always reports in the panel's native portrait frame. A
+        build that draws landscape and rotates on its way to the framebuffer has
+        to undo that rotation here, or every tap lands a quarter turn away from
+        the finger. A build that draws portrait does not rotate at all, so the
+        mapping is a straight scale.
+
+        Verify by tapping four corners rather than by reasoning about it - axis
+        inversion is the classic bug here and it is cheap to check.
         """
         px = tx / self._mx * (self.fb_w - 1)
         py = ty / self._my * (self.fb_h - 1)
-        return int(self.w - 1 - py), int(px)
+        if self.rotated:
+            return int(self.w - 1 - py), int(px)
+        return int(px), int(py)
 
     def _run(self):
         x = y = None
