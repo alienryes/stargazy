@@ -89,6 +89,15 @@ class Sky:
         ]
         self._sprites = None
         self._bases = None
+        # Seeded points drift to suggest motion. Real stars do not need to be
+        # suggested - they move because the positions are recomputed - so a
+        # build supplying them turns this off via set_stars().
+        self.star_drift = True
+
+    def set_stars(self, stars, drift=False):
+        """Replace the starfield, e.g. with real positions for this moment."""
+        self.stars = stars
+        self.star_drift = drift
 
     def make_base(self, top, bot):
         """Vertical gradient background, built once."""
@@ -106,7 +115,10 @@ class Sky:
 
     def draw_stars(self, draw, t, params):
         w, gain = self.w, params["gain"]
-        drift = {s: (t * params["drift"] * d) % w for s, d in STAR_DEPTH.items()}
+        if self.star_drift:
+            drift = {s: (t * params["drift"] * d) % w for s, d in STAR_DEPTH.items()}
+        else:
+            drift = dict.fromkeys(STAR_DEPTH, 0.0)
         for x0, y, base, phase, speed, size in self.stars:
             val = base * (0.55 + 0.45 * math.sin(t * speed + phase)) * gain
             if val <= 0.05:

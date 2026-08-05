@@ -95,6 +95,31 @@ moon_ring = false
 # night stays quiet at any setting.
 meteor_compression = 20
 
+# The starfield behind the dashboard.
+#
+# With real_stars = true it is the actual sky: 8,355 catalogue stars to
+# magnitude 6.5, plotted where they really are for this site and this minute,
+# turning because the Earth does. Recomputed once a minute (about 85 ms) and
+# free per frame.
+#
+# The panel cannot know which way it is facing, so the direction is CHOSEN here
+# rather than detected. camera_azimuth is where the window looks (0 = north,
+# 180 = south, which is where everything transits from the northern hemisphere);
+# camera_altitude is the height of the centre of the view; field_of_view is the
+# vertical span in degrees, with the horizontal following from the panel's
+# aspect ratio.
+#
+# Honest note: a real sky is mostly faint stars, so it draws roughly half the
+# lit area of the invented starfield it replaces - about 440 stars in view, of
+# which 420 are single pixels. It is correct, and it is quieter. Set
+# real_stars = false for the old seeded random field if the panel reads better
+# that way from where it actually sits.
+[sky]
+real_stars = true
+camera_azimuth = 180
+camera_altitude = 45
+field_of_view = 90
+
 # Touch controls. Tap the panel once and a control strip appears along the
 # bottom for strip_seconds; tap a button to use it, or leave it and it goes
 # away again. No controls are drawn until the screen is touched, and nothing

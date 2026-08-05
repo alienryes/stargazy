@@ -17,6 +17,8 @@ import logging
 import math
 import random
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,6 +54,7 @@ from core.panel import Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
+from core.starfield import project
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
@@ -119,6 +122,14 @@ BTN_GAP = 10
 # is there rather than manufacturing what is not, so a night with nothing falling
 # still shows nothing. Overridable as display.meteor_compression.
 METEOR_COMPRESSION = 20.0
+
+# Which way the window looks. The panel cannot know how it is oriented in the
+# room, so this is chosen rather than detected: due south by default, because
+# that is where everything transits from the northern hemisphere. The vertical
+# field spans the full horizon-to-zenith; the horizontal one follows from the
+# aspect ratio. Set sky.real_stars = false for the seeded random field instead.
+REAL_STARS = True
+CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 90.0
 
 # The engine, sized for this panel. The daemon reads these three off this module
 # as its layout.
@@ -761,6 +772,35 @@ def render_meteors(states, lat, lon):
     return img
 
 
+def refresh_stars():
+    """Point the starfield at the real sky for right now.
+
+    The panel cannot know which way it faces, so the direction is configuration,
+    not inference: CAMERA_AZ is where the window looks and CAMERA_ALT the height
+    of its centre. Everything behind the dashboard is then the part of the sky
+    actually in that direction, turning because the Earth does.
+
+    Recomputed on a timer rather than per frame - the sky moves a quarter of a
+    degree a minute, so once a minute is imperceptibly smooth and costs nothing.
+    """
+    if not REAL_STARS:
+        return
+    obs = observer(LAT or 0.0, LON or 0.0,
+                   when=datetime.now(timezone.utc).replace(tzinfo=None))
+    stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
+    sky.set_stars(stars)
+    return len(stars)
+
+
+def _star_thread():
+    while True:
+        time.sleep(60)
+        try:
+            refresh_stars()
+        except Exception as e:      # a bad fix must not stop the display
+            log.warning("Star refresh failed: %s", e)
+
+
 def sky_params(states):
     """The sky's mood, with the meteors made real.
 
@@ -864,8 +904,13 @@ def main():
     if night not in NIGHT_CYCLE:
         raise ValueError(f'display.night_mode is "{night}"; expected "off", "dim" or "red"')
     moon_ring = bool(disp.get("moon_ring", False))
-    global METEOR_COMPRESSION
+    global METEOR_COMPRESSION, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV
     METEOR_COMPRESSION = float(disp.get("meteor_compression", METEOR_COMPRESSION))
+    skycfg = config.get("sky", {})
+    REAL_STARS = bool(skycfg.get("real_stars", REAL_STARS))
+    CAMERA_AZ  = float(skycfg.get("camera_azimuth", CAMERA_AZ))
+    CAMERA_ALT = float(skycfg.get("camera_altitude", CAMERA_ALT))
+    CAMERA_FOV = float(skycfg.get("field_of_view", CAMERA_FOV))
     tch = config.get("touch", {})
 
     if args.compare:
@@ -875,6 +920,9 @@ def main():
 
     if args.save or args.once:
         log.info("Fetching conditions...")
+        n = refresh_stars()
+        if n is not None:
+            log.info("%d catalogue stars in view.", n)
         states = fetch()
         params = sky_params(states)
         pages = build_pages(states, read_targets(out_dir), lat, moon_ring)
@@ -896,6 +944,11 @@ def main():
         return
 
     install_signal_handlers()
+    n = refresh_stars()
+    if n is not None:
+        log.info("Real sky: %d catalogue stars in view, az %.0f alt %.0f fov %.0f.",
+                 n, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
+        threading.Thread(target=_star_thread, daemon=True).start()
     reader = (TouchReader(W, H, FB_W, FB_H, rotated=ROTATE is not None)
               if tch.get("enabled", True) else None)
     # This module is the layout the daemon draws through: it supplies sky, fb,
