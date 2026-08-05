@@ -1,9 +1,13 @@
 [project]
 name = "touch2-stargazing-display"
-version = "2.4.0"
+version = "4.0.0"
 
 [tool.ruff]
 line-length = 100
+# First-party roots. Without these, a build folder's own modules resolve as
+# third-party once they no longer sit at the repo root, and the import block
+# sorts wrongly.
+src = ["core", "build5", "build10"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]

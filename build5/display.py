@@ -34,6 +34,10 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 import touch
 
+# Frozen. This build's panel leaves the bench once the 10" one is running, after
+# which nothing here can be confirmed against real hardware again, so 3.7.2 marks
+# the last state that was. Repo releases are versioned separately in
+# pyproject.toml and will keep moving; the two were never going to line up.
 FIRMWARE_VERSION = "3.7.2"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.

@@ -246,19 +246,28 @@ The daemon uses roughly 80% of one Pi 4 core at 20 fps; lower `fps` in `config.t
 
 ## 📁 File structure
 
+There are two builds, differing in panel and board. They share one engine in
+`core/`; each build folder holds only what is specific to its hardware — layout,
+config, systemd units and deploy script. A build folder plus `core/` is
+everything that gets installed on a Pi.
+
 ```
-display.py              Main script (render + animation + framebuffer daemon)
-touch.py                Touchscreen reader (evdev; run alone to check mapping)
+core/                   Shared engine: weather sources, target reports, imagery,
+                        animated sky, night filter, framebuffer, touch controls
+build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference build
+  display.py              Entry point and 1280x720 layout
+  touch.py                Touchscreen reader (evdev; run alone to check mapping)
+  config.toml             Local config (gitignored)
+  config.example.toml     Template ([weather] + [location] + [display] + [touch])
+  deploy.ps1              Windows → Pi deploy script
+  setup.sh                One-time Pi setup (run with sudo)
+  systemd/
+    touch2-stargazing.service   Always-on animated display daemon
+    fbcon-detach.service        Frees /dev/fb0 from the text console
+    install-units.sh            Installs the units - interactive sudo, by design
+build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - in progress
 screenshots/            README images, regenerated with display.py --save
-config.toml             Local config (gitignored)
-config.example.toml     Template ([weather] + [location] + [display] + [touch])
-deploy.ps1              Windows → Pi deploy script
-setup.sh                One-time Pi setup (run with sudo)
 harden-pi.sh            Optional: key-only SSH + automatic security updates
-systemd/
-  touch2-stargazing.service   Always-on animated display daemon
-  fbcon-detach.service        Frees /dev/fb0 from the text console
-  install-units.sh            Installs the units - interactive sudo, by design
 case/
   README.md               Print settings, hardware, assembly
   shell.py                Display shell (front frame + back plate)
