@@ -23,7 +23,7 @@ Everything that is not layout — both weather sources, the target reports, the 
 - **A real image of the Moon** for the current hour — true phase, libration and terminator — with constellation and next new/full moon dates
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
-- **Live animated night sky** behind the dashboard: a real twinkling starfield, drifting clouds and meteors radiating from tonight's real showers, all **reactive to the actual conditions**
+- **Live animated night sky** behind the dashboard: **the actual stars overhead**, plotted from a catalogue at their real positions for the site and the moment, plus drifting clouds and meteors from tonight's active showers — all **reactive to the actual conditions**
 - **Touch controls** hidden until the screen is tapped: night mode, page rotation, brightness and a true blank that drops the display to 0% CPU
 
 ---
@@ -38,13 +38,13 @@ Two pages rotate over the same continuous animated sky. Both shots are real fram
 
 ![The conditions page: a large EXCELLENT verdict in pale blue-white, four labelled condition bars with percentages, and a photographic last-quarter Moon captioned Last Quarter in Aries. The Seeing bar reads 36% and is drawn as a hollow outline rather than filled, because it falls below its warning mark; the other three are filled. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind.](screenshots/conditions.png)
 
-> **Dusk / Dawn** in that footer, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
+> **Dusk / Dawn** is used in that footer, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
 
 **Page 2 — tonight's targets**
 
 ![The targets page: a dusk-to-dawn timeline with the astronomical dark window highlighted and a moon-up strip above it; an altitude-versus-bearing plot of the Moon and planets; and four deep-sky cards, each with a real sky photograph, object type, constellation, peak altitude and time.](screenshots/targets.png)
 
-The page-2 timeline only appears once UpTonight has run, and the page leaves the rotation entirely if it has produced nothing — better one page than a dead one.
+The page-2 timeline only appears once UpTonight has run, and the page leaves the rotation entirely if it has produced nothing, so an empty page is never shown.
 
 **Night mode — the same page after dark**
 
@@ -66,7 +66,7 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 ![The 10.1-inch conditions page in portrait: a large EXCELLENT verdict, a 600-pixel photograph of a last-quarter Moon captioned Last Quarter in Aries with its age, distance, diameter and libration, four condition bars with the below-threshold Seeing bar drawn hollow, and a footer of forecast, dusk and dawn times and weather.](screenshots/10in-conditions.png)
 
-**Page 2 — targets.** One altitude-versus-bearing plot carries the planets *and* the deep-sky objects on a full 0–90° axis. The 5" build cannot do this: its objects peak at 70–85° while the planets sit below 35°, and one axis holding both would squash the planets flat. Every position on the plot is for the single instant named above it.
+**Page 2 — targets.** One altitude-versus-bearing plot carries the planets *and* the deep-sky objects on a full 0–90° axis. The 5" build keeps the two apart because it has far less vertical room: UpTonight selects deep-sky targets for high altitude, while the planets stay near the ecliptic and so occupy a lower band, and a short axis holding both compresses whichever band is lower. How far apart those bands sit depends on latitude — from the reference site at 51°N the objects peak around 70–85° and the planets stay below about 35°, but nearer the equator the ecliptic rides much higher and the two overlap. Every position on the plot is for the single instant named above it.
 
 ![The 10.1-inch targets page: a dusk-to-dawn timeline, then an altitude-versus-bearing plot showing six deep-sky objects between 60 and 77 degrees and four planets below 30, each labelled with its bearing, above six deep-sky cards with real sky photographs.](screenshots/10in-targets.png)
 
@@ -91,9 +91,31 @@ The moon card shows **a real image of the Moon** (set `display.moon_ring = true`
 
 Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
 
-**The meteors are real in both builds.** Their cadence comes from the same computation that fills the 10.1-inch meteor page — which showers are running, how high each radiant sits, and how much of the rate cloud and moonlight remove — so a quiet night in March shows almost nothing and a clear Perseid peak is busy. If nothing is falling, nothing falls here either. The rate is deliberately time-compressed (`meteor_compression`, default 20), because a truthful three-an-hour makes an animated sky look broken; it scales what is there and cannot invent what is not.
+### The starfield is the real sky
 
-**And they radiate from the real radiant.** A meteor is drawn from one of tonight's active showers in proportion to that shower's rate, and travels away from where that shower's radiant actually is in the projected sky, so it converges on a point that agrees with the stars around it. Trails shorten towards the radiant, because a path pointing at the observer is seen end-on. The radiant is often off the edge of the panel, which is not a fault: the window faces one direction and the shower is somewhere else, so its meteors sweep in near-parallel from that side. Meteors belonging to no shower — the sporadic background, which is most of them on an ordinary night — keep an arbitrary direction, because they genuinely have none. Setting `sky.real_stars = false` returns the meteors to arbitrary directions along with the starfield; the two are real together or not at all.
+The stars behind the dashboard are not decoration. They are plotted from the Yale Bright Star Catalogue down to magnitude 6.5 — about 8,400 stars — at their true altitude and azimuth for the configured site and the current moment, recomputed every minute. Constellations are therefore recognisable, and they move because the Earth turns rather than because a drift constant says so. The catalogue ships in the repository, so this needs no network.
+
+**A panel cannot know which way it is facing, so the direction it looks is configuration rather than something inferred:**
+
+```toml
+[sky]
+real_stars = true
+camera_azimuth = 180    # degrees: 0 = north, 90 = east, 180 = south
+camera_altitude = 45    # degrees above the horizon at the centre of the view
+field_of_view = 70      # degrees, vertical (build10 defaults to 90)
+```
+
+The default view faces **due south at 45° up**, which is where objects transit and therefore the most useful direction at northern latitudes. Point it wherever the window actually faces, or wherever the view is best. The horizontal field is derived from the panel's aspect ratio so the scale stays even in both directions — which means the landscape 5" build sees considerably more sky than the portrait 10.1-inch one at the same vertical setting.
+
+Brightness and star size are mapped for legibility at a distance rather than photometrically: the ordering is faithful, so Sirius still dominates, but a magnitude 6.5 star is drawn at a visible floor rather than at its true relative brightness. Set `real_stars = false` for the earlier randomised starfield.
+
+### The meteors follow tonight's real showers
+
+**They are representative, not observations.** No meteor on the panel corresponds to a meteor in the sky, and nothing here is a live feed. What is real is everything governing them — when they fall, how often, and which way they go.
+
+**The cadence** comes from the same computation that fills the 10.1-inch meteor page: which showers are running, how high each radiant sits, and how much of the rate cloud and moonlight remove. So a quiet night in March shows almost nothing and a clear Perseid peak is busy, and if nothing is falling, nothing falls here either. The rate is deliberately time-compressed (`meteor_compression`, default 20), because a truthful three-an-hour makes an animated sky look broken; it scales what is there and does not invent what is not.
+
+**The direction** is the true radiant. A meteor is drawn from one of tonight's active showers in proportion to that shower's rate, and travels away from where that shower's radiant actually is in the projected sky, so it converges on a point that agrees with the stars around it. Trails shorten towards the radiant, because a path pointing at the observer is seen end-on. The radiant is often off the edge of the panel, which is not a fault: the view faces one direction and the shower is somewhere else, so its meteors sweep in near-parallel from that side. Meteors belonging to no shower — the sporadic background, which is most of them on an ordinary night — keep an arbitrary direction, because they genuinely have none. Setting `sky.real_stars = false` returns the meteors to arbitrary directions along with the starfield.
 
 ---
 
