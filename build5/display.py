@@ -15,27 +15,22 @@ the hour's real lunar image. Touch controls live in touch.py.
 """
 
 import argparse
-import glob
 import logging
 import math
 import random
-import signal
-import threading
-import time
+import sys
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 import touch
+from core.daemon import install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
 from core.night import (
     NIGHT_CYCLE,
     apply_night,
-    inside_window,
-    night_filter,
     night_mode_now,
     night_window,
     tonight,
@@ -50,12 +45,13 @@ from core.palette import (
     MOON_DARK,
     MUTED,
     ROSE,
-    STAR_COLOUR,
     STEEL,
     WHITE,
     bar_colour,
     verdict,
 )
+from core.panel import Framebuffer, Strip
+from core.sky import Sky, sky_params
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
@@ -99,6 +95,14 @@ STRIP_H  = 64
 STRIP_Y  = H - STRIP_H - 16
 BTN_GAP  = 8
 
+# The engine, sized for this panel. `sky` is constructed exactly where the
+# seeded starfield used to be generated, so the shared random stream is consumed
+# in the same order and a rendered frame still matches an earlier one byte for
+# byte. The daemon reads these three off this module as its layout.
+sky = Sky(W, H)
+fb = Framebuffer(W, H, FB_W, FB_H, ROTATE, FB_DEV)
+strip = Strip(W, MARGIN, STRIP_Y, STRIP_H, BTN_GAP)
+
 PHASE_NAMES = {
     "moon-new":             "New Moon",
     "moon-waxing-crescent": "Waxing Crescent",
@@ -109,24 +113,6 @@ PHASE_NAMES = {
     "moon-last-quarter":    "Last Quarter",
     "moon-waning-crescent": "Waning Crescent",
 }
-
-# Fixed, seeded starfield spanning the whole screen. Each star:
-# x, y, base brightness, twinkle phase, twinkle speed, size.
-random.seed(7)
-STARS = [
-    (
-        random.randint(0, W - 1),
-        random.randint(0, H - 1),
-        random.uniform(0.35, 1.0),
-        random.uniform(0.0, 2 * math.pi),
-        random.uniform(0.4, 2.6),
-        1 if random.random() > 0.28 else (2 if random.random() > 0.25 else 3),
-    )
-    for _ in range(200)
-]
-
-_RUNNING = True  # cleared by SIGTERM/SIGINT so the daemon exits gracefully
-
 
 def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
     """Draw moon phase using parametric geometry."""
@@ -155,158 +141,6 @@ def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
         pts = [(2 * cx - px, py) for px, py in pts]
 
     draw.polygon(pts, fill=MOON)
-
-
-# ── Animated sky ──────────────────────────────────────────────────────────
-
-def make_base(top, bot):
-    """Vertical gradient background, built once."""
-    top = np.array(top, dtype=np.float32)
-    bot = np.array(bot, dtype=np.float32)
-    col = (top + (bot - top) * (np.arange(H)[:, None] / H)).astype(np.uint8)  # (H,3)
-    arr = np.repeat(col[:, None, :], W, axis=1)  # (H,W,3)
-    return Image.fromarray(arr, "RGB")
-
-
-# Forced vivid clear-sky mood for --demo (visual testing regardless of weather).
-DEMO_PARAMS = {"twilight": False, "gain": 1.0, "drift": 6.0, "meteors": True,
-               "met_min": 7.0, "met_max": 15.0, "cloud": 30, "cloud_speed": 14.0}
-
-
-def sky_params(states):
-    """Derive the sky animation's mood from the conditions."""
-    cloud   = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
-    seeing  = _i(states.get("sensor.astroweather_backyard_seeing_percentage"))
-    transp  = _i(states.get("sensor.astroweather_backyard_transparency"))
-    calm    = _i(states.get("sensor.astroweather_backyard_calm_percentage"))
-    wind    = _f(states.get("sensor.astroweather_backyard_10m_wind_speed"))
-    no_dark = _f(states.get("sensor.astroweather_backyard_astronomical_night_duration")) < 3600
-
-    clarity = max(0.0, min(1.0, (seeing + transp + calm) / 300.0))
-    # Keep the sky clearly alive in all conditions; modulate within a visible range.
-    gain = (0.60 + 0.40 * clarity) * (1.0 - 0.35 * cloud / 100.0)
-    gain = max(0.45, min(1.0, gain))
-    if no_dark:
-        gain = 0.40                          # twilight: dimmer, few stars
-    # Meteors whenever it's dark; rarer (longer gaps) when cloudy/poor.
-    met_min = 8.0 + 0.22 * cloud
-    return {
-        "twilight": no_dark,
-        "gain": gain,
-        "drift": 2.5 + wind * 0.7,           # px/sec
-        "meteors": not no_dark,
-        "met_min": met_min,
-        "met_max": met_min + 8.0,
-        "cloud": cloud,                      # % -> number of drifting cloud sprites
-        "cloud_speed": 6.0 + wind * 1.2,     # px/sec
-    }
-
-
-# Parallax depth, keyed by the star's size. Bigger stars read as nearer, so they
-# drift faster; brightness and depth then reinforce each other instead of
-# fighting. Three offsets are computed per frame, not per star.
-STAR_DEPTH = {1: 0.25, 2: 0.6, 3: 1.3}
-
-
-def draw_stars(draw, t, params):
-    gain = params["gain"]
-    drift = {s: (t * params["drift"] * d) % W for s, d in STAR_DEPTH.items()}
-    for x0, y, base, phase, speed, size in STARS:
-        val = base * (0.55 + 0.45 * math.sin(t * speed + phase)) * gain
-        if val <= 0.05:
-            continue
-        c = tuple(int(ch * val) for ch in STAR_COLOUR)
-        x = (x0 + drift[size]) % W
-        if size == 1:
-            draw.point((x, y), fill=c)
-        else:
-            r = size - 1
-            draw.ellipse([x - r, y - r, x + r, y + r], fill=c)
-            if size == 3 and val > 0.7:  # faint glint on the brightest stars
-                g = tuple(int(ch * val * 0.5) for ch in STAR_COLOUR)
-                draw.line([(x - 4, y), (x + 4, y)], fill=g, width=1)
-                draw.line([(x, y - 4), (x, y + 4)], fill=g, width=1)
-
-
-def spawn_meteor():
-    return {
-        "x": random.uniform(W * 0.25, W - 10),
-        "y": random.uniform(10, H * 0.45),
-        "vx": -random.uniform(4.0, 7.5),
-        "vy": random.uniform(2.0, 4.0),
-        "life": 0,
-        "max": random.randint(40, 58),
-    }
-
-
-def draw_meteor(draw, m):
-    frac = m["life"] / m["max"]
-    fade = math.sin(math.pi * min(1.0, frac))
-    mag = math.hypot(m["vx"], m["vy"])
-    ux, uy = m["vx"] / mag, m["vy"] / mag
-    seg, nseg = 11.0, 14
-    for i in range(nseg):
-        b = fade * (1.0 - i / nseg)
-        c = (int(255 * b), int(255 * b), int(235 * b))
-        x1, y1 = m["x"] - ux * seg * i, m["y"] - uy * seg * i
-        x2, y2 = m["x"] - ux * seg * (i + 1), m["y"] - uy * seg * (i + 1)
-        draw.line([(x1, y1), (x2, y2)], fill=c, width=2)
-    hb = int(255 * fade)
-    draw.ellipse([m["x"] - 2, m["y"] - 2, m["x"] + 2, m["y"] + 2], fill=(hb, hb, int(235 * fade)))
-
-
-# Drifting cloud sprites (phase 2). Pre-rendered blurred blobs, count scaled by
-# cloud cover; they drift across the sky and dim the stars they pass over.
-MAX_CLOUDS = 7
-CLOUD_COLOUR = (48, 53, 72)   # muted blue-grey, lighter than the navy sky
-CLOUD_SPRITES = None
-
-
-def make_cloud_sprite():
-    """One soft, translucent cloud: overlapping blobs on an alpha mask, blurred."""
-    w = random.randint(360, 540)
-    h = random.randint(150, 240)
-    mask = Image.new("L", (w, h), 0)
-    md = ImageDraw.Draw(mask)
-    for _ in range(random.randint(5, 8)):
-        cx = random.uniform(w * 0.30, w * 0.70)   # keep blobs off the tile edges
-        cy = random.uniform(h * 0.38, h * 0.62)
-        rw = random.uniform(w * 0.10, w * 0.22)
-        rh = random.uniform(h * 0.14, h * 0.28)
-        md.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=random.randint(120, 200))
-    mask = mask.filter(ImageFilter.GaussianBlur(w * 0.06))
-    # Feather the alpha to zero at the tile border so the sprite never shows a
-    # hard rectangular edge where it overlaps the sky.
-    env = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(env).rectangle([w * 0.14, h * 0.16, w * 0.86, h * 0.84], fill=255)
-    env = env.filter(ImageFilter.GaussianBlur(min(w, h) * 0.13))
-    mask = ImageChops.multiply(mask, env)
-    mask = mask.point(lambda p: int(p * 0.6))   # cap opacity so stars faintly show through
-    sprite = Image.new("RGBA", (w, h), CLOUD_COLOUR + (0,))
-    sprite.putalpha(mask)
-    return sprite
-
-
-def cloud_sprites():
-    global CLOUD_SPRITES
-    if CLOUD_SPRITES is None:
-        CLOUD_SPRITES = [make_cloud_sprite() for _ in range(5)]
-    return CLOUD_SPRITES
-
-
-def spawn_cloud():
-    sp = random.choice(cloud_sprites())
-    if random.random() < 0.5:
-        sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
-    return {"sprite": sp,
-            "x": random.uniform(-sp.width, W),
-            "y": random.randint(-40, int(H * 0.72)),
-            "depth": random.uniform(0.75, 1.35)}   # parallax: clouds separate
-
-
-def initial_clouds(params):
-    n = round(params.get("cloud", 0) / 100 * MAX_CLOUDS)
-    return [spawn_cloud() for _ in range(n)]
 
 
 def _glyph(draw, cx, cy, r, otype):
@@ -825,30 +659,6 @@ def render_targets(states, targets, images, lat=None):
     return img
 
 
-def to_fb_bytes(img, night="off", dim=45):
-    rot = img.transpose(ROTATE)
-    if rot.size != (FB_W, FB_H):
-        rot = rot.resize((FB_W, FB_H))
-    arr = np.asarray(rot, dtype=np.uint16)
-    # Filtered here rather than in compose(): this array already exists, so
-    # night mode costs no extra conversion on the 20fps path.
-    arr = night_filter(arr, night, dim)
-    packed = ((arr[:, :, 0] >> 3) << 11) | ((arr[:, :, 1] >> 2) << 5) | (arr[:, :, 2] >> 3)
-    return packed.astype("<u2").tobytes()
-
-
-NIGHT_BASE = None
-TWILIGHT_BASE = None
-
-
-def _bases():
-    global NIGHT_BASE, TWILIGHT_BASE
-    if NIGHT_BASE is None:
-        NIGHT_BASE = make_base((6, 8, 20), (15, 17, 42))
-        TWILIGHT_BASE = make_base((22, 32, 62), (44, 60, 100))
-    return NIGHT_BASE, TWILIGHT_BASE
-
-
 def draw_clock(draw):
     """Stamp the header date and time onto a composed frame.
 
@@ -864,322 +674,35 @@ def draw_clock(draw):
     draw.text((W - ts_w - MARGIN, 28), now_str, fill=MUTED, font=f_sm)
 
 
-def button_rects(n):
-    """The n control-strip buttons, left to right, as (x0, y0, x1, y1)."""
-    w = (W - 2 * MARGIN - (n - 1) * BTN_GAP) // n
-    return [(MARGIN + i * (w + BTN_GAP), STRIP_Y,
-             MARGIN + i * (w + BTN_GAP) + w, STRIP_Y + STRIP_H)
-            for i in range(n)]
+def build_pages(states, targets, lat, moon_ring=False):
+    """Both dashboard pages as RGBA overlays.
+
+    Data thread only: this fetches the hour's lunar frame and any deep-sky
+    cutouts not already cached.
+    """
+    pages = [render_foreground(states, moon_image(), moon_ring)]
+    # The targets page joins the rotation only when there is something on it -
+    # better a single page than a dead one before UpTonight's first run.
+    page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS), lat)
+    if page2 is not None:
+        pages.append(page2)
+    return pages
 
 
-def button_at(x, y, n):
-    """Index of the button under a tap, or None."""
-    for i, (x0, y0, x1, y1) in enumerate(button_rects(n)):
-        if x0 <= x <= x1 and y0 <= y <= y1:
-            return i
-    return None
-
-
-def draw_strip(draw, labels):
-    """Stamp the control strip over a composed frame."""
-    f = font("IBMPlexSans-SemiBold.ttf", 26)
-    for (x0, y0, x1, y1), label in zip(button_rects(len(labels)), labels):
-        draw.rounded_rectangle((x0, y0, x1, y1), radius=10,
-                               fill=BG, outline=STEEL, width=2)
-        tw = int(draw.textlength(label, font=f))
-        draw.text(((x0 + x1 - tw) // 2, y0 + 16), label, fill=WHITE, font=f)
-
-
-def compose(fg, params, t, meteors, clouds, labels=None):
-    """One composited frame: sky + drifting clouds + meteors + dashboard on top."""
-    night, twi = _bases()
-    frame = (twi if params["twilight"] else night).copy()
+def compose(frame, overlay, labels=None):
+    """Dashboard, clock and control strip over a painted sky frame."""
+    frame.paste(overlay, (0, 0), overlay)
     d = ImageDraw.Draw(frame)
-    draw_stars(d, t, params)
-    for c in clouds:
-        frame.paste(c["sprite"], (int(c["x"]), c["y"]), c["sprite"])
-    for m in meteors:
-        draw_meteor(d, m)
-    frame.paste(fg, (0, 0), fg)
     draw_clock(d)
     # Drawn per frame alongside the clock rather than into the cached overlay:
-    # it appears and disappears on its own timer, and the overlay only changes
-    # when the data does.
+    # they change on their own timers, and the overlay only changes when the
+    # data does.
     if labels:
-        draw_strip(d, labels)
+        strip.draw(d, labels, font("IBMPlexSans-SemiBold.ttf", 26))
     return frame
 
 
-# ── Backlight and touch controls ──────────────────────────────────────────
-
-def _backlight(name):
-    """Path to a backlight sysfs attribute, or None if the panel has none."""
-    dirs = sorted(glob.glob("/sys/class/backlight/*"))
-    return Path(dirs[0]) / name if dirs else None
-
-
-def read_brightness(name="brightness"):
-    p = _backlight(name)
-    try:
-        return int(p.read_text()) if p else 0
-    except OSError:
-        return 0
-
-
-def set_brightness(value):
-    """Set the panel backlight. Does nothing, loudly, if it is not writable.
-
-    bl_power would be the natural way to blank the panel, but on this kernel it
-    is root-only while brightness is writable by group video - which the daemon
-    is already in - so brightness 0 is what blanking uses.
-    """
-    p = _backlight("brightness")
-    if not p:
-        return
-    try:
-        p.write_text(str(value))
-    except OSError as e:
-        log.warning("Backlight not writable: %s", e)
-
-
-class Controls:
-    """What the control strip shows, and what a tap on it does.
-
-    None of this is persisted: config.toml stays the source of truth for the
-    defaults, so a restart always comes back to a known state rather than to
-    whatever was last poked at in the dark.
-    """
-
-    def __init__(self, night, strip_seconds):
-        self.config_night   = night
-        self.strip_seconds  = strip_seconds
-        self.override       = None   # night mode chosen by hand, or None
-        self.override_dark  = None   # dusk-to-dawn state when it was chosen
-        self.paused         = False
-        self.next_page      = False
-        self.blanked        = False
-        self.shown_until    = 0.0
-        self.max_brightness = read_brightness("max_brightness")
-        self.brightness     = read_brightness() or self.max_brightness
-
-    @property
-    def visible(self):
-        return time.time() < self.shown_until
-
-    def show(self):
-        self.shown_until = time.time() + self.strip_seconds
-
-    def labels(self):
-        return [f"Night: {self.override or self.config_night}",
-                "Resume" if self.paused else "Pause",
-                "Next", "Dimmer", "Brighter", "Blank"]
-
-    def night_now(self, window):
-        """The night mode to apply right now, honouring a manual override.
-
-        An override applies immediately whatever the hour - being able to see
-        red mode in the afternoon is most of the point of a button - but it
-        lapses the next time the sky crosses dusk or dawn. It is a change of
-        mind about tonight, not a second schedule competing with the real one.
-        """
-        dark = inside_window(window)
-        if self.override is not None and dark != self.override_dark:
-            self.override = None
-        if self.override is not None:
-            return self.override
-        return night_mode_now(self.config_night, window)
-
-    def take_next(self):
-        """True once after the Next button is pressed."""
-        stepped, self.next_page = self.next_page, False
-        return stepped
-
-    def _step_brightness(self, direction):
-        # Never down to 0: going fully dark is what Blank is for, and the strip
-        # must stay visible for the change to be reversible.
-        step = max(1, self.max_brightness // 8)
-        self.brightness = max(1, min(self.max_brightness,
-                                     self.brightness + direction * step))
-        set_brightness(self.brightness)
-
-    def blank(self):
-        self.blanked = True
-        self.shown_until = 0.0
-        set_brightness(0)
-
-    def wake(self):
-        self.blanked = False
-        set_brightness(self.brightness)
-
-    def touched(self, x, y, window):
-        """Handle one tap, in render coordinates."""
-        if self.blanked:
-            self.wake()
-            return
-        if not self.visible:
-            # First tap only reveals the controls. Nothing on an ambient
-            # display should fire from a tap whose target was not visible.
-            self.show()
-            return
-        self.show()
-        idx = button_at(x, y, len(self.labels()))
-        if idx == 0:
-            cur = self.night_now(window)
-            self.override = NIGHT_CYCLE[(NIGHT_CYCLE.index(cur) + 1) % len(NIGHT_CYCLE)]
-            self.override_dark = inside_window(window)
-        elif idx == 1:
-            self.paused = not self.paused
-        elif idx == 2:
-            self.next_page = True
-        elif idx == 3:
-            self._step_brightness(-1)
-        elif idx == 4:
-            self._step_brightness(+1)
-        elif idx == 5:
-            self.blank()
-
-
 # ── Run modes ─────────────────────────────────────────────────────────────
-
-def _install_signal_handlers():
-    def stop(_signum, _frame):
-        global _RUNNING
-        _RUNNING = False
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
-
-
-def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
-               page_seconds, demo=False, night="off", night_dim=45,
-               touch_enabled=True, strip_seconds=6, moon_ring=False):
-    """Long-running loop: animate the panel while a thread refreshes the data."""
-    state = {"pages": [], "params": None, "window": None}
-
-    def load():
-        states = fetch()
-        targets = read_targets(out_dir)
-        pages = [render_foreground(states, moon_image(), moon_ring)]
-        # Targets page joins the rotation only when there is something on it -
-        # better a single page than a dead one before UpTonight's first run.
-        page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS), lat)
-        if page2 is not None:
-            pages.append(page2)
-        state["pages"] = pages
-        state["params"] = DEMO_PARAMS if demo else sky_params(states)
-        # Dusk/dawn drive night mode, and they only change when the data does.
-        state["window"] = night_window(states)
-
-    log.info("Fetching conditions...")
-    load()
-
-    def refresher():
-        while _RUNNING:
-            for _ in range(int(refresh_min * 60)):
-                if not _RUNNING:
-                    return
-                time.sleep(1)
-            if _RUNNING:
-                try:
-                    load()
-                    log.info("Data refreshed.")
-                except Exception as e:  # keep animating on a transient fetch error
-                    log.warning("Refresh failed: %s", e)
-
-    threading.Thread(target=refresher, daemon=True).start()
-
-    controls = None
-    reader = touch.TouchReader(W, H, FB_W, FB_H) if touch_enabled and animated else None
-    if reader and reader.start():
-        controls = Controls(night, strip_seconds)
-    else:
-        reader = None
-
-    fb = open(FB_DEV, "wb")
-    try:
-        if not animated:
-            log.info("Static mode: redraw on data change.")
-            last, last_mode = None, None
-            while _RUNNING:
-                page = state["pages"][0]
-                mode = night_mode_now(night, state["window"])
-                if page is not last or mode != last_mode:
-                    frame = compose(page, state["params"], 0.0, [], initial_clouds(state["params"]))
-                    fb.seek(0)
-                    fb.write(to_fb_bytes(frame, mode, night_dim))
-                    last, last_mode = page, mode
-                time.sleep(1)
-            return
-
-        log.info("Animated mode at %.0f fps.", fps)
-        frame_dt = 1.0 / fps
-        t0 = time.time()
-        meteors = []
-        clouds = initial_clouds(state["params"])
-        next_meteor = t0 + random.uniform(1.0, 3.0)
-        page_i, next_flip = 0, t0 + page_seconds
-        dark_frame = b"\x00" * (FB_W * FB_H * 2)
-        blanked = False
-        while _RUNNING:
-            now = time.time()
-            t = now - t0
-            params = state["params"]
-            if controls:
-                tap = reader.get()
-                if tap:
-                    controls.touched(tap[0], tap[1], state["window"])
-                if controls.blanked:
-                    # Backlight off and nothing composited: the one state in
-                    # which this display is not using a whole core.
-                    if not blanked:
-                        fb.seek(0)
-                        fb.write(dark_frame)
-                        blanked = True
-                    time.sleep(0.05)
-                    continue
-                blanked = False
-            # Clouds: match the count to cover, drift across, recycle off the right edge.
-            tgt = round(params["cloud"] / 100 * MAX_CLOUDS)
-            while len(clouds) > tgt:
-                clouds.pop()
-            while len(clouds) < tgt:
-                clouds.append(spawn_cloud())
-            for c in clouds:
-                c["x"] += params["cloud_speed"] * c["depth"] * frame_dt
-                if c["x"] > W:
-                    c["x"] = -c["sprite"].width
-                    c["y"] = random.randint(-40, int(H * 0.72))
-            if params["meteors"] and now >= next_meteor:
-                meteors.append(spawn_meteor())
-                next_meteor = now + random.uniform(params["met_min"], params["met_max"])
-            for m in meteors[:]:
-                m["x"] += m["vx"]
-                m["y"] += m["vy"]
-                m["life"] += 1
-                if m["life"] >= m["max"] or m["y"] > H + 20 or m["x"] < -20:
-                    meteors.remove(m)
-            pages = state["pages"]
-            if controls and controls.take_next():
-                page_i, next_flip = page_i + 1, now + page_seconds
-            elif now >= next_flip:
-                # A paused page holds; the deadline still moves, so resuming
-                # gives a full turn on the page rather than an instant flip.
-                if not (controls and controls.paused):
-                    page_i += 1
-                next_flip = now + page_seconds
-            page = pages[page_i % len(pages)]
-            frame = compose(page, params, t, meteors, clouds,
-                            controls.labels() if controls and controls.visible else None)
-            mode = controls.night_now(state["window"]) if controls \
-                else night_mode_now(night, state["window"])
-            fb.seek(0)
-            fb.write(to_fb_bytes(frame, mode, night_dim))
-            dt = time.time() - now
-            if dt < frame_dt:
-                time.sleep(frame_dt - dt)
-    finally:
-        fb.close()
-    log.info("Stopped. v%s", FIRMWARE_VERSION)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Touch Display 2 stargazing display")
@@ -1216,36 +739,36 @@ def main():
         states = fetch()
         targets = read_targets(out_dir)
         params = sky_params(states)
-        fg = render_foreground(states, moon_image(), moon_ring)
+        pages = build_pages(states, targets, lat, moon_ring)
         # A saved preview should look like the panel does right now, night mode
         # included - otherwise --save quietly lies once the sun goes down.
         now_mode = night_mode_now(night, night_window(states))
-        frame = compose(fg, params, 1.7, [], initial_clouds(params))
+        frames = [compose(sky.paint(params, 1.7, [], sky.initial_clouds(params)), p)
+                  for p in pages]
         if args.save:
-            apply_night(frame, now_mode, night_dim).save(args.save)
+            apply_night(frames[0], now_mode, night_dim).save(args.save)
             log.info("Saved %s", args.save)
-            page2 = render_targets(states, targets,
-                                   load_cutouts(targets, P2_CARDS), lat)
-            if page2 is not None:
+            if len(frames) > 1:
                 p = Path(args.save)
                 out = str(p.with_name(p.stem + "_targets" + p.suffix))
-                apply_night(compose(page2, params, 1.7, [],
-                                    initial_clouds(params)),
-                            now_mode, night_dim).save(out)
+                apply_night(frames[1], now_mode, night_dim).save(out)
                 log.info("Saved %s", out)
             else:
                 log.warning("No UpTonight reports in %s - targets page skipped.", out_dir)
         else:
-            with open(FB_DEV, "wb") as fb:
-                fb.write(to_fb_bytes(frame, now_mode, night_dim))
+            with fb.open() as out:
+                out.write(fb.to_bytes(frames[0], now_mode, night_dim))
             log.info("Done. v%s", FIRMWARE_VERSION)
         return
 
-    _install_signal_handlers()
-    run_daemon(fetch, out_dir, lat, animated=(mode != "static"), fps=fps,
-               refresh_min=refresh_min, page_seconds=page_seconds, demo=args.demo,
-               night=night, night_dim=night_dim,
-               touch_enabled=bool(tch.get("enabled", True)),
+    install_signal_handlers()
+    reader = touch.TouchReader(W, H, FB_W, FB_H) if tch.get("enabled", True) else None
+    # This module is the layout the daemon draws through: it supplies sky, fb,
+    # strip, build_pages, compose and night_window.
+    run_daemon(sys.modules[__name__], fetch, read_targets, out_dir, lat,
+               animated=(mode != "static"), fps=fps, refresh_min=refresh_min,
+               page_seconds=page_seconds, demo=args.demo, night=night,
+               night_dim=night_dim, touch_reader=reader,
                strip_seconds=float(tch.get("strip_seconds", 6)),
                moon_ring=moon_ring)
 
