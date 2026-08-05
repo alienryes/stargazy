@@ -16,23 +16,49 @@ the hour's real lunar image. Touch controls live in touch.py.
 
 import argparse
 import glob
-import json
 import logging
 import math
 import random
-import re
 import signal
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import requests
-import tomllib
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 import touch
+from core.fonts import font
+from core.imagery import moon_image, paste_moon
+from core.night import (
+    NIGHT_CYCLE,
+    apply_night,
+    inside_window,
+    night_filter,
+    night_mode_now,
+    night_window,
+    tonight,
+)
+from core.palette import (
+    AMBER,
+    BG,
+    DIM,
+    ELECTRIC,
+    ICE,
+    MOON,
+    MOON_DARK,
+    MUTED,
+    ROSE,
+    STAR_COLOUR,
+    STEEL,
+    WHITE,
+    bar_colour,
+    verdict,
+)
+from core.targets import load_cutouts, peak, read_targets, ut_dt
+from core.values import _dt, _f, _i, _phrase, load_config
+from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
 # Frozen. This build's panel leaves the bench once the 10" one is running, after
 # which nothing here can be confirmed against real hardware again, so 3.7.2 marks
@@ -47,14 +73,6 @@ FIRMWARE_VERSION = "3.7.2"
 Image.MAX_IMAGE_PIXELS = 3_000 * 3_000
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
-# IBM Plex Sans (OFL, Debian's fonts-ibm-plex). Drawn for technical material,
-# holds up at a distance, and its figures are tabular so nothing shifts as the
-# numbers change. It runs about 11% narrower than DejaVu at the same nominal
-# size, which is why every size below is ~8% larger than the DejaVu original -
-# the aim is to match the OPTICAL size, not the point size.
-FONT_DIR = Path("/usr/share/fonts/truetype/ibm-plex")
-FONT_FALLBACK_DIR = Path("/usr/share/fonts/truetype/dejavu")
-
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
@@ -63,34 +81,6 @@ log = logging.getLogger(__name__)
 FB_DEV = "/dev/fb0"
 FB_W, FB_H = 720, 1280
 ROTATE = Image.ROTATE_90
-
-# ── Palette ───────────────────────────────────────────────────────────────
-# Conditions run on a cool-to-warm ramp: a clear night reads cold and blue, a
-# washed-out one warm. Amber is reserved for the moon and for cautions.
-BG       = (10, 12, 28)      # opaque fills (bar troughs) — matches the night sky
-WHITE    = (230, 232, 240)   # data text
-ICE      = (165, 243, 252)   # #A5F3FC — best conditions
-ELECTRIC = (56, 189, 248)    # #38BDF8 — good conditions, bar fills
-AMBER    = (245, 158, 11)    # #F59E0B — fair/caution. STATUS ONLY.
-# The moon is an object, not a state, and it used to share AMBER with the FAIR
-# verdict - so on a fair night the two matched and implied a link that is not
-# there. Ivory rather than gold: every warm gold tested came out under the
-# ΔE 15 normal-vision floor against AMBER, i.e. hard to tell from it even with
-# full colour vision. Ivory is warm AND very light, so it clears amber, and it
-# is what the Moon actually looks like.
-MOON     = (240, 226, 196)   # #F0E2C4 — the moon, wherever it appears
-ROSE     = (244, 63, 94)     # #F43F5E — poor conditions
-STEEL    = (29, 94, 128)     # muted electric — bar trough frame
-MOON_DARK = (27, 36, 64)     # unlit lunar disc, just above the sky navy
-MUTED    = (150, 158, 180)   # secondary TEXT — present, but not competing
-# Rules, ticks and frames - plus the two deliberately recessive marginal notes,
-# the version stamp and the imagery credit. NEVER content: at 3.2:1 on the
-# night sky and 1.8:1 on the twilight one it is below WCAG AA wherever it is
-# legible at all, and until v3.2.2 it was carrying axis labels, dusk/dawn times
-# and the card subtitles. Lines are graphical objects, whose bar is 3:1, so it
-# is the right colour for what it is used for now and was the wrong one before.
-DIM      = (90, 98, 120)     # divider lines / subtle rules
-STAR_COLOUR = (232, 234, 248)
 
 W, H = 1280, 720
 
@@ -108,65 +98,6 @@ RIGHT_CX = (DIV_X + W) // 2  # centre of right (moon) panel = 1040
 STRIP_H  = 64
 STRIP_Y  = H - STRIP_H - 16
 BTN_GAP  = 8
-NIGHT_CYCLE = ("off", "dim", "red")
-
-# Every value the dashboard needs, as HA entity suffix -> pyastroweatherio
-# property. ONE table, because the two weather sources must stay in step: the
-# Home Assistant path uses the keys, the direct path uses the values, and the
-# render code below is keyed on the full entity id either way.
-HA_PREFIX = "sensor.astroweather_backyard_"
-
-FIELDS = {
-    "astronomical_night_duration":           "night_duration_astronomical",
-    "deepsky_forecast_today":                "deepsky_forecast_today",
-    "deepsky_forecast_today_description":    "deepsky_forecast_today_desc",
-    "deepsky_forecast_tomorrow":             "deepsky_forecast_tomorrow",
-    "deepsky_forecast_tomorrow_description": "deepsky_forecast_tomorrow_desc",
-    "cloud_cover":                           "cloudcover_percentage",
-    "seeing_percentage":                     "seeing_percentage",
-    # NB the plain `transparency` property is a magnitude figure; the HA sensor
-    # of that name carries the PERCENTAGE, which is what the bars expect.
-    "transparency":                          "transparency_percentage",
-    "calm_percentage":                       "calm_percentage",
-    "moon_phase":                            "moon_phase",
-    "moon_icon":                             "moon_icon",
-    "moon_constellation":                    "moon_constellation",
-    "moon_next_new_moon":                    "moon_next_new_moon",
-    "moon_next_full_moon":                   "moon_next_full_moon",
-    "moon_next_dark_night":                  "moon_next_dark_night",
-    "sun_next_setting":                      "sun_next_setting",
-    "sun_next_rising":                       "sun_next_rising",
-    "2m_temperature":                        "temp2m",
-    "2m_dewpoint":                           "dewpoint2m",
-    "2m_relative_humidity":                  "rh2m",
-    "10m_wind_speed":                        "wind10m_speed",
-    "10m_wind_direction":                    "wind10m_direction",
-    "lifted_index_plain":                    "lifted_index_plain",
-    "moon_next_rising":                      "moon_next_rising",
-    "moon_next_setting":                     "moon_next_setting",
-    # The plain sun_next_setting/rising are CIVIL twilight; these are the real
-    # astronomical dark bounds the timeline highlights.
-    "sun_next_setting_astronomical":         "sun_next_setting_astro",
-    "sun_next_rising_astronomical":          "sun_next_rising_astro",
-}
-
-ENTITIES = [HA_PREFIX + suffix for suffix in FIELDS]
-
-# pyastroweatherio reports wind in m/s; Home Assistant serves the same figure in
-# km/h. Everything downstream - the footer and the starfield drift coefficient
-# in sky_params() - was tuned against km/h, so the direct path converts and km/h
-# stays the internal unit. Only the footer converts again, to mph, for display.
-MS_TO_KMH = 3.6
-KMH_TO_MPH = 1 / 1.609344
-
-# UpTonight runs on this Pi from a daily timer and writes these reports; we read
-# them straight off disk. Absent files simply mean it has not run yet, or that
-# the section is disabled (comets are off by default).
-UPTONIGHT_REPORTS = {
-    "objects": "uptonight-report.json",
-    "bodies":  "uptonight-bodies-report.json",
-    "comets":  "uptonight-comets-report.json",
-}
 
 PHASE_NAMES = {
     "moon-new":             "New Moon",
@@ -178,12 +109,6 @@ PHASE_NAMES = {
     "moon-last-quarter":    "Last Quarter",
     "moon-waning-crescent": "Waning Crescent",
 }
-
-# AstroWeather condition strings arrive as joined words ("Partlycloudy",
-# "Clearsky"); split before a known second component so they read naturally.
-_COMPOUND_RE = re.compile(
-    r"(?<=[a-z])(cloudy|clouds|sky|rain|snow|fog|mist|overcast|sunny)", re.IGNORECASE
-)
 
 # Fixed, seeded starfield spanning the whole screen. Each star:
 # x, y, base brightness, twinkle phase, twinkle speed, size.
@@ -201,270 +126,6 @@ STARS = [
 ]
 
 _RUNNING = True  # cleared by SIGTERM/SIGINT so the daemon exits gracefully
-
-
-def _phrase(s):
-    """'Partlycloudy night' -> 'Partly cloudy night'."""
-    return _COMPOUND_RE.sub(r" \1", s) if s else s
-
-
-def load_config():
-    with open(CONFIG_PATH, "rb") as f:
-        return tomllib.load(f)
-
-
-def fetch_states(ha_url, token):
-    """Weather and sun/moon conditions, as entity -> state string."""
-    session = requests.Session()
-    session.headers["Authorization"] = f"Bearer {token}"
-    states = {}
-    for eid in ENTITIES:
-        try:
-            r = session.get(f"{ha_url}/api/states/{eid}", timeout=10)
-            r.raise_for_status()
-            states[eid] = r.json()["state"]
-        except Exception as e:
-            log.warning("Failed to fetch %s: %s", eid, e)
-            states[eid] = "unknown"
-    return states
-
-
-def _as_state(value):
-    """Render a library value the way Home Assistant's REST API would.
-
-    The whole point is that both sources hand the render code the same thing:
-    strings, with datetimes in ISO form (which _dt parses) and missing values
-    as "unknown" (which _f/_i already fall back on).
-    """
-    if value is None:
-        return "unknown"
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return str(value)
-
-
-def fetch_states_direct(loc, tuning):
-    """The same dict as fetch_states(), fetched straight from Met.no/Open-Meteo.
-
-    This is what makes the display work without Home Assistant on the network.
-    pyastroweatherio is the very library the HA integration wraps, so the
-    numbers are its numbers rather than a reimplementation of its judgement.
-
-    Imported lazily and deliberately: the library pulls in aiohttp, pandas and
-    ephem (~195MB installed), and nobody running source = "homeassistant"
-    should have to carry that.
-    """
-    import asyncio
-
-    import aiohttp
-    from pyastroweatherio import AstroWeather
-
-    async def _fetch():
-        async with aiohttp.ClientSession() as session:
-            aw = AstroWeather(
-                session,
-                latitude=loc["latitude"],
-                longitude=loc["longitude"],
-                elevation=loc.get("elevation", 0),
-                timezone_info=loc.get("timezone", "Etc/UTC"),
-                cloudcover_weight=tuning["cloudcover_weight"],
-                # fractions, not percentages - the HA integration scales its
-                # own 40/70/100 defaults down before passing them
-                cloudcover_high_weakening=tuning["cloudcover_high_weakening"],
-                cloudcover_medium_weakening=tuning["cloudcover_medium_weakening"],
-                cloudcover_low_weakening=tuning["cloudcover_low_weakening"],
-                fog_weight=tuning["fog_weight"],
-                seeing_weight=tuning["seeing_weight"],
-                transparency_weight=tuning["transparency_weight"],
-                calm_weight=tuning["calm_weight"],
-                uptonight_path="",   # UpTonight is read off disk by read_targets
-                experimental_features=tuning["experimental_features"],
-                forecast_model=tuning["forecast_model"],
-            )
-            return await aw.get_location_data()
-
-    try:
-        data = asyncio.run(_fetch())
-    except Exception as e:
-        log.warning("Direct weather fetch failed: %s", e)
-        return {eid: "unknown" for eid in ENTITIES}
-
-    if isinstance(data, list):        # get_location_data returns a 1-item list
-        data = data[0]
-
-    states = {}
-    for suffix, prop in FIELDS.items():
-        try:
-            value = getattr(data, prop)
-        except Exception as e:
-            log.warning("No %s from pyastroweatherio: %s", prop, e)
-            value = None
-        if suffix == "10m_wind_speed" and value is not None:
-            value = _f(value) * MS_TO_KMH
-        states[HA_PREFIX + suffix] = _as_state(value)
-    return states
-
-
-# pyastroweatherio's own defaults. They are NOT the AstroWeather HA
-# integration's DEFAULT_ constants, which are on a different scale for the
-# weights and expressed as percentages for the weakenings.
-TUNING_DEFAULTS = {
-    "cloudcover_weight": 3,
-    "cloudcover_high_weakening": 0.4,
-    "cloudcover_medium_weakening": 0.7,
-    "cloudcover_low_weakening": 1.0,
-    "fog_weight": 3,
-    "seeing_weight": 2,
-    "transparency_weight": 1,
-    "calm_weight": 2,
-    "experimental_features": True,
-    "forecast_model": "ecmwf_ifs025",
-}
-
-
-def make_fetcher(config):
-    """Return a zero-argument callable giving the states dict for this config."""
-    weather = config.get("weather", {})
-    source = weather.get("source", "direct")
-    if source == "homeassistant":
-        ha = config["ha"]
-        url, token = ha["url"].rstrip("/"), ha["token"]
-        return lambda: fetch_states(url, token)
-    if source != "direct":
-        raise ValueError(
-            f'weather.source is "{source}"; expected "direct" or "homeassistant"')
-    loc = config["location"]
-    tuning = {**TUNING_DEFAULTS, **{k: v for k, v in weather.items() if k != "source"}}
-    return lambda: fetch_states_direct(loc, tuning)
-
-
-def compare_sources(config):
-    """Fetch from both sources and diff them, value by value.
-
-    Worth keeping in the tool rather than in a scratch script: the two sources
-    are meant to agree, and the cheapest way to know they still do after a
-    library or integration update is to ask the running install.
-
-    Both are fetched back to back - AstroWeather refreshes every few minutes,
-    so comparing readings taken minutes apart invents differences that are not
-    there.
-    """
-    loc, ha = config["location"], config["ha"]
-    weather = config.get("weather", {})
-    tuning = {**TUNING_DEFAULTS, **{k: v for k, v in weather.items() if k != "source"}}
-
-    direct = fetch_states_direct(loc, tuning)
-    hass = fetch_states(ha["url"].rstrip("/"), ha["token"])
-
-    same = 0
-    for suffix in FIELDS:
-        eid = HA_PREFIX + suffix
-        d, h = direct[eid], hass[eid]
-        # Times come back at differing precision - Home Assistant truncates to
-        # whole seconds, the library keeps microseconds - so compare instants
-        # with a tolerance rather than for equality.
-        dd, hh = _dt(d), _dt(h)
-        if dd and hh:
-            equal = abs((dd - hh).total_seconds()) < 2.0
-        else:
-            equal = d == h
-        if not equal and not (dd or hh):
-            # numeric near-equality, so 45 and 45.0 are not a "difference"
-            fd, fh = _f(d, None), _f(h, None)
-            equal = fd is not None and fh is not None and abs(fd - fh) < 0.05
-        same += equal
-        print(f"{'ok ' if equal else 'DIFF'} {suffix:38s} "
-              f"direct={d:<34.34} ha={h}")
-    print(f"\n{same}/{len(FIELDS)} identical")
-    return 0 if same == len(FIELDS) else 1
-
-
-def _records(columns):
-    """UpTonight writes pandas column-major JSON - {"mag": {"0": 8.4, ...}, ...}
-    - so pivot it back into one dict per object. Key names are unchanged."""
-    if not isinstance(columns, dict) or not columns:
-        return []
-    index = sorted(next(iter(columns.values())).keys(), key=lambda k: int(k))
-    return [{col: values.get(i) for col, values in columns.items()} for i in index]
-
-
-def read_targets(out_dir):
-    """UpTonight's object/body/comet lists, empty if it has not run yet."""
-    targets = {}
-    for key, name in UPTONIGHT_REPORTS.items():
-        path = Path(out_dir) / name
-        if not path.exists():
-            continue
-        try:
-            targets[key] = _records(json.loads(path.read_text()))
-        except Exception as e:
-            log.warning("Failed to read %s: %s", path, e)
-    return targets
-
-
-def _f(val, default=0.0):
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return default
-
-
-def _i(val, default=0):
-    try:
-        return int(float(val))
-    except (ValueError, TypeError):
-        return default
-
-
-def _dt(s):
-    if not s or s == "unknown":
-        return None
-    try:
-        return datetime.fromisoformat(s).astimezone()
-    except ValueError:
-        return None
-
-
-_DEJAVU = {"IBMPlexSans-Regular.ttf": "DejaVuSans.ttf",
-           "IBMPlexSans-SemiBold.ttf": "DejaVuSans-Bold.ttf",
-           "IBMPlexSans-Bold.ttf": "DejaVuSans-Bold.ttf"}
-
-
-def _font(name, size):
-    """Plex, falling back to DejaVu, falling back to whatever Pillow has.
-
-    Plex arrives via setup.sh rather than with the OS, so an install that
-    skipped it would otherwise drop to Pillow's default bitmap face and render
-    a dashboard nobody could read from across a room. DejaVu is on every
-    Raspberry Pi OS image, so the middle rung always exists.
-    """
-    for path in (FONT_DIR / name, FONT_FALLBACK_DIR / _DEJAVU[name]):
-        try:
-            return ImageFont.truetype(str(path), size)
-        except OSError:
-            continue
-    return ImageFont.load_default()
-
-
-def _verdict(score):
-    """(label, colour) for a deep-sky forecast score 0-100."""
-    if score >= 75:
-        return "EXCELLENT", ICE
-    if score >= 50:
-        return "GOOD", ELECTRIC
-    if score >= 25:
-        return "FAIR", AMBER
-    if score > 0:
-        return "POOR", ROSE
-    return "NONE", ROSE
-
-
-def _bar_colour(value, good, warn):
-    if value >= good:
-        return ELECTRIC
-    if value >= warn:
-        return AMBER
-    return ROSE
 
 
 def _draw_moon(draw, cx, cy, r, illumination, waxing=True):
@@ -648,118 +309,6 @@ def initial_clouds(params):
     return [spawn_cloud() for _ in range(n)]
 
 
-# ── Deep-sky imagery ──────────────────────────────────────────────────────
-# Real sky cutouts from the CDS hips2fits service, which resolves the object
-# name itself and renders the actual patch of sky. That beats an image-library
-# search: coverage is total (NGC and LBN designations work as well as Messier)
-# and it cannot return a confidently-wrong picture of something else. DSS2
-# colour renders on black, so the tiles composite onto the night sky cleanly.
-CACHE_DIR = Path(__file__).parent / "cache" / "dso"
-HIPS_URL = "https://alasky.cds.unistra.fr/hips-image-services/hips2fits"
-
-
-def cutout(obj_id, size_arcmin, px=200):
-    """Cached DSS2 colour cutout for an object, or None. NETWORK - background
-    thread only; never call this from the render loop."""
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    path = CACHE_DIR / (re.sub(r"[^A-Za-z0-9]+", "_", obj_id).strip("_") + ".jpg")
-    if path.exists():
-        try:
-            return Image.open(path).convert("RGB")
-        except Exception:
-            path.unlink(missing_ok=True)
-    # Frame the object rather than the pixel grid: catalogue size in arcmin,
-    # with margin, clamped so a tiny galaxy is not a dot and M31 is not a smear.
-    fov = min(max(size_arcmin * 1.8, 12.0), 50.0) / 60.0
-    try:
-        r = requests.get(HIPS_URL, timeout=25, params={
-            "hips": "CDS/P/DSS2/color", "object": obj_id, "fov": f"{fov:.4f}",
-            "width": px, "height": px, "format": "jpg"})
-        r.raise_for_status()
-        path.write_bytes(r.content)
-        img = Image.open(path).convert("RGB")
-        log.info("Cutout fetched for %s (fov %.1f')", obj_id, fov * 60)
-        return img
-    except Exception as e:
-        log.warning("Cutout for %s failed: %s", obj_id, e)
-        return None
-
-
-# Real lunar imagery from NASA's Scientific Visualization Studio (Ernie Wright's
-# Dial-a-Moon). The API resolves the frame for a given hour, so the phase, the
-# libration and the terminator are all as they actually are that night -
-# including WHICH LIMB IS LIT, which is why nothing here mirrors anything. Like
-# the DSS2 cutouts it renders on black, so it composites onto the sky cleanly.
-MOON_CACHE = Path(__file__).parent / "cache" / "moon"
-DIALAMOON_URL = "https://svs.gsfc.nasa.gov/api/dialamoon/"
-MOON_CACHE_KEEP = 4
-# The disc is 658px across, centred, in a 730px frame. Scaling by the frame
-# rather than by a measured bounding box keeps the Moon's real change of
-# apparent size with distance - and a thin crescent has no bounding box worth
-# measuring anyway, since most of the disc is only lit by earthshine.
-MOON_DISC_FRAC = 658 / 730
-
-
-def _prune(d, keep):
-    files = sorted(d.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for p in files[keep:]:
-        p.unlink(missing_ok=True)
-
-
-def moon_image():
-    """The Moon as it actually looks this hour, or None. NETWORK - background
-    thread only; never call this from the render loop.
-
-    Deliberately does NOT fall back to a cached older frame: the phase moves
-    about 12 degrees a day, so yesterday's picture would be wrong. Returning
-    None instead selects the parametric drawing, which is computed from current
-    data and therefore correct, if simpler.
-    """
-    MOON_CACHE.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00")
-    try:
-        meta = requests.get(DIALAMOON_URL + stamp, timeout=20)
-        meta.raise_for_status()
-        url  = meta.json()["image"]["url"]
-        # The filename comes from a network response, so constrain it to
-        # known-safe characters: anything a path could be built from is
-        # stripped ("\" would traverse on Windows, and a bare ".." names the
-        # cache directory itself).
-        name = re.sub(r"[^A-Za-z0-9._-]+", "_", url.rsplit("/", 1)[-1])
-        if not name.strip("._-"):
-            name = "frame.jpg"
-        path = MOON_CACHE / name
-        if not path.exists():
-            r = requests.get(url, timeout=30)
-            r.raise_for_status()
-            path.write_bytes(r.content)
-            log.info("Moon frame fetched: %s", path.name)
-            _prune(MOON_CACHE, MOON_CACHE_KEEP)
-        return Image.open(path).convert("RGB")
-    except Exception as e:
-        log.warning("Moon frame unavailable (%s); drawing the phase instead.", e)
-        return None
-
-
-def _paste_moon(img, photo, cx, cy, r, ring=True):
-    """Composite a Dial-a-Moon frame as the moon disc.
-
-    The mask edge is feathered because the disc does not always fill it: the
-    Moon is nearer at perigee than at apogee by about 4%, and a hard edge would
-    show that as a black rim against the navy sky on the far weeks.
-    """
-    d     = int(2 * r / MOON_DISC_FRAC)
-    disc  = photo.resize((d, d), Image.LANCZOS)
-    mask  = Image.new("L", (d, d), 0)
-    inset = (d - 2 * r) // 2
-    ImageDraw.Draw(mask).ellipse([inset, inset, d - inset, d - inset], fill=255)
-    mask  = mask.filter(ImageFilter.GaussianBlur(2))
-    img.paste(disc, (cx - d // 2, cy - d // 2), mask)
-    if ring:
-        ImageDraw.Draw(img).ellipse([cx - r, cy - r, cx + r, cy + r],
-                                    outline=MOON, width=3)
-
-
 def _glyph(draw, cx, cy, r, otype):
     """Fallback mark when no cutout is available (offline, or a failed fetch)."""
     t = (otype or "").lower()
@@ -777,40 +326,6 @@ def _glyph(draw, cx, cy, r, otype):
         draw.ellipse([cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy + r * 0.45], outline=STEEL)
 
 
-# How high each object actually gets. UpTonight gives alt/az for the planets and
-# comets but nothing positional for deep-sky objects, so the cards derive it:
-# peak altitude is 90 - |latitude - declination|, with declination coming
-# straight out of UpTonight's own report file. (Until v3.0.0 that number was
-# looked up from CDS's Sesame resolver and cached, because the MQTT transport
-# then in use dropped the field; running UpTonight locally made both unnecessary.)
-def peak(dec, lat):
-    """(altitude, compass letter) at meridian transit. An object north of the
-    zenith culminates due north, not south, which is the direction to face."""
-    return 90.0 - abs(lat - dec), ("N" if dec > lat else "S")
-
-
-def _ut_dt(s):
-    """UpTonight's transit stamps are US-format local time, or "" when it does
-    not transit within the observing window."""
-    try:
-        return datetime.strptime(s, "%m/%d/%Y %H:%M:%S")
-    except (ValueError, TypeError):
-        return None
-
-
-def load_cutouts(targets, limit):
-    """{object id: image} for the objects the page will show. NETWORK on a cache
-    miss, so this runs on the data thread, not the render loop."""
-    images = {}
-    for o in sorted(targets.get("objects") or [],
-                    key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))[:limit]:
-        oid = str(o.get("id", ""))
-        pic = cutout(oid, _f(o.get("size"), 10.0))
-        if pic is not None:
-            images[oid] = pic
-    return images
-
-
 def render_foreground(states, moon_photo=None, moon_ring=False):
     """Render the dashboard as an RGBA overlay: opaque content, transparent sky.
 
@@ -820,10 +335,10 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    f_large = _font("IBMPlexSans-Bold.ttf", 104)
-    f_med   = _font("IBMPlexSans-SemiBold.ttf", 46)
-    f_sm    = _font("IBMPlexSans-Regular.ttf", 32)
-    f_xs    = _font("IBMPlexSans-Regular.ttf", 26)
+    f_large = font("IBMPlexSans-Bold.ttf", 104)
+    f_med   = font("IBMPlexSans-SemiBold.ttf", 46)
+    f_sm    = font("IBMPlexSans-Regular.ttf", 32)
+    f_xs    = font("IBMPlexSans-Regular.ttf", 26)
 
     s = states
 
@@ -871,7 +386,7 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
         v_colour = AMBER
         v_sub    = f"Next dark night: {next_dark.strftime('%d %b') if next_dark else 'unknown'}"
     else:
-        v_text, v_colour = _verdict(dsky_today)
+        v_text, v_colour = verdict(dsky_today)
         v_sub = f"Deep sky: {dsky_today}%  -  {dsky_today_desc}"
 
     # Measured, not guessed: at (MARGIN, 92) the verdict's ink already started
@@ -933,7 +448,7 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
             draw.rectangle([BARX,     y + 4, BARX + BARW,     y + BARH + 4], fill=BG)
             filled = max(2, int(BARW * value / 100))
             draw.rectangle([BARX, y + 4, BARX + filled, y + BARH + 4],
-                           fill=_bar_colour(value, good, warn))
+                           fill=bar_colour(value, good, warn))
             # Ticks at the top and bottom edges only, so they never fight the
             # fill. DIM reads darker than any fill colour and lighter than the
             # empty trough, so one colour works on both sides of the boundary.
@@ -950,7 +465,7 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
     MR  = 100
     MCY = 364
     if moon_photo is not None:
-        _paste_moon(img, moon_photo, MCX, MCY, MR, ring=moon_ring)
+        paste_moon(img, moon_photo, MCX, MCY, MR, ring=moon_ring)
     else:
         _draw_moon(draw, MCX, MCY, MR, moon_phase, waxing)
 
@@ -977,7 +492,7 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
     desc = f"{dsky_tmrw_desc}  "
     draw.text((MARGIN + tm_w, 560), desc, fill=WHITE, font=f_sm)
     draw.text((MARGIN + tm_w + int(draw.textlength(desc, font=f_sm)), 560),
-              f"({dsky_tmrw}%)", fill=_verdict(dsky_tmrw)[1], font=f_sm)
+              f"({dsky_tmrw}%)", fill=verdict(dsky_tmrw)[1], font=f_sm)
 
     moon_date_parts = []
     if next_new:
@@ -1041,41 +556,19 @@ def _tl_x(t, t0, t1, x0, x1):
     return x0 + max(0.0, min(1.0, f)) * (x1 - x0)
 
 
-def _night_window(states):
-    """Tonight's civil dusk -> dawn.
-
-    The sun_next_* sensors roll to TOMORROW as soon as the event passes, so
-    after sunset next_setting is tomorrow's and the window inverts. That used to
-    blank the entire timeline every night from sunset onward - i.e. whenever the
-    display was actually worth looking at.
-    """
-    dusk = _dt(states.get("sensor.astroweather_backyard_sun_next_setting"))
-    dawn = _dt(states.get("sensor.astroweather_backyard_sun_next_rising"))
-    if dusk is None or dawn is None:
-        return None, None
-    if dusk >= dawn:
-        dusk -= timedelta(days=1)     # sunset already happened; this is tonight
-    return dusk, dawn
-
-
-def _tonight(t, end):
-    """Step a 'next event' back a day when it points past tonight's window."""
-    return t - timedelta(days=1) if (t is not None and t > end) else t
-
-
 def _draw_timeline(draw, states, y, f_xs):
     """Dusk-to-dawn bar with true astronomical darkness and moon-up marked."""
     # h must clear the in-bar label's line height, not just look right empty:
     # at 24 the larger Plex f_xs spilled out of the bar top and bottom.
     x0, x1, h = MARGIN, W - MARGIN, 32
-    dusk, dawn = _night_window(states)
+    dusk, dawn = night_window(states)
     if dusk is None or dawn <= dusk:
         return
     draw.rectangle([x0, y, x1, y + h], fill=BG, outline=STEEL)
 
     # Astronomical dark: the hours that actually count, not civil twilight.
-    t_a0 = _tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_setting_astronomical")), dawn)
-    t_a1 = _tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_rising_astronomical")), dawn)
+    t_a0 = tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_setting_astronomical")), dawn)
+    t_a1 = tonight(_dt(states.get("sensor.astroweather_backyard_sun_next_rising_astronomical")), dawn)
     a0 = _tl_x(t_a0, dusk, dawn, x0, x1)
     a1 = _tl_x(t_a1, dusk, dawn, x0, x1)
     if a0 is not None and a1 is not None and a1 > a0:
@@ -1269,7 +762,7 @@ def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
         if dec is not None and lat is not None:
             alt, face = peak(dec, lat)
             line = f"peaks {alt:.0f}° {face}"
-            when = _ut_dt(str(o.get("meridian transit", "")))
+            when = ut_dt(str(o.get("meridian transit", "")))
             if when is not None:
                 line += f"   at {when.strftime('%H:%M')}"
             draw.text((tx, y + 66), line, font=f_xs, fill=WHITE)
@@ -1295,10 +788,10 @@ def render_targets(states, targets, images, lat=None):
 
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    f_title = _font("IBMPlexSans-Bold.ttf", 46)
-    f_med   = _font("IBMPlexSans-SemiBold.ttf", 36)
-    f_sm    = _font("IBMPlexSans-Regular.ttf", 26)
-    f_xs    = _font("IBMPlexSans-Regular.ttf", 22)
+    f_title = font("IBMPlexSans-Bold.ttf", 46)
+    f_med   = font("IBMPlexSans-SemiBold.ttf", 36)
+    f_sm    = font("IBMPlexSans-Regular.ttf", 26)
+    f_xs    = font("IBMPlexSans-Regular.ttf", 22)
 
     draw.text((MARGIN, 22), "TONIGHT'S TARGETS", font=f_title, fill=WHITE)
     draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM)
@@ -1332,37 +825,6 @@ def render_targets(states, targets, images, lat=None):
     return img
 
 
-def _night_filter(arr, mode, dim):
-    """Night transform over an HxWx3 uint16 array. The transform lives here
-    once; both the framebuffer path and --save go through it.
-
-    Applied to the FINISHED frame rather than by swapping the palette, which
-    means it also covers the animated sky and the DSS2 cutouts - a palette
-    swap would have left photographs of galaxies glowing white.
-    """
-    if mode == "dim":
-        return (arr * dim) // 100
-    if mode == "red":
-        # Rec.601 luma, then everything onto the red channel. Red is what
-        # observers use because long wavelengths leave scotopic vision alone;
-        # a trace of green and blue keeps it from looking like a fault.
-        lum = (arr[:, :, 0] * 54 + arr[:, :, 1] * 183 + arr[:, :, 2] * 19) >> 8
-        out = np.zeros_like(arr)
-        out[:, :, 0] = lum
-        out[:, :, 1] = lum >> 4
-        out[:, :, 2] = lum >> 5
-        return out
-    return arr
-
-
-def apply_night(img, mode, dim):
-    """Same transform, for the paths that want a PIL image back (--save)."""
-    if mode == "off":
-        return img
-    arr = _night_filter(np.asarray(img, dtype=np.uint16), mode, dim)
-    return Image.fromarray(arr.astype(np.uint8))
-
-
 def to_fb_bytes(img, night="off", dim=45):
     rot = img.transpose(ROTATE)
     if rot.size != (FB_W, FB_H):
@@ -1370,29 +832,9 @@ def to_fb_bytes(img, night="off", dim=45):
     arr = np.asarray(rot, dtype=np.uint16)
     # Filtered here rather than in compose(): this array already exists, so
     # night mode costs no extra conversion on the 20fps path.
-    arr = _night_filter(arr, night, dim)
+    arr = night_filter(arr, night, dim)
     packed = ((arr[:, :, 0] >> 3) << 11) | ((arr[:, :, 1] >> 2) << 5) | (arr[:, :, 2] >> 3)
     return packed.astype("<u2").tobytes()
-
-
-def inside_window(window):
-    """True when the clock is between real dusk and dawn."""
-    if not window:
-        return False
-    dusk, dawn = window
-    if dusk is None or dawn is None:
-        return False
-    return dusk <= datetime.now().astimezone() <= dawn
-
-
-def night_mode_now(mode, window):
-    """The mode to apply right now - "off" outside the dusk-to-dawn window.
-
-    Tied to real dusk and dawn rather than a clock schedule, because the whole
-    point is to stop the panel wrecking dark adaptation, and that starts when
-    the sky does.
-    """
-    return mode if mode != "off" and inside_window(window) else "off"
 
 
 NIGHT_BASE = None
@@ -1414,7 +856,7 @@ def draw_clock(draw):
     advances live and the date rolls over at midnight. It is one short text draw
     over transparent sky, which the 20 fps loop does not notice.
     """
-    f_sm    = _font("IBMPlexSans-Regular.ttf", 32)
+    f_sm    = font("IBMPlexSans-Regular.ttf", 32)
     now_str = datetime.now().strftime("%a %d %b  %H:%M")
     ts_w    = int(draw.textlength(now_str, font=f_sm))
     # Secondary ink: at full white it carried the same weight as the title and
@@ -1440,7 +882,7 @@ def button_at(x, y, n):
 
 def draw_strip(draw, labels):
     """Stamp the control strip over a composed frame."""
-    f = _font("IBMPlexSans-SemiBold.ttf", 26)
+    f = font("IBMPlexSans-SemiBold.ttf", 26)
     for (x0, y0, x1, y1), label in zip(button_rects(len(labels)), labels):
         draw.rounded_rectangle((x0, y0, x1, y1), radius=10,
                                fill=BG, outline=STEEL, width=2)
@@ -1625,7 +1067,7 @@ def run_daemon(fetch, out_dir, lat, animated, fps, refresh_min,
         state["pages"] = pages
         state["params"] = DEMO_PARAMS if demo else sky_params(states)
         # Dusk/dawn drive night mode, and they only change when the data does.
-        state["window"] = _night_window(states)
+        state["window"] = night_window(states)
 
     log.info("Fetching conditions...")
     load()
@@ -1748,7 +1190,7 @@ def main():
                         help="Fetch from both weather sources and print a per-value diff")
     args = parser.parse_args()
 
-    config = load_config()
+    config = load_config(CONFIG_PATH)
     out_dir = config.get("uptonight", {}).get("out_dir", "")
     lat    = config.get("location", {}).get("latitude")
     disp   = config.get("display", {})
@@ -1777,7 +1219,7 @@ def main():
         fg = render_foreground(states, moon_image(), moon_ring)
         # A saved preview should look like the panel does right now, night mode
         # included - otherwise --save quietly lies once the sun goes down.
-        now_mode = night_mode_now(night, _night_window(states))
+        now_mode = night_mode_now(night, night_window(states))
         frame = compose(fg, params, 1.7, [], initial_clouds(params))
         if args.save:
             apply_night(frame, now_mode, night_dim).save(args.save)

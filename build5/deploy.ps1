@@ -44,6 +44,14 @@ Invoke-Pi "mkdir -p $REMOTE_DIR"
 Write-Host "--> Copying files..."
 Copy-ToPi "$BUILD\display.py"    "$REMOTE_DIR/display.py"
 Copy-ToPi "$BUILD\touch.py"      "$REMOTE_DIR/touch.py"
+
+# The shared engine sits beside display.py, so the install layout stays flat and
+# the systemd units keep working unchanged.
+Invoke-Pi "mkdir -p $REMOTE_DIR/core"
+foreach ($f in Get-ChildItem "$CORE\*.py") {
+    Copy-ToPi $f.FullName "$REMOTE_DIR/core/$($f.Name)"
+}
+
 Copy-ToPi "$BUILD\requirements.txt" "$REMOTE_DIR/requirements.txt"
 Copy-ToPi "$BUILD\render_uptonight_config.py" "$REMOTE_DIR/render_uptonight_config.py"
 Copy-ToPi "$BUILD\uptonight\config.yaml.template" "$REMOTE_DIR/uptonight-config.yaml.template"
