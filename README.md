@@ -68,28 +68,6 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 ![The 10.1-inch meteor page: solar longitude 133.2 degrees, with Delta Aquariids 8 degrees past peak and Perseids peaking in 7 days, each showing radiant altitude and bearing and an estimated rate of about one per hour, plus a sporadic background figure.](screenshots/10in-meteors.png)
 
-The schematic below labels the regions of page 1:
-
-```
-┌───────────────────────────────────────────────────────────────┐
-│ STARGAZING                                   Fri 24 Jul 21:58 │
-│───────────────────────────────────────────────────────────────│
-│ EXCELLENT                                                     │
-│ Deep sky: 94%  -  Clear sky night                             │
-│───────────────────────────────────────────────────────────────│
-│ Cloudless    [█░░░░░░░]  0%   │    (photo of the Moon)        │
-│ Seeing       [███░░░░░] 34%   │       Waxing Gibbous          │
-│ Transparency [██░░░░░░] 12%   │         in Scorpius           │
-│ Calm         [███████░] 89%   │                               │
-│───────────────────────────────────────────────────────────────│
-│ Tomorrow: Cloudy (5%)             New 12 Aug  -  Full 29 Jul  │
-│ LI: Over 6, very stable           Dusk 21:50  -  Dawn 04:39   │
-│ Temp 24.7°C  -  Dew 12.0°C  -  RH 45%  -  Wind W 4.0 mph      │
-└───────────────────────────────────────────────────────────────┘
-  behind everything: a living sky with stars, clouds and meteors
-  ..and on a screen tap, a control strip along the bottom edge
-```
-
 > **Dusk / Dawn**, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
 
 ---
