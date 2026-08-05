@@ -38,6 +38,8 @@ Two pages rotate over the same continuous animated sky. Both shots are real fram
 
 ![The conditions page: a large FAIR verdict in amber, four labelled condition bars with percentages, and a photographic waning gibbous Moon captioned Waning Gibbous in Pisces. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind.](screenshots/conditions.png)
 
+> **Dusk / Dawn** in that footer, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
+
 **Page 2 — tonight's targets**
 
 ![The targets page: a dusk-to-dawn timeline with the astronomical dark window highlighted and a moon-up strip above it; an altitude-versus-bearing plot of the Moon and planets; and four deep-sky cards, each with a real sky photograph, object type, constellation, peak altitude and time.](screenshots/targets.png)
@@ -67,8 +69,6 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 **Page 3 — meteors.** Which showers are actually running, from a table of orbital constants indexed by solar longitude, with the rate an observer would really count once radiant altitude, cloud and moonlight are accounted for.
 
 ![The 10.1-inch meteor page: solar longitude 133.2 degrees, with Delta Aquariids 8 degrees past peak and Perseids peaking in 7 days, each showing radiant altitude and bearing and an estimated rate of about one per hour, plus a sporadic background figure.](screenshots/10in-meteors.png)
-
-> **Dusk / Dawn**, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
 
 ---
 
