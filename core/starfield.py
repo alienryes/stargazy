@@ -83,6 +83,27 @@ def _appearance(mag):
     return base, size
 
 
+def project_point(az, alt, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0):
+    """One alt-az direction as (x, y, inside_view) canvas coordinates.
+
+    Shared by the starfield and by the meteor radiants, so a radiant lands where
+    the stars around it land and the two cannot drift apart.
+
+    The coordinates are returned whether or not the direction is in view, and
+    the caller decides what that means. A star outside the view is not drawn; a
+    radiant outside it still governs its meteors, because the shower is
+    overhead either way - the window simply is not pointed at it.
+    """
+    fov_h = fov_vertical * (w / h)
+    # Signed angular distance from the centre of view, wrapped to +-180.
+    daz = (az - az_centre + 180.0) % 360.0 - 180.0
+    dalt = alt - alt_centre
+    x = w / 2.0 + (daz / fov_h) * w
+    y = h / 2.0 - (dalt / fov_vertical) * h
+    inside = abs(daz) <= fov_h / 2.0 and abs(dalt) <= fov_vertical / 2.0
+    return x, y, inside
+
+
 def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0):
     """Stars currently above the horizon and inside the view, in Sky's format.
 
@@ -96,21 +117,15 @@ def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0):
     view, and nothing here may disturb the sequence the clouds and meteors draw
     from.
     """
-    fov_h = fov_vertical * (w / h)
     stars = []
     for i, (ra, dec, mag) in enumerate(catalogue()):
         alt, az = alt_az(obs, ra, dec)
         if alt <= 0.0:
             continue                      # below the horizon: genuinely not there
-        # Signed angular distance from the centre of view, wrapped to +-180.
-        daz = (az - az_centre + 180.0) % 360.0 - 180.0
-        if abs(daz) > fov_h / 2.0:
+        x, y, inside = project_point(az, alt, w, h,
+                                     az_centre, alt_centre, fov_vertical)
+        if not inside:
             continue
-        dalt = alt - alt_centre
-        if abs(dalt) > fov_vertical / 2.0:
-            continue
-        x = w / 2.0 + (daz / fov_h) * w
-        y = h / 2.0 - (dalt / fov_vertical) * h
         base, size = _appearance(mag)
         rng = random.Random(i)
         stars.append((int(x), int(y), base,

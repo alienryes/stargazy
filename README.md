@@ -23,7 +23,7 @@ Everything that is not layout — both weather sources, the target reports, the 
 - **A real image of the Moon** for the current hour — true phase, libration and terminator — with constellation and next new/full moon dates
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
-- **Live animated night sky** behind the dashboard: twinkling starfield, drifting clouds and occasional, random meteors, all **reactive to the actual conditions**
+- **Live animated night sky** behind the dashboard: a real twinkling starfield, drifting clouds and meteors radiating from tonight's real showers, all **reactive to the actual conditions**
 - **Touch controls** hidden until the screen is tapped: night mode, page rotation, brightness and a true blank that drops the display to 0% CPU
 
 ---
@@ -85,9 +85,11 @@ The sky is a live layer composited behind the dashboard each frame (about 14 fps
 
 The moon card shows **a real image of the Moon** (set `display.moon_ring = true` to outline the full disc), fetched hourly from NASA SVS's Dial-a-Moon and cached on disk — actual phase, libration and terminator rather than a drawn approximation. If it can't be reached the display falls back to drawing the phase geometrically, so it degrades rather than breaks. It deliberately will not reuse an older cached frame: the phase moves about 12° a day, so yesterday's picture is simply wrong and the correct drawing is better than an attractive inaccuracy.
 
-Meteors streak occasionally through the night sky (rarer when cloudy). Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
+Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
 
-**In the 10.1-inch build the meteors are real.** Their cadence comes from the same computation that fills its meteor page — which showers are running, how high each radiant sits, and how much of the rate cloud and moonlight remove — so a quiet night in March shows almost nothing and a clear Perseid peak is busy. If nothing is falling, nothing falls here either. The rate is deliberately time-compressed (`meteor_compression`, default 20), because a truthful three-an-hour makes an animated sky look broken; it scales what is there and cannot invent what is not. The *direction* is still arbitrary, and stays that way until the starfield itself is real — a correct radiant over invented stars would be false precision.
+**The meteors are real in both builds.** Their cadence comes from the same computation that fills the 10.1-inch meteor page — which showers are running, how high each radiant sits, and how much of the rate cloud and moonlight remove — so a quiet night in March shows almost nothing and a clear Perseid peak is busy. If nothing is falling, nothing falls here either. The rate is deliberately time-compressed (`meteor_compression`, default 20), because a truthful three-an-hour makes an animated sky look broken; it scales what is there and cannot invent what is not.
+
+**And they radiate from the real radiant.** A meteor is drawn from one of tonight's active showers in proportion to that shower's rate, and travels directly away from where that shower's radiant actually is in the projected sky — so it converges on a point that agrees with the stars around it. Trails shorten towards the radiant, because a path pointing at the observer is seen end-on. The radiant is often off the edge of the panel, which is not a fault: the window faces one direction and the shower is somewhere else, so its meteors sweep in near-parallel from that side. Meteors belonging to no shower — the sporadic background, which is most of them on an ordinary night — keep an arbitrary direction, because they genuinely have none. Setting `sky.real_stars = false` returns every meteor to an arbitrary direction along with the starfield: a correct radiant over invented stars would be false precision, so the two are real together or not at all.
 
 ---
 

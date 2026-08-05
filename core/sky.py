@@ -28,6 +28,15 @@ STAR_DEPTH = {1: 0.25, 2: 0.6, 3: 1.3}
 MAX_CLOUDS = 7
 CLOUD_COLOUR = (48, 53, 72)   # muted blue-grey, lighter than the navy sky
 
+# A meteor's streak is the trail seen side-on, so it shortens towards nothing as
+# the path points at the observer. Within this distance of the radiant the
+# geometry gives no usable direction, and a meteor is nudged out to it rather
+# than drawn along a direction that would be invented.
+MIN_RADIANT_PX = 40
+# Trail geometry: segment length and count, the drawn length being the product.
+# Shower meteors scale the segment by their foreshortening.
+TRAIL_SEG, TRAIL_SEGMENTS = 11.0, 14
+
 NIGHT_GRADIENT = ((6, 8, 20), (15, 17, 42))
 TWILIGHT_GRADIENT = ((22, 32, 62), (44, 60, 100))
 
@@ -89,6 +98,11 @@ class Sky:
         ]
         self._sprites = None
         self._bases = None
+        # Meteor radiants for right now, as (x, y, weight) with x and y None for
+        # the sporadic floor. Empty means no build supplied any, and meteors
+        # then spawn from nowhere in particular as they always did.
+        self._radiants = []
+        self._px_per_degree = None
         # Seeded points drift to suggest motion. Real stars do not need to be
         # suggested - they move because the positions are recomputed - so a
         # build supplying them turns this off via set_stars().
@@ -135,23 +149,102 @@ class Sky:
                     draw.line([(x - 4, y), (x + 4, y)], fill=g, width=1)
                     draw.line([(x, y - 4), (x, y + 4)], fill=g, width=1)
 
+    def set_radiants(self, radiants, px_per_degree):
+        """Where tonight's showers radiate from, in canvas coordinates.
+
+        `radiants` is [(x, y, weight)], one row per active shower plus one for
+        the sporadic floor carried as x and y of None. The weights need not be
+        normalised and are the relative rates: cloud and moonlight cancel out of
+        the ratio between showers, because they cut every shower and the
+        sporadics by the same factor, so only the shower rate and the radiant's
+        altitude decide which stream a given meteor belongs to.
+
+        `px_per_degree` converts a distance on the canvas into an angle, which
+        is what sets how foreshortened a meteor's trail is.
+        """
+        self._radiants = radiants
+        self._px_per_degree = px_per_degree
+
+    def _pick_radiant(self):
+        """One radiant drawn in proportion to its rate, or None for a sporadic."""
+        total = sum(w for _, _, w in self._radiants)
+        if total <= 0:
+            return None
+        r = random.uniform(0.0, total)
+        for x, y, weight in self._radiants:
+            r -= weight
+            if r <= 0.0:
+                return None if x is None else (x, y)
+        return None
+
     def spawn_meteor(self):
+        """One meteor, radiating from a real shower where there is one.
+
+        A sporadic belongs to no stream and genuinely has no preferred
+        direction, so it keeps the arbitrary one this display always used. Only
+        a shower meteor gets its direction from the sky.
+        """
+        if not self._radiants:
+            return self._spawn_undirected()
+        radiant = self._pick_radiant()
+        if radiant is None:
+            return self._spawn_undirected()
+
+        rx, ry = radiant
+        # The meteor appears somewhere on the panel and travels away from the
+        # radiant. Taking the appearance point first, rather than an angle from
+        # the radiant, means it is on the canvas by construction - which matters
+        # because the radiant itself is often off it.
+        x = random.uniform(0.0, self.w)
+        y = random.uniform(0.0, self.h * 0.85)
+        dx, dy = x - rx, y - ry
+        dist = math.hypot(dx, dy)
+        if dist < MIN_RADIANT_PX:
+            # Too close to have a direction: push it out to where it does.
+            if dist < 1e-6:
+                dx, dy, dist = 1.0, 0.0, 1.0
+            x, y = rx + dx / dist * MIN_RADIANT_PX, ry + dy / dist * MIN_RADIANT_PX
+            dx, dy, dist = x - rx, y - ry, MIN_RADIANT_PX
+
+        # Trails shorten towards the radiant because the path is then pointing
+        # at the observer. The angular distance is what governs it, so the pixel
+        # distance is converted before the sine rather than after.
+        theta = min(90.0, dist / self._px_per_degree)
+        speed = random.uniform(4.5, 8.5)
+        return {
+            "x": x, "y": y,
+            "vx": dx / dist * speed,
+            "vy": dy / dist * speed,
+            "seg": TRAIL_SEG * max(0.25, math.sin(math.radians(theta))),
+            "life": 0,
+            "max": random.randint(40, 58),
+        }
+
+    def _spawn_undirected(self):
+        """The original arbitrary meteor: down and to the left, from the top right."""
         return {
             "x": random.uniform(self.w * 0.25, self.w - 10),
             "y": random.uniform(10, self.h * 0.45),
             "vx": -random.uniform(4.0, 7.5),
             "vy": random.uniform(2.0, 4.0),
+            "seg": TRAIL_SEG,
             "life": 0,
             "max": random.randint(40, 58),
         }
 
     def step_meteors(self, meteors):
-        """Advance and retire meteors in place."""
+        """Advance and retire meteors in place.
+
+        Radiants put meteors on any heading, so all four edges retire them; the
+        original only ever needed the two it travelled towards.
+        """
         for m in meteors[:]:
             m["x"] += m["vx"]
             m["y"] += m["vy"]
             m["life"] += 1
-            if m["life"] >= m["max"] or m["y"] > self.h + 20 or m["x"] < -20:
+            off = (m["x"] < -20 or m["x"] > self.w + 20
+                   or m["y"] < -20 or m["y"] > self.h + 20)
+            if m["life"] >= m["max"] or off:
                 meteors.remove(m)
 
     def make_cloud_sprite(self):
@@ -226,7 +319,7 @@ def draw_meteor(draw, m):
     fade = math.sin(math.pi * min(1.0, frac))
     mag = math.hypot(m["vx"], m["vy"])
     ux, uy = m["vx"] / mag, m["vy"] / mag
-    seg, nseg = 11.0, 14
+    seg, nseg = m["seg"], TRAIL_SEGMENTS
     for i in range(nseg):
         b = fade * (1.0 - i / nseg)
         c = (int(255 * b), int(255 * b), int(235 * b))

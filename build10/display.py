@@ -54,13 +54,13 @@ from core.panel import Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
-from core.starfield import project
+from core.starfield import project, project_point
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -782,14 +782,48 @@ def refresh_stars():
 
     Recomputed on a timer rather than per frame - the sky moves a quarter of a
     degree a minute, so once a minute is imperceptibly smooth and costs nothing.
+
+    Meteor radiants are refreshed here and nowhere else, so switching the real
+    sky off also returns meteors to arbitrary directions. That is deliberate: a
+    correct radiant over an invented starfield is false precision, and the two
+    should be real together or not at all.
     """
     if not REAL_STARS:
         return
-    obs = observer(LAT or 0.0, LON or 0.0,
-                   when=datetime.now(timezone.utc).replace(tzinfo=None))
+    utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    obs = observer(LAT or 0.0, LON or 0.0, when=utc)
     stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
     sky.set_stars(stars)
+    refresh_radiants(obs, utc)
     return len(stars)
+
+
+def refresh_radiants(obs, utc):
+    """Point tonight's meteors at the radiants they actually come from.
+
+    Computed here rather than alongside the rate in sky_params because the
+    radiant climbs and sets with everything else in the sky, so it belongs on
+    the same minute cadence as the stars it is drawn among. The rate keeps its
+    own home: this decides which way a meteor goes, not how often one appears.
+
+    The weights are the relative rates only, so cloud and moonlight are absent
+    by design - both cut every shower and the sporadics by the same factor and
+    cancel out of the ratio. They already do their work on the cadence.
+    """
+    px_per_degree = H / CAMERA_FOV
+    radiants = []
+    for s in active(utc):
+        alt, az = alt_az(obs, s["ra"], s["dec"])
+        if alt <= 0.0:
+            continue                  # radiant below the horizon: no meteors from it
+        x, y, _inside = project_point(az, alt, W, H,
+                                      CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
+        radiants.append((x, y, s["zhr"] * s["strength"] * math.sin(math.radians(alt))))
+    # A sporadic belongs to no shower and has no radiant, so it is carried as a
+    # weight with no position. Its reference altitude matches the one the rate
+    # uses, so the two agree on how much of tonight is sporadic.
+    radiants.append((None, None, SPORADIC_ZHR * math.sin(math.radians(45.0))))
+    sky.set_radiants(radiants, px_per_degree)
 
 
 def _star_thread():
