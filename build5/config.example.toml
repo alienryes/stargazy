@@ -55,6 +55,9 @@ out_dir = "/home/operations/uptonight/out"
 # "animated" = live data-reactive night sky behind the dashboard (default);
 # "static"   = redraw only when the data changes (no animation).
 mode = "animated"
+# A CEILING, not a target. A frame costs about 73 ms on a Pi 4, three quarters
+# of it the RGB565 framebuffer write, so the loop settles near 14 fps whatever
+# is set here. Lowering this below 14 does reduce CPU; raising it does nothing.
 fps = 20
 data_refresh_min = 15
 # Seconds each page is shown before rotating. The targets page only joins the
@@ -79,6 +82,29 @@ night_dim = 45
 # it - but worth enabling if the card looks too empty near new moon, when
 # almost nothing of the Moon is lit and there is very little left to see.
 moon_ring = false
+
+# The starfield behind the dashboard.
+#
+# With real_stars = true it is the actual sky: 8,355 catalogue stars to
+# magnitude 6.5, plotted where they really are for this site and this minute,
+# turning because the Earth does. Recomputed once a minute and free per frame.
+#
+# The panel cannot know which way it is facing, so the direction is CHOSEN here
+# rather than detected. camera_azimuth is where the window looks (0 = north,
+# 180 = south, where everything transits from the northern hemisphere);
+# camera_altitude is the height of the centre of the view; field_of_view is the
+# vertical span in degrees, with the horizontal following from the panel's
+# aspect ratio so the scale stays isotropic.
+#
+# 70 degrees puts about 790 stars in view - measured at 140% of the drawn area
+# of the seeded random field it replaces. 90 gives about 1,419 and 240%, at the
+# cost of more stretch near the zenith. Set real_stars = false for the old
+# seeded field.
+[sky]
+real_stars = true
+camera_azimuth = 180
+camera_altitude = 45
+field_of_view = 70
 
 # Touch controls. Tap the panel once and a control strip appears along the
 # bottom for strip_seconds; tap a button to use it, or leave it and it goes

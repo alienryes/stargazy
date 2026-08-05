@@ -46,9 +46,14 @@ Copy-ToPi "$BUILD\display.py"    "$REMOTE_DIR/display.py"
 
 # The shared engine sits beside display.py, so the install layout stays flat and
 # the systemd units keep working unchanged.
-Invoke-Pi "mkdir -p $REMOTE_DIR/core"
+Invoke-Pi "mkdir -p $REMOTE_DIR/core/data"
 foreach ($f in Get-ChildItem "$CORE\*.py") {
     Copy-ToPi $f.FullName "$REMOTE_DIR/core/$($f.Name)"
+}
+# The star catalogue ships with the code so the sky needs no network. Without
+# it the real starfield raises on first refresh.
+foreach ($f in Get-ChildItem "$CORE\data\*") {
+    Copy-ToPi $f.FullName "$REMOTE_DIR/core/data/$($f.Name)"
 }
 
 Copy-ToPi "$BUILD\requirements.txt" "$REMOTE_DIR/requirements.txt"

@@ -74,7 +74,7 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 ## ✨ The animated sky
 
-The sky is a live layer composited behind the dashboard each frame (~20 fps); the dashboard itself is an RGBA overlay (transparent where the sky should show, opaque content on top). The animation **reflects the conditions** rather than just decorating:
+The sky is a live layer composited behind the dashboard each frame (about 14 fps on a Pi 4 - see the note under Running); the dashboard itself is an RGBA overlay (transparent where the sky should show, opaque content on top). The animation **reflects the conditions** rather than just decorating:
 
 | Condition | Effect |
 |---|---|
@@ -265,7 +265,9 @@ journalctl -u touch2-stargazing -f
 systemctl status touch2-stargazing
 ```
 
-The daemon uses roughly 80% of one Pi 4 core at 20 fps; lower `fps` in `config.toml` to reduce it.
+The daemon uses one Pi 4 core continuously. **`fps` is a ceiling, not a promise:** measured on the reference build, a frame costs about 73 ms, so the loop actually runs at **roughly 14 fps** with `fps = 20` set. Lowering `fps` below that does reduce CPU; raising it above does nothing.
+
+Almost all of that frame is the framebuffer write — **54.6 ms of it is `to_fb_bytes`**, which rotates the image and packs it to RGB565 across 921,600 pixels. Compositing the dashboard is 11.5 ms and the entire starfield, real catalogue included, is under 6 ms. Anyone wanting a faster panel should start there and nowhere else.
 
 ---
 

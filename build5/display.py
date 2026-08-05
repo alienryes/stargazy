@@ -19,6 +19,8 @@ import logging
 import math
 import random
 import sys
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,6 +54,7 @@ from core.palette import (
 from core.panel import Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
 from core.sky import Sky, sky_params
+from core.starfield import project
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
@@ -71,7 +74,8 @@ Image.MAX_IMAGE_PIXELS = 3_000 * 3_000
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
 # Computing alt-az needs a longitude; the daemon only passes a latitude, so
-# main() records it here.
+# main() records both here.
+LAT = None
 LON = None
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -99,10 +103,23 @@ STRIP_H  = 64
 STRIP_Y  = H - STRIP_H - 16
 BTN_GAP  = 8
 
+# Which way the window looks. The panel cannot know how it is oriented in the
+# room, so this is chosen rather than detected: due south by default, because
+# that is where everything transits from the northern hemisphere.
+#
+# 70 degrees vertical, not the 10" build's 90. The horizontal field follows from
+# the aspect ratio - so the scale stays isotropic either way - and on this
+# landscape canvas 70 gives about 790 stars in view against the seeded field's
+# 200, measured at 140% of its drawn area. 90 would give 1,419 and 240%, at the
+# cost of a wider plate-carree stretch near the zenith.
+REAL_STARS = True
+CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 70.0
+
 # The engine, sized for this panel. `sky` is constructed exactly where the
 # seeded starfield used to be generated, so the shared random stream is consumed
-# in the same order and a rendered frame still matches an earlier one byte for
-# byte. The daemon reads these three off this module as its layout.
+# in the same order - which still matters for the clouds and meteors even though
+# the stars themselves are now replaced at startup. The daemon reads these three
+# off this module as its layout.
 sky = Sky(W, H)
 fb = Framebuffer(W, H, FB_W, FB_H, ROTATE, FB_DEV)
 strip = Strip(W, MARGIN, STRIP_Y, STRIP_H, BTN_GAP)
@@ -701,6 +718,32 @@ def draw_clock(draw):
     draw.text((W - ts_w - MARGIN, 28), now_str, fill=MUTED, font=f_sm)
 
 
+def refresh_stars():
+    """Point the starfield at the real sky for right now.
+
+    Recomputed on a timer rather than per frame: the sky turns a quarter of a
+    degree a minute, so once a minute is imperceptibly smooth, and the result is
+    handed to Sky in the format draw_stars already takes, so the frame cost is
+    unchanged.
+    """
+    if not REAL_STARS:
+        return None
+    obs = observer(LAT or 0.0, LON or 0.0,
+                   when=datetime.now(timezone.utc).replace(tzinfo=None))
+    stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
+    sky.set_stars(stars)
+    return len(stars)
+
+
+def _star_thread():
+    while True:
+        time.sleep(60)
+        try:
+            refresh_stars()
+        except Exception as e:      # a bad fix must not stop the display
+            log.warning("Star refresh failed: %s", e)
+
+
 def build_pages(states, targets, lat, moon_ring=False):
     """Both dashboard pages as RGBA overlays.
 
@@ -742,11 +785,17 @@ def main():
                         help="Fetch from both weather sources and print a per-value diff")
     args = parser.parse_args()
 
-    global LON
+    global LAT, LON, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV
     config = load_config(CONFIG_PATH)
     out_dir = config.get("uptonight", {}).get("out_dir", "")
     lat    = config.get("location", {}).get("latitude")
     LON    = config.get("location", {}).get("longitude")
+    LAT    = lat
+    skycfg = config.get("sky", {})
+    REAL_STARS = bool(skycfg.get("real_stars", REAL_STARS))
+    CAMERA_AZ  = float(skycfg.get("camera_azimuth", CAMERA_AZ))
+    CAMERA_ALT = float(skycfg.get("camera_altitude", CAMERA_ALT))
+    CAMERA_FOV = float(skycfg.get("field_of_view", CAMERA_FOV))
     disp   = config.get("display", {})
     mode   = disp.get("mode", "animated")
     fps    = float(disp.get("fps", 20))
@@ -767,6 +816,9 @@ def main():
 
     if args.save or args.once:
         log.info("Fetching conditions...")
+        n = refresh_stars()
+        if n is not None:
+            log.info("%d catalogue stars in view.", n)
         states = fetch()
         targets = read_targets(out_dir)
         params = sky_params(states)
@@ -793,6 +845,11 @@ def main():
         return
 
     install_signal_handlers()
+    n = refresh_stars()
+    if n is not None:
+        log.info("Real sky: %d catalogue stars in view, az %.0f alt %.0f fov %.0f.",
+                 n, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
+        threading.Thread(target=_star_thread, daemon=True).start()
     reader = TouchReader(W, H, FB_W, FB_H) if tch.get("enabled", True) else None
     # This module is the layout the daemon draws through: it supplies sky, fb,
     # strip, build_pages, compose and night_window.
