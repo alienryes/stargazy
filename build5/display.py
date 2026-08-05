@@ -19,7 +19,7 @@ import logging
 import math
 import random
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -50,6 +50,7 @@ from core.palette import (
     verdict,
 )
 from core.panel import Framebuffer, Strip
+from core.positions import alt_az, observer, plot_instant
 from core.sky import Sky, sky_params
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.touch import TouchReader
@@ -69,6 +70,9 @@ FIRMWARE_VERSION = "3.7.2"
 Image.MAX_IMAGE_PIXELS = 3_000 * 3_000
 
 CONFIG_PATH = Path(__file__).parent / "config.toml"
+# Computing alt-az needs a longitude; the daemon only passes a latitude, so
+# main() records it here.
+LON = None
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
@@ -478,8 +482,15 @@ def _draw_timeline(draw, states, y, f_xs):
     draw.text((x1 - ww - (8 if inside else 0), ty), w_lab, font=f_xs, fill=MUTED)
 
 
-def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
-    """Where to look: azimuth across, altitude up. A bearing and a height."""
+def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
+    """Where to look: azimuth across, altitude up. A bearing and a height.
+
+    marks are (az, alt, name, colour, magnitude) computed for ONE instant.
+    They used to be read straight out of UpTonight's report files, but the
+    object and body reports are sampled about three hours apart, so that put two
+    different moments on one plot - and, having no time on it at all, the plot
+    read as "now" when it was neither.
+    """
     draw.line([(PAN_X0, PAN_BASE), (PAN_X1, PAN_BASE)], fill=STEEL, width=2)
     for az, lab in ((0, "N"), (90, "E"), (180, "S"), (270, "W"), (360, "N")):
         x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
@@ -491,20 +502,8 @@ def _draw_panorama(draw, bodies, comets, f_sm, f_xs):
         draw.text((PAN_X1 + 4, y - 12), f"{alt}", font=f_xs, fill=MUTED)
     # The axis numbers were unitless; one marker at the top says what they are.
     draw.text((PAN_X1 + 4, PAN_TOP - 6), "alt°", font=f_xs, fill=MUTED)
-
-    marks = []
-    for b in bodies:
-        alt, az = _f(b.get("max altitude"), -99), _f(b.get("azimuth"), -1)
-        name = str(b.get("target name", "?"))
-        # Planets were ICE, which is also the EXCELLENT verdict colour - a
-        # status hue doing duty as a data series. MUTED keeps them clearly
-        # apart from the ivory Moon (ΔE 22.9) and leaves ICE meaning one thing.
-        col = MOON if name.lower() == "moon" else MUTED
-        marks.append((az, alt, name, col, _f(b.get("visual magnitude"), 5)))
-    for c in comets:
-        marks.append((_f(c.get("azimuth"), -1), _f(c.get("altitude"), -99),
-                      str(c.get("target name", "?")), ROSE,
-                      _f(c.get("visual magnitude"), 8)))
+    # Which moment this is. Without it the plot silently reads as "now".
+    draw.text((PAN_X0, PAN_TOP - 6), when_label, font=f_xs, fill=MUTED)
 
     # Planets bunch up along the ecliptic - Saturn, Neptune and the Moon can sit
     # within 30px of each other - so labels are nudged down until clear, with a
@@ -612,6 +611,30 @@ def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
         y += tile + gap
 
 
+def _panorama_marks(bodies, comets, obs):
+    """(az, alt, name, colour, magnitude) for everything the plot shows."""
+    marks = []
+    for b in bodies:
+        ra, dec = b.get("right ascension"), b.get("declination")
+        if ra is None or dec is None:
+            continue
+        alt, az = alt_az(obs, ra, dec)
+        name = str(b.get("target name", "?"))
+        # Planets were ICE, which is also the EXCELLENT verdict colour - a
+        # status hue doing duty as a data series. MUTED keeps them clearly
+        # apart from the ivory Moon (ΔE 22.9) and leaves ICE meaning one thing.
+        col = MOON if name.lower() == "moon" else MUTED
+        marks.append((az, alt, name, col, _f(b.get("visual magnitude"), 5)))
+    for c in comets:
+        ra, dec = c.get("right ascension"), c.get("declination")
+        if ra is None or dec is None:
+            continue
+        alt, az = alt_az(obs, ra, dec)
+        marks.append((az, alt, str(c.get("target name", "?")), ROSE,
+                      _f(c.get("visual magnitude"), 8)))
+    return marks
+
+
 def render_targets(states, targets, images, lat=None):
     """Page 2 as an RGBA overlay, or None when UpTonight has produced nothing."""
     objects = targets.get("objects") or []
@@ -639,7 +662,11 @@ def render_targets(states, targets, images, lat=None):
     count = (f"first {shown} of {len(objects)}" if shown < len(objects)
              else f"all {len(objects)}")
     draw.text((P2_DIV_X + 24, 182), f"DEEP SKY  ({count})", font=f_sm, fill=ELECTRIC)
-    _draw_panorama(draw, bodies, comets, f_sm, f_xs)
+    # One instant, computed here: the report files are sampled hours apart.
+    when, when_label = plot_instant(night_window(states))
+    obs = observer(lat or 0.0, LON or 0.0,
+                   when=when.astimezone(timezone.utc).replace(tzinfo=None))
+    _draw_panorama(draw, _panorama_marks(bodies, comets, obs), when_label, f_sm, f_xs)
 
     ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
     _draw_cards(img, draw, ranked, images, lat, f_med, f_sm, f_xs)
@@ -715,9 +742,11 @@ def main():
                         help="Fetch from both weather sources and print a per-value diff")
     args = parser.parse_args()
 
+    global LON
     config = load_config(CONFIG_PATH)
     out_dir = config.get("uptonight", {}).get("out_dir", "")
     lat    = config.get("location", {}).get("latitude")
+    LON    = config.get("location", {}).get("longitude")
     disp   = config.get("display", {})
     mode   = disp.get("mode", "animated")
     fps    = float(disp.get("fps", 20))
