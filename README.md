@@ -2,7 +2,7 @@
 
 A stargazing conditions display for the [Raspberry Pi Touch Display 2](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html). It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if available — and renders an overnight forecast over a live, data-reactive animated night sky — no interaction required.
 
-Rendered with Pillow and written straight to the Linux framebuffer (`/dev/fb0`, RGB565) — no X, no display server, no `inky` library.
+Rendered with Pillow and written straight to the Linux framebuffer (`/dev/fb0`) — no X and no display server.
 
 **There are two builds**, sharing one engine. Pick the one that matches the hardware:
 
@@ -50,17 +50,13 @@ The page-2 timeline only appears once UpTonight has run, and the page leaves the
 
 ![The conditions page in red night mode: the identical layout rendered entirely in shades of red on black, including the photograph of the Moon. The verdict, the condition bars, the percentages and the footer are all still legible, and the hollow Seeing bar still reads as hollow; only hue has gone.](screenshots/night-red.png)
 
-Between real dusk and dawn — not on a clock schedule — the finished frame is put through a red filter, because long wavelengths leave dark-adapted vision alone. Filtering the frame rather than swapping the palette is what keeps the lunar photograph and the deep-sky cutouts from glowing white, and it costs nothing measurable: the transform runs on the array the framebuffer path already builds.
+Between real dusk and dawn — not on a clock schedule — the finished frame is put through a red filter, because long wavelengths leave dark-adapted vision alone. The whole frame is filtered rather than the palette swapped, which keeps the lunar photograph and the deep-sky cutouts from glowing white.
 
-Nothing is lost to it, and since the redesign below nothing can be: no state on this display is encoded in hue at all. The verdict is a word, every bar has a number and a length, and a reading below its threshold is hollow rather than a different colour — all of which survive a red filter untouched. `night_mode = "dim"` keeps full colour at reduced brightness instead.
+Nothing is lost to it, because no state on this display is encoded in hue at all. The verdict is a word, every bar has a number and a length, and a reading below its threshold is hollow rather than a different colour. `night_mode = "dim"` keeps full colour at reduced brightness instead.
 
 ### Colour marks real objects; state is neutral
 
 If something here is coloured it is a thing that is actually up there — the Moon, a planet, a comet, a photograph of a nebula. If it is a judgement about tonight it is the same neutral blue-white as everything else, and it says what it means by size, length, position, or the word itself.
-
-This replaced a four-step cool-to-warm ramp, which turned out to be over-constrained rather than badly chosen. Four ordinal steps encoded in hue, on a blue background, two of them necessarily blue, each clearing WCAG AA against two different sky gradients, each separated by ΔE 15, and still ordered by luminance once the red filter discards the hue — there is no solution. The original fell to 2.95:1 at the POOR end; a careful replacement put EXCELLENT and GOOD ΔE 6.8 apart.
-
-The ramp was also redundant. A bar already encodes magnitude by length, the number is printed beside it, and the verdict is spelled out in 90px letters. Colour was a fourth copy of what the panel already said three times, and it was the copy that cost the design.
 
 ### The 10.1-inch build
 
@@ -70,7 +66,7 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 ![The 10.1-inch conditions page in portrait: a large EXCELLENT verdict, a 600-pixel photograph of a last-quarter Moon captioned Last Quarter in Aries with its age, distance, diameter and libration, four condition bars with the below-threshold Seeing bar drawn hollow, and a footer of forecast, dusk and dawn times and weather.](screenshots/10in-conditions.png)
 
-**Page 2 — targets.** One altitude-versus-bearing plot carries the planets *and* the deep-sky objects on a full 0–90° axis. The 5" build cannot do this: its objects peak at 70–85° while the planets sit below 35°, and one axis holding both would squash the planets flat. Positions are computed for a single stated instant rather than read from the report files, which are written hours apart.
+**Page 2 — targets.** One altitude-versus-bearing plot carries the planets *and* the deep-sky objects on a full 0–90° axis. The 5" build cannot do this: its objects peak at 70–85° while the planets sit below 35°, and one axis holding both would squash the planets flat. Every position on the plot is for the single instant named above it.
 
 ![The 10.1-inch targets page: a dusk-to-dawn timeline, then an altitude-versus-bearing plot showing six deep-sky objects between 60 and 77 degrees and four planets below 30, each labelled with its bearing, above six deep-sky cards with real sky photographs.](screenshots/10in-targets.png)
 
@@ -97,13 +93,13 @@ Star and cloud brightness always keep a visible floor, so the sky stays alive ev
 
 **The meteors are real in both builds.** Their cadence comes from the same computation that fills the 10.1-inch meteor page — which showers are running, how high each radiant sits, and how much of the rate cloud and moonlight remove — so a quiet night in March shows almost nothing and a clear Perseid peak is busy. If nothing is falling, nothing falls here either. The rate is deliberately time-compressed (`meteor_compression`, default 20), because a truthful three-an-hour makes an animated sky look broken; it scales what is there and cannot invent what is not.
 
-**And they radiate from the real radiant.** A meteor is drawn from one of tonight's active showers in proportion to that shower's rate, and travels directly away from where that shower's radiant actually is in the projected sky — so it converges on a point that agrees with the stars around it. Trails shorten towards the radiant, because a path pointing at the observer is seen end-on. The radiant is often off the edge of the panel, which is not a fault: the window faces one direction and the shower is somewhere else, so its meteors sweep in near-parallel from that side. Meteors belonging to no shower — the sporadic background, which is most of them on an ordinary night — keep an arbitrary direction, because they genuinely have none. Setting `sky.real_stars = false` returns every meteor to an arbitrary direction along with the starfield: a correct radiant over invented stars would be false precision, so the two are real together or not at all.
+**And they radiate from the real radiant.** A meteor is drawn from one of tonight's active showers in proportion to that shower's rate, and travels away from where that shower's radiant actually is in the projected sky, so it converges on a point that agrees with the stars around it. Trails shorten towards the radiant, because a path pointing at the observer is seen end-on. The radiant is often off the edge of the panel, which is not a fault: the window faces one direction and the shower is somewhere else, so its meteors sweep in near-parallel from that side. Meteors belonging to no shower — the sporadic background, which is most of them on an ordinary night — keep an arbitrary direction, because they genuinely have none. Setting `sky.real_stars = false` returns the meteors to arbitrary directions along with the starfield; the two are real together or not at all.
 
 ---
 
 ## 👆 Touch controls
 
-As the panel is a touchscreen, there are some touch controls (which the display reads directly from `/dev/input/eventN` — there's no requirment for X or Wayland.)
+As the panel is a touchscreen, there are touch controls. The display reads them directly from `/dev/input/eventN`, so neither X nor Wayland is required.
 
 No controls are drawn until the screen is touched. **The first tap only reveals a control strip** along the bottom, which disappears after six seconds; a second tap presses a button. That way the ambient display stays uncluttered and brushing past the panel in the dark can't change anything.
 
@@ -115,9 +111,9 @@ No controls are drawn until the screen is touched. **The first tap only reveals 
 | **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
 | **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until it is touched again. |
 
-If a night mode picked by hand, it lapses the next time the sky crosses dusk or dawn: it is just a change of state for that night, not a second schedule competing with the automatic one. Nothing else in the touch controls is persisted — `config.toml` is restored on restart, so the display always comes back to a known state.
+A night mode picked by hand lapses the next time the sky crosses dusk or dawn: it is a change of state for that night, not a second schedule competing with the automatic one. Nothing else in the touch controls is persisted — `config.toml` is restored on restart, so the display always comes back to a known state.
 
-This finctionality requires `display.mode = "animated"`, and an account in the `input` and `video` groups (`setup.sh` arranges both). Set `touch.enabled = false` to turn the touch controls off.
+This functionality requires `display.mode = "animated"`, and an account in the `input` and `video` groups (`setup.sh` arranges both). Set `touch.enabled = false` to turn the touch controls off.
 
 ---
 
@@ -169,7 +165,7 @@ With no argument it sets everything up for the account that invoked `sudo`, whic
 
 `setup.sh`:
 - installs `fonts-ibm-plex` (the display's typeface), `fonts-dejavu-core` (fallback), `python3-pil`, `python3-numpy`, `python3-requests`, `python3-pip`, `python3-venv`
-- builds the display's virtualenv (`--system-site-packages`, so apt's Pillow and NumPy are reused rather than rebuilt). The direct weather source brings pandas, which carries its own NumPy — keeping that out of the system Python is what stops it shadowing the one the framebuffer path uses
+- builds the display's virtualenv, reusing apt's Pillow and NumPy rather than rebuilding them
 - adds the user to the `video` group (framebuffer + backlight) and `input` group (touchscreen)
 - adds `fbcon=map:2` to `/boot/firmware/cmdline.txt` so the text console never draws over the display
 - installs a deliberately narrow sudoers rule for the deploy script — see the security note below
@@ -200,7 +196,9 @@ data_refresh_min = 15
 
 The `[display]` section is optional; the values above are the defaults.
 
-**Night mode** (`night_mode = "off" | "dim" | "red"`) applies between real dusk and dawn rather than on a clock schedule, because the point is to stop the panel ruining dark adaptation and that starts when the dark sky does. `"dim"` keeps the colours at `night_dim`% brightness; `"red"` goes monochrome red because long wavelengths leave low-light vision alone. Nothing is lost by going red — no reading is carried by colour alone, so the verdict word, the numbers and the bar lengths all still say what they said. It is applied to the finished frame, so it covers the animated sky and the sky photographs too, and it costs no measurable CPU. To read from Home Assistant instead, set `source = "homeassistant"` and add an `[ha]` section with the HA URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens).
+**Night mode** (`night_mode = "off" | "dim" | "red"`) applies between real dusk and dawn rather than on a clock schedule, because the point is to stop the panel ruining dark adaptation and that starts when the dark sky does. `"dim"` keeps the colours at `night_dim`% brightness; `"red"` goes monochrome red because long wavelengths leave low-light vision alone. Nothing is lost by going red — no reading is carried by colour alone, so the verdict word, the numbers and the bar lengths all still say what they said. It applies to the finished frame, so it covers the animated sky and the sky photographs too.
+
+To read from Home Assistant instead, set `source = "homeassistant"` and add an `[ha]` section with the HA URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens).
 
 Both sources are the same underlying model, so they agree — `display.py --compare` fetches from each back to back and prints a per-value diff if local confirmation is required.
 
@@ -263,7 +261,7 @@ The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke s
 | `ModuleNotFoundError: numpy` | `sudo apt install python3-numpy` (or rerun `setup.sh`) |
 | Tapping the panel does nothing | The log will say `No touchscreen found` if the account isn't in the `input` group — rerun `setup.sh`, or `sudo adduser <user> input` and reboot. Also check `touch.enabled` is true and `display.mode` is `animated`; touch is not wired into static mode |
 | Taps land a quarter-turn away from a finger | The touch mapping follows `ROTATE`, so if that is flipped, flip it here too. Check it directly with `python3 touch.py`, which prints raw and mapped coordinates for each tap |
-| Buttons fire when it was just required to wake the strip | They shouldn't — the first tap only reveals it. If the strip was already up (it stays for `touch.strip_seconds`), the tap counts as a press; raise or lower that value to taste |
+| A button fires when the tap was only meant to wake the strip | The first tap only reveals it. If the strip was already up (it stays for `touch.strip_seconds`), the tap counts as a press; raise or lower that value to suit |
 | Drawn moon instead of a photograph | The Dial-a-Moon fetch failed — the log says why. It will not substitute an older cached frame, because the phase moves ~12°/day and yesterday's picture would be wrong |
 | `KeyError: 'ha'` in config | Only applies with `weather.source = "homeassistant"`: `config.toml` is missing the `[ha]` section header |
 | 401 Unauthorized from HA | Likewise — the token in `config.toml` is wrong or expired |
@@ -275,9 +273,7 @@ journalctl -u touch2-stargazing -f
 systemctl status touch2-stargazing
 ```
 
-The daemon uses one Pi 4 core continuously. **`fps` is a ceiling, not a promise:** measured on the reference build, a frame costs about 73 ms, so the loop actually runs at **roughly 14 fps** with `fps = 20` set. Lowering `fps` below that does reduce CPU; raising it above does nothing.
-
-Almost all of that frame is the framebuffer write — **54.6 ms of it is `to_fb_bytes`**, which rotates the image and packs it to RGB565 across 921,600 pixels. Compositing the dashboard is 11.5 ms and the entire starfield, real catalogue included, is under 6 ms. Anyone wanting a faster panel should start there and nowhere else.
+The daemon uses one Pi 4 core continuously. **`fps` is a ceiling, not a promise:** on the reference build the loop settles at **roughly 14 fps** with `fps = 20` set. Lowering `fps` below that does reduce CPU; raising it above that does nothing.
 
 ---
 
@@ -304,8 +300,6 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
     install-units.sh            Installs the units - interactive sudo, by design
 build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - in progress
 screenshots/            README images, regenerated with display.py --save
-                        (night-red.png needs apply_night() forced: --save
-                        renders night mode off outside the dark window)
 harden-pi.sh            Optional: key-only SSH + automatic security updates
 case/
   README.md               Print settings, hardware, assembly
@@ -336,7 +330,7 @@ This project is a thin dashboard over other people's hard work.
 - **[AstroWeather](https://github.com/mawinkler/astroweather) and [pyastroweatherio](https://github.com/mawinkler/pyastroweatherio)** by Markus Winkler (MIT). The seeing, transparency, calm and deep-sky figures are its model, not a reimplementation of it — the display calls the same library the Home Assistant integration wraps.
 - **[UpTonight](https://github.com/mawinkler/uptonight)**, also by Markus Winkler, computes the target lists on the Pi.
 - **Weather data** from [MET Norway](https://www.met.no/) and [Open-Meteo](https://open-meteo.com/), via the above.
-- **The star catalogue** behind the 10.1-inch build's real sky is the **Yale Bright Star Catalogue** (Hoffleit & Warren, 5th revised edition), obtained from **VizieR at CDS, Strasbourg Observatory, France** (catalogue V/50) and trimmed to magnitude 6.5. It ships in the repository as `core/data/stars.tsv`, so the display needs no network to draw the sky.
+- **The star catalogue** behind the real sky in both builds is the **Yale Bright Star Catalogue** (Hoffleit & Warren, 5th revised edition), obtained from **VizieR at CDS, Strasbourg Observatory, France** (catalogue V/50) and trimmed to magnitude 6.5. It ships in the repository as `core/data/stars.tsv`, so the display needs no network to draw the sky.
 - **Sky imagery** from the [`hips2fits` service](https://alasky.cds.unistra.fr/hips-image-services/hips2fits) at **CDS, Strasbourg Observatory, France**, rendering the **DSS2 colour** HiPS survey. The Digitized Sky Survey was produced at the Space Telescope Science Institute under U.S. Government grant NAG W-2166, from photographic data of the Oschin Schmidt Telescope on Palomar Mountain and the UK Schmidt Telescope.
 - **Lunar imagery** from **[Dial-a-Moon](https://svs.gsfc.nasa.gov/4442)**, by **Ernie Wright** at **NASA's Scientific Visualization Studio**, rendered from Lunar Reconnaissance Orbiter data. SVS content is public domain. Each frame shows the Moon's real phase, libration and terminator for that hour — the display is compositing an actual render, not drawing an approximation.
 - **The case** is a remix of **"Raspberry Pi Touch Display 2 Case" by RonnyS** ([Printables 1377047](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)), used under CC BY.
