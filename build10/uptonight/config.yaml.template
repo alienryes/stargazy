@@ -1,0 +1,79 @@
+# UpTonight configuration, rendered by setup.sh from the [location] section of
+# config.toml - edit that, not this file, and re-run setup.sh.
+#
+# UpTonight runs here on the Pi from a daily systemd timer and writes its
+# reports into out/, which display.py reads directly. No broker, no container.
+
+observation_date:
+target_list: targets/GaryImm
+type_filter:
+output_dir: out
+live_mode: false
+
+features:
+  horizon: false
+  objects: true
+  bodies: true
+  # Comets are off by default. Computing positions for ~950 comets is roughly
+  # five of the six minutes a full run takes, and the published magnitudes are
+  # not trustworthy - see https://github.com/mawinkler/uptonight/issues/37.
+  # Turning this on also re-downloads the comet database on every run.
+  comets: false
+
+location:
+  longitude: __LONGITUDE__
+  latitude: __LATITUDE__
+  elevation: __ELEVATION__
+  timezone: __TIMEZONE__
+
+environment:
+  pressure: 1.022
+  temperature: 15
+  relative_humidity: 0.7
+
+constraints:
+  altitude_constraint_min: 30
+  altitude_constraint_max: 80
+  airmass_constraint: 2
+  size_constraint_min: 10
+  size_constraint_max: 300
+  moon_separation_min: 45
+  # Derive the moon separation from illumination instead: near full moon this is
+  # what cuts a 200-object catalogue down to a handful.
+  moon_separation_use_illumination: true
+  fraction_of_time_observable_threshold: 0.5
+  # The display shows the best four; a dark night can put dozens behind them.
+  max_number_within_threshold: 40
+  north_to_east_ccw: false
+
+output_datestamp: false
+
+bucket_list:
+
+done_list:
+
+custom_targets:
+  - name: NGC 4395
+    description: NGC 4395
+    type: Galaxy
+    constellation: Canes Venatici
+    size: 13
+    ra: 12 25 48
+    dec: +33 32 48
+    mag: 10.0
+  - name: NGC 3227
+    description: Galaxy duo NGC 3226
+    type: Galaxy
+    constellation: Leo
+    size: 4
+    ra: 10 23 30
+    dec: +19 51 54
+    mag: 10.4
+  - name: LBN 105
+    description: SH2-73
+    type: Molecular Cloud
+    constellation: Hercules
+    size: 75
+    ra: 16 11 7.6
+    dec: +21 52 26.4
+    mag: 0

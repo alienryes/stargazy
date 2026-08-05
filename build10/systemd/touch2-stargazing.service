@@ -1,0 +1,36 @@
+[Unit]
+Description=Stargazing Display
+After=network-online.target fbcon-detach.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=/home/__USER__/touch2-stargazing
+ExecStart=/home/__USER__/touch2-stargazing/.venv/bin/python /home/__USER__/touch2-stargazing/display.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Containment: this process parses images and JSON fetched from the internet,
+# so assume it can be made to run attacker code and bound what that code can
+# do. NoNewPrivileges alone means sudo and every other setuid path simply
+# fails inside the service, whatever the sudoers file says.
+#
+# Deliberately ABSENT, with reasons:
+#   ProtectHome           - the app, its venv and its cache live in /home
+#   ProtectKernelTunables - brightness/blanking writes /sys/class/backlight
+#   PrivateDevices        - needs /dev/fb0 and /dev/input/event*
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
