@@ -30,6 +30,14 @@ Two pages rotate over the same continuous animated sky. Both shots are real fram
 
 The page-2 timeline only appears once UpTonight has run, and the page leaves the rotation entirely if it has produced nothing — better one page than a dead one.
 
+**Night mode — the same page after dark**
+
+![The conditions page in red night mode: the identical layout rendered entirely in shades of red on black, including the photograph of the Moon. The verdict, the condition bars, the percentages and the footer are all still legible; only hue has gone.](screenshots/night-red.png)
+
+Between real dusk and dawn — not on a clock schedule — the finished frame is put through a red filter, because long wavelengths leave dark-adapted vision alone. Filtering the frame rather than swapping the palette is what keeps the lunar photograph and the deep-sky cutouts from glowing white, and it costs nothing measurable: the transform runs on the array the framebuffer path already builds.
+
+Nothing is lost to it, because no reading on this display is carried by colour alone — the verdict is a word as well as a hue, and every bar has a number. The one real consequence is that the status colours collapse to brightness, so a POOR verdict renders dimmer than an EXCELLENT one rather than differently coloured. `night_mode = "dim"` keeps the colours at reduced brightness instead.
+
 The schematic below labels the regions of page 1:
 
 ```
@@ -267,6 +275,8 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
     install-units.sh            Installs the units - interactive sudo, by design
 build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - in progress
 screenshots/            README images, regenerated with display.py --save
+                        (night-red.png needs apply_night() forced: --save
+                        renders night mode off outside the dark window)
 harden-pi.sh            Optional: key-only SSH + automatic security updates
 case/
   README.md               Print settings, hardware, assembly
