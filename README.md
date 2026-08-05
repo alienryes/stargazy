@@ -75,9 +75,9 @@ Meteors streak occasionally through the night sky (rarer when cloudy). Star and 
 
 ## 👆 Touch controls
 
-The panel is a touchscreen, and the display reads it directly from `/dev/input/eventN` — no X, no Wayland, no extra packages.
+As the panel is a touchscreen, there are some touch controls (which the display reads directly from `/dev/input/eventN` — there's no requirment for X or Wayland.)
 
-No controls are drawn until the screen is touched. **The first tap only reveals a control strip** along the bottom, which goes away again after six seconds; a second tap presses a button. That way an ambient display stays uncluttered, and a brush past the panel in the dark cannot change anything.
+No controls are drawn until the screen is touched. **The first tap only reveals a control strip** along the bottom, which disappears after six seconds; a second tap presses a button. That way the ambient display stays uncluttered and brushing past the panel in the dark can't change anything.
 
 | Button | What it does |
 |---|---|
@@ -87,9 +87,9 @@ No controls are drawn until the screen is touched. **The first tap only reveals 
 | **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
 | **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until it is touched again. |
 
-A night mode picked by hand lapses the next time the sky crosses dusk or dawn: it is a change of mind about tonight, not a second schedule competing with the automatic one. Nothing else here is persisted either — `config.toml` is restored on restart, so the display always comes back to a known state.
+If a night mode picked by hand, it lapses the next time the sky crosses dusk or dawn: it is just a change of state for that night, not a second schedule competing with the automatic one. Nothing else in the touch controls is persisted — `config.toml` is restored on restart, so the display always comes back to a known state.
 
-Requires `display.mode = "animated"`, and an account in the `input` and `video` groups (`setup.sh` arranges both). Set `touch.enabled = false` to turn the whole thing off.
+This finctionality requires `display.mode = "animated"`, and an account in the `input` and `video` groups (`setup.sh` arranges both). Set `touch.enabled = false` to turn the touch controls off.
 
 ---
 
@@ -100,13 +100,13 @@ Requires `display.mode = "animated"`, and an account in the `input` and `video` 
 | Item | Qty | Notes |
 |---|---|---|
 | Raspberry Pi 4 Model B (2GB is plenty) | 1 | What this is built and proven on. See the Pi 5 note below |
-| Raspberry Pi Touch Display 2, **5-inch** | 1 | 720×1280 DSI, ~£36. Ships with a Pi 4 DSI cable |
+| Raspberry Pi Touch Display 2, **5-inch** | 1 | 720×1280 DSI. Ships with a Pi 4 DSI cable |
 | Official Raspberry Pi USB-C PSU (5.1V/3A) | 1 | The printed stand is sized so this one's stiff cable clears the desk |
 | microSD card, 16GB+ | 1 | Raspberry Pi OS Lite 64-bit |
 | 3D-printed case and stands | 1 set | Optional — see [`case/`](case/README.md). ~150g of PETG |
 | M2.5 screws and standoffs | 1 set | Only for the case; full list in [`case/README.md`](case/README.md) |
 
-No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all screws and standoffs.
+No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all screws and standoffs. If a 5v GPIO pin is required then the 0 v pin of the display connector can be shifted to the middle pin and the connector moved right by one pin. This frees up Pin 2. Normally the connector connects via Pin 2 and Pin 6, which blocks pin 4.
 
 > **A Pi 5 is untested for the software.** It needs a Display Adapter Cable for Pi 5 (22-way → 15-way, the one marked `DISPLAY`), and `display.py` assumes a 16-bit RGB565 `/dev/fb0` — a Pi 5 gets its framebuffer from DRM emulation, which commonly comes up 32bpp, so the packing code would need a format branch. There is no performance reason to move either: the render loop is single-threaded and uses about one core of four. The case *does* have a printable Pi 5 variant.
 
