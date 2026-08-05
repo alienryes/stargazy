@@ -161,7 +161,9 @@ No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all 
 > cat /sys/class/graphics/fb0/bits_per_pixel /sys/class/graphics/fb0/virtual_size
 > ```
 
-**For the 10.1" build**, the table changes: a **Raspberry Pi 5** (its DSI is four-lane, which the panel requires), the **10.1-inch** Touch Display 2, and a 27W USB-C PSU. No printed case exists for it yet.
+**For the 10.1" build**, the table changes: a **Raspberry Pi 5** (its DSI is four-lane, which the panel requires), the **10.1-inch** Touch Display 2, a 27W USB-C PSU, and the official **Pi 5 Active Cooler**, which is required rather than optional on a continuous render loop.
+
+**The 10.1" build deliberately has no case, and does not need one.** The Pi bolts to the standard 58 × 49 mm hole pattern in the middle of the panel's back, which mounts it properly on its own — unlike the 5", where the case and the Pi share one screw chain. Leaving the board open also suits the active cooler, which wants free air rather than a grille. The panel is 247 mm tall in its native portrait with the Pi centred, so there is roughly 80–95 mm below the board for the display ribbon and the power cable to turn and drop; the 5" needs a stand partly because rotating it to landscape leaves only about 18 mm there. A stand is still wanted for the 10", but that is a question of how it sits on a desk, not of enclosing anything.
 
 **Software**
 - Raspberry Pi OS Lite 64-bit (Trixie / Bookworm), headless (`multi-user.target`)
@@ -267,6 +269,8 @@ python3 display.py --compare  # fetch from both weather sources and diff them
 ## 🧰 Case
 
 A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](case/README.md) — four parametric CadQuery parts (shell, Pi clamshell, twin bolt-on stands at a 20° lean, optional 40 mm fan). A Pi 5 variant of the two clamshell parts is also generated, though it has not been built on hardware and its display ribbon routes differently. It's a **CC BY remix of [RonnyS's Touch Display 2 case](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)**, which targets the 7" panel; this one is re-drawn for the 5". See [`case/README.md`](case/README.md) for print settings, hardware and assembly.
+
+**This is for the 5" build only.** The 10.1" panel mounts and cools its Pi perfectly well with the board left open — see the note under Requirements.
 
 The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke stand (CadQuery frame + riser + WS2812B LED bezel ring). After moving to the self-lit Touch Display 2 that design was retired and archived, with its full history, to a separate private repository.
 
