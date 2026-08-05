@@ -83,6 +83,17 @@ night_dim = 45
 # almost nothing of the Moon is lit and there is very little left to see.
 moon_ring = false
 
+# Meteors in the animated sky are drawn at the rate an observer would actually
+# count tonight - shower activity from the solar-longitude table, cut by radiant
+# altitude, cloud and moonlight - rather than on a fixed cadence. On a night when
+# nothing is falling, nothing falls here either.
+#
+# That rate is time-compressed, because three an hour is honest and makes an
+# animated sky look broken: the panel runs meteors as though watching for this
+# many minutes per minute. Set it to 1 for real time. It scales what is there and
+# cannot manufacture what is not, so a quiet night stays quiet at any setting.
+meteor_compression = 20
+
 # The starfield behind the dashboard.
 #
 # With real_stars = true it is the actual sky: 8,355 catalogue stars to

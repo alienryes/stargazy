@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw
 from core.daemon import install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
+from core.meteors import SPORADIC_ZHR, active, visible_rate
 from core.night import (
     NIGHT_CYCLE,
     apply_night,
@@ -53,7 +54,8 @@ from core.palette import (
 )
 from core.panel import Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
-from core.sky import Sky, sky_params
+from core.sky import Sky
+from core.sky import sky_params as core_sky_params
 from core.starfield import project
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.touch import TouchReader
@@ -114,6 +116,12 @@ BTN_GAP  = 8
 # cost of a wider plate-carree stretch near the zenith.
 REAL_STARS = True
 CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 70.0
+
+# Meteors are drawn at the real rate, sped up. Three an hour is honest and makes
+# an animated sky look broken, so the panel runs them as though watching for this
+# many minutes per minute. It scales what is there rather than manufacturing what
+# is not, so a night with nothing falling still shows nothing.
+METEOR_COMPRESSION = 20.0
 
 # The engine, sized for this panel. `sky` is constructed exactly where the
 # seeded starfield used to be generated, so the shared random stream is consumed
@@ -744,6 +752,45 @@ def _star_thread():
             log.warning("Star refresh failed: %s", e)
 
 
+def sky_params(states):
+    """The sky's mood, with the meteors made real.
+
+    core.sky spawns meteors on a fixed cadence scaled only by cloud, so a clear
+    night in March showed the same shower as the Perseid peak. The rate now
+    comes from the shower table: activity by solar longitude, cut by radiant
+    altitude, cloud and moonlight.
+
+    NOTHING ACTIVE MEANS NO METEORS. That matters more here than it did before
+    the starfield became real - invented meteors falling through a real sky are
+    the same class of error as showing yesterday's Moon.
+
+    The rate is TIME-COMPRESSED, a stated convention rather than a fudge: three
+    an hour is honest and makes an animated sky look broken, so the panel runs
+    meteors as though watching for `meteor_compression` minutes per minute. It
+    scales what is there and cannot manufacture what is not.
+    """
+    params = core_sky_params(states)
+    when, _ = plot_instant(night_window(states))
+    utc = when.astimezone(timezone.utc).replace(tzinfo=None)
+    obs = observer(LAT or 0.0, LON or 0.0, when=utc)
+    cloud = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+    moon_illum = _f(states.get("sensor.astroweather_backyard_moon_phase")) / 100.0
+
+    rate = visible_rate(SPORADIC_ZHR, 1.0, 45.0, cloud, moon_illum)
+    for s in active(utc):
+        alt, _az = alt_az(obs, s["ra"], s["dec"])
+        rate += visible_rate(s["zhr"], s["strength"], alt, cloud, moon_illum)
+
+    if rate <= 0 or params["twilight"]:
+        params["meteors"] = False
+        return params
+    mean = 3600.0 / (rate * METEOR_COMPRESSION)
+    params["meteors"] = True
+    params["met_min"] = max(1.5, mean * 0.5)
+    params["met_max"] = max(3.0, mean * 1.5)
+    return params
+
+
 def build_pages(states, targets, lat, moon_ring=False):
     """Both dashboard pages as RGBA overlays.
 
@@ -785,7 +832,7 @@ def main():
                         help="Fetch from both weather sources and print a per-value diff")
     args = parser.parse_args()
 
-    global LAT, LON, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV
+    global LAT, LON, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV, METEOR_COMPRESSION
     config = load_config(CONFIG_PATH)
     out_dir = config.get("uptonight", {}).get("out_dir", "")
     lat    = config.get("location", {}).get("latitude")
@@ -807,6 +854,7 @@ def main():
         raise ValueError(f'display.night_mode is "{night}"; '
                          'expected "off", "dim" or "red"')
     moon_ring = bool(disp.get("moon_ring", False))
+    METEOR_COMPRESSION = float(disp.get("meteor_compression", METEOR_COMPRESSION))
     tch = config.get("touch", {})
 
     if args.compare:
