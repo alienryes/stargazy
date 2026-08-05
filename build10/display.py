@@ -25,6 +25,13 @@ from PIL import Image, ImageDraw
 from core.daemon import install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
+from core.meteors import (
+    SPORADIC_ZHR,
+    active,
+    next_shower,
+    solar_longitude,
+    visible_rate,
+)
 from core.night import NIGHT_CYCLE, apply_night, night_mode_now, night_window, tonight
 from core.palette import (
     AMBER,
@@ -643,6 +650,107 @@ def render_targets(states, targets, images, lat=None, lon=None):
     return img
 
 
+# ── Page 3: meteors ───────────────────────────────────────────────────────
+MET_Y0, MET_GAP = 300, 190
+MET_BAR_W, MET_BAR_H = 620, 36
+# The scale the rate bars are drawn against. Fixed rather than relative to the
+# strongest shower, so a quiet night looks quiet instead of being normalised
+# back up to a full bar.
+MET_RATE_FULL = 60.0
+
+
+def render_meteors(states, lat, lon):
+    """Page 3: what is actually falling tonight, computed from orbital constants.
+
+    Returns None when nothing is running, so the page leaves the rotation rather
+    than showing an empty frame.
+    """
+    when, when_label = plot_instant(night_window(states))
+    utc = when.astimezone(timezone.utc).replace(tzinfo=None)
+    showers = active(utc)
+    if not showers:
+        return None
+
+    obs = observer(lat or 0.0, lon or 0.0, when=utc)
+    cloud = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+    moon_illum = _f(states.get("sensor.astroweather_backyard_moon_phase")) / 100.0
+
+    img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    f = _fonts()
+    draw.text((MARGIN, 30), "METEORS", font=font("IBMPlexSans-Bold.ttf", 60), fill=WHITE)
+    draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM, width=2)
+
+    lam = solar_longitude(utc)
+    draw.text((MARGIN, 160),
+              f"Active showers {when_label}   ·   solar longitude {lam:.1f}°",
+              font=f["sm"], fill=MUTED)
+    draw.text((MARGIN, 210),
+              f"Rates allow for radiant altitude, {cloud}% cloud "
+              f"and {moon_illum * 100:.0f}% moon.",
+              font=f["xs"], fill=MUTED)
+
+    y = MET_Y0
+    for s in showers[:4]:
+        alt, az = alt_az(obs, s["ra"], s["dec"])
+        rate = visible_rate(s["zhr"], s["strength"], alt, cloud, moon_illum)
+        up = alt > 0
+
+        draw.text((MARGIN, y), s["name"], font=f["lg"], fill=WHITE if up else DIM)
+        # The peak is the actionable number when a shower is still building.
+        days = (s["peak_lambda"] - lam) % 360.0 / 0.9856
+        peak_note = ("peaking now" if s["delta_lambda"] < 0.5
+                     else f"peak in {days:.0f} days" if days < 180
+                     else f"{s['delta_lambda']:.0f}° past peak")
+        _right(draw, peak_note, y + 14, MUTED, f["sm"])
+
+        if up:
+            where = f"radiant {alt:.0f}° up, bearing {az:.0f}°"
+        else:
+            # Below the horizon is not a failure to report - it is the answer.
+            where = f"radiant below the horizon ({alt:.0f}°)"
+        draw.text((MARGIN, y + 68), where, font=f["sm"], fill=MUTED)
+
+        # Bar and figure describe the SAME quantity - what you would see - so
+        # the headline ZHR rides alongside as context rather than as the number.
+        by = y + 122
+        draw.rectangle([MARGIN - 2, by - 2, MARGIN + MET_BAR_W + 2, by + MET_BAR_H + 2],
+                       fill=STEEL)
+        draw.rectangle([MARGIN, by, MARGIN + MET_BAR_W, by + MET_BAR_H], fill=BG)
+        frac = max(0.0, min(1.0, rate / MET_RATE_FULL))
+        if frac > 0:
+            draw.rectangle([MARGIN, by, MARGIN + max(2, int(MET_BAR_W * frac)),
+                            by + MET_BAR_H],
+                           fill=ELECTRIC if rate >= 10 else AMBER)
+        draw.text((MARGIN + MET_BAR_W + 20, by - 4),
+                  f"~{rate:.0f}/hr", font=f["med"],
+                  fill=WHITE if rate >= 1 else DIM)
+        _right(draw, f"ZHR {s['zhr']} at peak", by + 8, DIM, f["xs"])
+        y += MET_GAP
+
+    # Anchored to the bottom rather than flowing after the last shower: the
+    # number of active showers swings between one and four through the year, and
+    # a summary that wanders up and down the page with it is harder to find than
+    # one that is always in the same place.
+    sy = H - 260
+    draw.line([(0, sy - 30), (W, sy - 30)], fill=DIM, width=2)
+    # Sporadics are the floor: quoting shower rates alone implies nothing falls
+    # on an ordinary night, which is not true.
+    spor = visible_rate(SPORADIC_ZHR, 1.0, 45.0, cloud, moon_illum)
+    draw.text((MARGIN, sy), f"Sporadic background   ~{spor:.0f}/hr",
+              font=f["sm"], fill=MUTED)
+    nxt = next_shower(utc)
+    if nxt:
+        draw.text((MARGIN, sy + 56),
+                  f"Next peak: {nxt[0]} in {nxt[1]:.0f} days",
+                  font=f["sm"], fill=MUTED)
+
+    draw.text((MARGIN, H - 44),
+              "Shower elements are orbital constants, stored by solar longitude",
+              font=f["xs"], fill=DIM)
+    return img
+
+
 def draw_clock(draw):
     """Stamp the header date and time onto a composed frame.
 
@@ -666,6 +774,9 @@ def build_pages(states, targets, lat, moon_ring=False):
                            load_cutouts(targets, P2_CARDS, CUTOUT_PX), lat, LON)
     if page2 is not None:
         pages.append(page2)
+    page3 = render_meteors(states, lat, LON)
+    if page3 is not None:
+        pages.append(page3)
     return pages
 
 
