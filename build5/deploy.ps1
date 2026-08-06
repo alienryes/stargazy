@@ -112,8 +112,11 @@ if ($changed) {
 }
 
 # First-run convenience: kick a targets computation if there is no report yet,
-# so the targets page appears without waiting for the midday timer.
-Invoke-Pi "test -f $UT_DIR/out/uptonight-report.json || sudo -n systemctl start uptonight.service"
+# so the targets page appears without waiting for the midday timer. Skipped
+# when the unit is not installed, which is the state on a very first deploy -
+# the units are staged just above and installed separately, so starting one
+# here would fail the whole deploy after all its real work had succeeded.
+Invoke-Pi "test -f $UT_DIR/out/uptonight-report.json || ! test -f /etc/systemd/system/uptonight.service || sudo -n systemctl start uptonight.service"
 
 Write-Host ""
 Write-Host "==> Done."
