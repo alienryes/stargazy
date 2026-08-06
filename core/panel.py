@@ -19,21 +19,41 @@ log = logging.getLogger(__name__)
 FB_DEV = "/dev/fb0"
 
 
-class Framebuffer:
-    """Rotation, night transform and RGB565 packing for one panel.
+def _fb_attr(dev, name):
+    """One sysfs attribute of a framebuffer device, or None if unreadable.
 
-    RGB565 is assumed, which is what both Touch Display 2 panels present -
-    including on a Pi 5, where /dev/fb0 comes from DRM's fbdev emulation and was
-    measured at 16bpp rather than the 32bpp that emulation often defaults to.
-    Confirm bits_per_pixel on a new board before trusting this; a 32bpp panel
-    needs a second packing branch, not a resize.
+    Absent on a host with no framebuffer at all, which is the normal case when
+    --save renders a preview on a development machine.
+    """
+    try:
+        return int((Path("/sys/class/graphics") / Path(dev).name / name).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+class Framebuffer:
+    """Rotation, night transform and pixel packing for one panel.
+
+    Two pixel formats are supported, and the depth is READ FROM THE DEVICE
+    rather than assumed, because the two panels genuinely differ: the 5" Touch
+    Display 2 on a Pi 4 presents 16bpp RGB565, while the 10.1" on a Pi 5
+    presents 32bpp XRGB8888 - byte order B,G,R,X in memory.
+
+    An earlier 16bpp reading from the Pi 5 was taken with no panel attached, so
+    it measured a phantom HDMI framebuffer rather than the display. Hardcoding
+    that would have failed loudly rather than subtly: a 565 pack emits half the
+    bytes a 32bpp panel expects, so the result is garbage, not a tinted image.
+    Reading the device costs one file read at startup and cannot go stale.
     """
 
-    def __init__(self, w, h, fb_w, fb_h, rotate=Image.ROTATE_90, dev=FB_DEV):
+    def __init__(self, w, h, fb_w, fb_h, rotate=Image.ROTATE_90, dev=FB_DEV, bpp=None):
         self.w, self.h = w, h
         self.fb_w, self.fb_h = fb_w, fb_h
         self.rotate = rotate
         self.dev = dev
+        # 16 when there is no device to ask. That path never writes a
+        # framebuffer, so the fallback only has to be harmless, not correct.
+        self.bpp = bpp or _fb_attr(dev, "bits_per_pixel") or 16
 
     def to_bytes(self, img, night="off", dim=45):
         # rotate is None for a build drawn in the panel's native portrait, which
@@ -45,15 +65,41 @@ class Framebuffer:
         # Filtered here rather than in the compositor: this array already
         # exists, so night mode costs no extra conversion on the animated path.
         arr = night_filter(arr, night, dim)
+        if self.bpp == 32:
+            # XRGB8888 on a little-endian machine, so the bytes go down in the
+            # order B, G, R, unused - not R, G, B.
+            out = np.empty((self.fb_h, self.fb_w, 4), np.uint8)
+            out[:, :, 0] = arr[:, :, 2]
+            out[:, :, 1] = arr[:, :, 1]
+            out[:, :, 2] = arr[:, :, 0]
+            out[:, :, 3] = 0
+            return out.tobytes()
         packed = (((arr[:, :, 0] >> 3) << 11)
                   | ((arr[:, :, 1] >> 2) << 5)
                   | (arr[:, :, 2] >> 3))
         return packed.astype("<u2").tobytes()
 
     def dark_frame(self):
-        return b"\x00" * (self.fb_w * self.fb_h * 2)
+        return b"\x00" * (self.fb_w * self.fb_h * self.bpp // 8)
 
     def open(self):
+        """Open the framebuffer, refusing a line length this packer cannot fill.
+
+        A stride wider than the visible line means padding between rows, which a
+        flat write smears diagonally down the panel. Neither supported panel
+        pads, so this guards a board that has not been seen rather than one that
+        has - but the whole reason this method now checks anything is that an
+        unstated framebuffer assumption already cost a debugging session, and
+        failing at startup beats rendering garbage for as long as the daemon runs.
+        """
+        want = self.fb_w * self.bpp // 8
+        stride = _fb_attr(self.dev, "stride")
+        if stride is not None and stride != want:
+            raise RuntimeError(
+                f"{self.dev} stride is {stride}, expected {want} for "
+                f"{self.fb_w}px at {self.bpp}bpp: padded framebuffers are not supported")
+        log.info("Framebuffer %s: %dx%d at %dbpp.",
+                 self.dev, self.fb_w, self.fb_h, self.bpp)
         return open(self.dev, "wb")
 
 

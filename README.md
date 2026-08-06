@@ -156,10 +156,11 @@ No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all 
 
 > **Using a Pi 5 for the 5" build gains nothing.** It needs a Display Adapter Cable for Pi 5 (22-way → 15-way, the one marked `DISPLAY`), and there is no performance reason to move: the render loop is single-threaded and uses about one core of four. The case *does* have a printable Pi 5 variant.
 >
-> The framebuffer format is the thing to check on any new board, for either build. Both packing paths assume 16-bit RGB565, and a Pi 5 gets `/dev/fb0` from DRM's fbdev emulation, which is often 32bpp XRGB8888 — though one Pi 5 measured here came up 16bpp. Confirm rather than assume:
+> The framebuffer format differs between the two panels and is **detected at runtime**, so neither build needs configuring for it: the 5" reports 16bpp RGB565, the 10.1" on a Pi 5 reports 32bpp XRGB8888. To see what a board presents:
 > ```bash
 > cat /sys/class/graphics/fb0/bits_per_pixel /sys/class/graphics/fb0/virtual_size
 > ```
+> A padded framebuffer — one whose `stride` exceeds width × bytes-per-pixel — is not supported, and is refused at startup rather than rendered as a diagonal smear. Neither panel pads.
 
 **For the 10.1" build**, the table changes: a **Raspberry Pi 5** (its DSI is four-lane, which the panel requires), the **10.1-inch** Touch Display 2, a 27W USB-C PSU, and the official **Pi 5 Active Cooler**, which is required rather than optional on a continuous render loop.
 
@@ -177,7 +178,13 @@ No soldering, no HAT, no GPIO wiring — the display is DSI and the case is all 
 
 ### 1. Pi one-time setup
 
-The Touch Display 2 is auto-detected over DSI — no SPI or device-tree overlay needed. Just run the setup script:
+The 5" Touch Display 2 is auto-detected over DSI and needs no device-tree overlay. **The 10.1" is not**: `display_auto_detect=1` is firmware-side probing, so firmware older than the panel does not recognise it, and the symptom is no output *and* no DSI connector at all in `/sys/class/drm`. For that panel, add the overlay to `/boot/firmware/config.txt` and reboot before running setup:
+
+```
+dtoverlay=vc4-kms-dsi-ili79600-10-1inch
+```
+
+Append `,dsi0` only if the ribbon is in CAM/DISP 0 — the overlay defaults to DSI1, which is CAM/DISP 1. Then run the setup script:
 
 ```bash
 # Copy the build's setup.sh to the Pi, then:

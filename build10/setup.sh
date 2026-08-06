@@ -8,15 +8,21 @@
 #
 # Board notes for this build, none of which need a line in this script:
 #   * The 10.1" panel needs a Pi 5 or CM - it is four-lane DSI and a Pi 4 cannot
-#     drive it. It is auto-detected via display_auto_detect=1, which Raspberry Pi
-#     OS sets by default, so no dtoverlay is added here.
+#     drive it.
+#   * THE PANEL IS NOT AUTO-DETECTED. display_auto_detect=1 is firmware-side
+#     probing, and firmware older than the panel cannot recognise it - which
+#     presents as no output AND no DSI connector at all in /sys/class/drm,
+#     rather than as a blank screen. Add to /boot/firmware/config.txt and reboot:
+#         dtoverlay=vc4-kms-dsi-ili79600-10-1inch
+#     Append ,dsi0 only if the ribbon is in CAM/DISP 0; the overlay defaults to
+#     DSI1, which is CAM/DISP 1. Note /dev/fb0 does not exist until a connector
+#     is connected, so a missing framebuffer is a symptom of this, not a
+#     separate fault.
 #   * No PWM fan overlay: a Pi 5 drives its cooler from its own fan header.
-#   * CHECK THE PIXEL FORMAT ONCE THE PANEL IS ATTACHED. core/panel.py packs
-#     RGB565 only. A Pi 5 gets /dev/fb0 from DRM's fbdev emulation, which often
-#     defaults to 32bpp XRGB8888 - though this board measured 16bpp headless.
-#     Confirm before first run:
+#   * The pixel format is detected at runtime by core/panel.py, so it needs no
+#     action here. For reference, this panel reports 32bpp XRGB8888 where the
+#     5" reports 16bpp RGB565:
 #         cat /sys/class/graphics/fb0/bits_per_pixel /sys/class/graphics/fb0/virtual_size
-#     16 and 1200,1920 is what this build expects; 32 needs a packing branch.
 set -e
 
 # SUDO_USER is the account that invoked sudo, which is the one that will own
