@@ -57,7 +57,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -737,10 +737,16 @@ def render_meteors(states, lat, lon):
 
         draw.text((MARGIN, y), s["name"], font=f["lg"], fill=WHITE if up else DIM)
         # The peak is the actionable number when a shower is still building.
-        days = (s["peak_lambda"] - lam) % 360.0 / 0.9856
+        # Both sides are quoted in days. Solar longitude is how the table is
+        # stored and searched, but it is not a unit anyone observes in, so it
+        # is converted here rather than leaking into one branch of the label:
+        # past the peak the next crossing is nearly a full orbit away, so the
+        # forward distance is useless and the elapsed distance is the answer.
+        days_to = (s["peak_lambda"] - lam) % 360.0 / 0.9856
+        days_since = s["delta_lambda"] / 0.9856
         peak_note = ("peaking now" if s["delta_lambda"] < 0.5
-                     else f"peak in {days:.0f} days" if days < 180
-                     else f"{s['delta_lambda']:.0f}° past peak")
+                     else f"peak in {days_to:.0f} days" if days_to < 180
+                     else f"{days_since:.0f} days past peak")
         _right(draw, peak_note, y + 14, MUTED, f["sm"])
 
         if up:
