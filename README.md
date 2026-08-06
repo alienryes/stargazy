@@ -125,6 +125,10 @@ Brightness and star size are mapped for legibility at a distance rather than pho
 
 A fourth page that exists **only when aurora is above this site's horizon and it is dark enough to see it**. At temperate latitudes that means it will be absent for years at a time; in Iceland or northern Norway it will be a regular fixture. Both are correct, and the frequency difference is real rather than a setting.
 
+![The aurora page, rendered from a simulated storm](screenshots/10in-aurora-simulated.png)
+
+> **This screenshot is from an injected storm, not a real one.** The page appears only during genuine activity, which at 51°N happens once or twice a year at solar maximum and not at all for years at solar minimum — so a real capture is not something that can be produced on demand. Everything above the data feed is the real code: the geometry, the cell choice, the drawn field and the colours. The Kp forecast bars are live data. Only the OVATION response is fabricated.
+
 **The query is not "the probability at my latitude".** Aurora emits 100–250 km up, so it is visible far beyond the ground it sits over — from 51°N the horizon reaches past 67°N. Reading the model cell containing the site returns zero while a display is genuinely visible to the north. Every cell within the horizon is searched instead.
 
 **Nor is the direction assumed.** The auroral oval passes overhead at high latitudes and lies to the *south* in the southern hemisphere, so the bearing and elevation are computed rather than presumed. The same code answers "north and low" from southern England, "overhead" from Reykjavik and "south" from Tasmania, none of them special-cased.
