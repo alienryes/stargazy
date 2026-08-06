@@ -29,6 +29,11 @@ EVENT_SIZE = struct.calcsize(EVENT_FMT)
 EV_KEY, EV_ABS = 0x01, 0x03
 BTN_TOUCH    = 0x14A
 ABS_X, ABS_Y = 0x00, 0x01
+# Multitouch position. The 10.1" panel's controller reports through these and
+# never emits ABS_X/ABS_Y at all, while still DECLARING absinfo for them - so it
+# is found by find_device() and then appears dead, because no coordinate ever
+# arrives. Both spellings are accepted; a device only ever uses one.
+ABS_MT_POSITION_X, ABS_MT_POSITION_Y = 0x35, 0x36
 
 
 def _abs_max(fd, axis):
@@ -50,6 +55,11 @@ def find_device():
     Matched on capability rather than on /dev/input/event0, which is not a
     stable name on someone else's Pi, or on the controller's model name, which
     is not the same on every Touch Display 2. Returns (path, max_x, max_y).
+
+    Note that declaring these axes is not the same as reporting through them:
+    the 10.1" panel answers the absinfo query with its full 1199x1919 range and
+    then sends every coordinate as ABS_MT_POSITION_*. Finding the device says
+    nothing about which events it will emit.
     """
     for path in sorted(glob.glob("/dev/input/event*")):
         try:
@@ -121,9 +131,9 @@ class TouchReader:
                 if not data:
                     return
                 _, _, etype, code, value = struct.unpack(EVENT_FMT, data)
-                if etype == EV_ABS and code == ABS_X:
+                if etype == EV_ABS and code in (ABS_X, ABS_MT_POSITION_X):
                     x = value
-                elif etype == EV_ABS and code == ABS_Y:
+                elif etype == EV_ABS and code in (ABS_Y, ABS_MT_POSITION_Y):
                     y = value
                 elif etype == EV_KEY and code == BTN_TOUCH and value == 0:
                     # Fired on release rather than press, so that resting a
