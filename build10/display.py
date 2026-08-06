@@ -24,6 +24,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+from core.aurora import compass
+from core.aurora import visible_now as aurora_now
 from core.daemon import install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
@@ -34,7 +36,14 @@ from core.meteors import (
     solar_longitude,
     visible_rate,
 )
-from core.night import NIGHT_CYCLE, apply_night, night_mode_now, night_window, tonight
+from core.night import (
+    NIGHT_CYCLE,
+    apply_night,
+    inside_window,
+    night_mode_now,
+    night_window,
+    tonight,
+)
 from core.palette import (
     BG,
     DIM,
@@ -57,7 +66,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.6.1"
+VERSION = "0.7.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -136,6 +145,16 @@ CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 90.0
 # instead. Size already stands in for brightness in this renderer - a brighter
 # star reads as larger through glare - so this stays within that convention.
 STAR_MIN_SIZE = 2
+
+# Aurora. The emission height is the honest knob for how far into the distance
+# this may claim to see: 250 km is the high red emission, which is the part that
+# clears a distant horizon first and is what gets reported from well south of
+# the oval. The threshold is deliberately NOT per-site - the same cut gives a
+# temperate site an event every few years and a high-latitude one a frequent
+# page, because that difference is real rather than a setting.
+AURORA_ENABLED = True
+AURORA_THRESHOLD = 10.0
+AURORA_EMISSION_KM = 250.0
 
 # The engine, sized for this panel. The daemon reads these three off this module
 # as its layout.
@@ -529,7 +548,9 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
         # One line per object: the y axis already states the altitude, so
         # repeating it was duplication and it was what made labels collide. The
         # bearing stays - a compass axis cannot give it precisely.
-        bearing = f"  {int(round(az))}°"
+        # Modulo AFTER rounding: 359.7 rounds to 360, which is a bearing that
+        # does not exist and reads as an error next to a compass axis marked N.
+        bearing = f"  {int(round(az)) % 360}°"
         nw = draw.textlength(name, font=f_xs)
         lw = nw + draw.textlength(bearing, font=f_xs)
         # Flip to the left of the marker in the right-hand third, so labels do
@@ -915,6 +936,131 @@ def draw_clock(draw):
               now, fill=MUTED, font=f_sm)
 
 
+# ── Page 4: aurora ────────────────────────────────────────────────────────
+AUR_Y0, AUR_GAP = 900, 64
+AUR_KP_H = 220
+# Kp runs 0-9 and 5 is the minor-storm threshold, which is the level worth
+# getting up for from a temperate latitude. Drawing the axis to 9 rather than to
+# whatever the forecast happens to reach keeps a quiet outlook looking quiet.
+AUR_KP_MAX, AUR_KP_STORM = 9.0, 5.0
+
+
+def _draw_kp_forecast(draw, rows, top, f):
+    """SWPC's three-day Kp outlook: is this building or fading.
+
+    The obvious next question once the page has appeared at all, and the only
+    part of it that speaks about nights other than tonight.
+    """
+    if not rows:
+        return
+    draw.text((MARGIN, top), "Kp forecast", font=f["med"], fill=WHITE)
+    base = top + 70 + AUR_KP_H
+    x0, x1 = MARGIN, PAN_X1
+    span = (x1 - x0) / len(rows)
+    bw = max(6, int(span) - 6)
+
+    y_storm = base - (AUR_KP_STORM / AUR_KP_MAX) * AUR_KP_H
+    draw.line([(x0, y_storm), (x1, y_storm)], fill=STEEL + (70,))
+    draw.text((x1 + 6, y_storm - 14), "5", font=f["xs"], fill=MUTED)
+
+    for i, (tag, kp) in enumerate(rows):
+        bx = int(x0 + i * span)
+        bh = int((min(kp, AUR_KP_MAX) / AUR_KP_MAX) * AUR_KP_H)
+        draw.rectangle([bx, base - bh, bx + bw, base], fill=NOMINAL)
+        # A day label at each midnight, so the bars carry dates without a
+        # tick for every three-hour step.
+        when = datetime.fromisoformat(tag)
+        if when.hour == 0:
+            draw.text((bx, base + 12), when.strftime("%a"), font=f["xs"], fill=MUTED)
+    draw.line([(x0, base), (x1, base)], fill=STEEL, width=2)
+
+
+def render_aurora(states, lat, lon):
+    """Page 4: aurora, when there is any to be seen from here.
+
+    Returns None unless the model puts aurora above this site's horizon AND it
+    is dark enough to see it. Both gates matter and for opposite reasons: at
+    temperate latitudes the page is absent almost always, while at high latitude
+    the sky is busy but there is no astronomical night from May to August, so
+    without the darkness gate a Reykjavik panel would carry an aurora page all
+    summer for something nobody could possibly see.
+
+    A page that appears when nothing can be seen is worse than no page at all.
+    """
+    if not AURORA_ENABLED or not inside_window(night_window(states)):
+        return None
+    data = aurora_now(lat or 0.0, lon or 0.0,
+                      AURORA_EMISSION_KM, AURORA_THRESHOLD)
+    if data is None:
+        return None
+
+    strongest, highest = data["strongest"], data["highest"]
+    cloud = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+
+    img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    f = _fonts()
+    draw.text((MARGIN, 30), "AURORA", font=font("IBMPlexSans-Bold.ttf", 60), fill=WHITE)
+    draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM, width=2)
+
+    kp = f"   ·   Kp {data['kp']:.0f}" if data.get("kp") is not None else ""
+    # NOT "chance overhead": OVATION's figure is the chance of aurora above each
+    # MODEL POINT, and the strongest of those is routinely sitting on the
+    # observer's horizon rather than over their head. Saying "overhead" here
+    # would promise the one thing the number does not mean.
+    draw.text((MARGIN, 160),
+              f"Up to {strongest['probability']:.0f}% probability in view{kp}",
+              font=f["sm"], fill=MUTED)
+    draw.text((MARGIN, 210),
+              f"{data['visible_cells']} model cells above the horizon from here.",
+              font=f["xs"], fill=MUTED)
+
+    # The same bearing-by-altitude plot page 2 uses, so "north and low" is said
+    # by the axes rather than in words - and so it reads the same way at a
+    # latitude where the answer is "overhead" or "south" instead.
+    same = (abs(strongest["bearing"] - highest["bearing"]) < 0.5
+            and abs(strongest["elevation"] - highest["elevation"]) < 0.5)
+    marks = ([(strongest["bearing"], strongest["elevation"], "aurora", OBJECT, 9)]
+             if same else
+             [(strongest["bearing"], strongest["elevation"], "strongest", OBJECT, 9),
+              (highest["bearing"], highest["elevation"], "best placed", OBJECT, 9)])
+    _draw_panorama(draw, marks, "now", f["sm"], f["xs"])
+
+    y = AUR_Y0
+    for label, d in (("Strongest", strongest), ("Best placed", highest)):
+        if same and label == "Best placed":
+            continue
+        draw.text((MARGIN, y), label, font=f["med"], fill=WHITE)
+        draw.text((MARGIN, y + AUR_GAP),
+                  f"{d['probability']:.0f}%  ·  {compass(d['bearing'])} "
+                  f"{int(round(d['bearing'])) % 360}°  ·  {d['elevation']:.0f}° up  ·  "
+                  f"{d['distance_km']:.0f} km away",
+                  font=f["sm"], fill=MUTED)
+        y += AUR_GAP * 2 + 20
+
+    # What the local sky is doing about it. A forecast the observer cannot act
+    # on because it is overcast is worth saying out loud rather than leaving
+    # them to look up and find out.
+    sky = ("Your sky is clear." if cloud <= 20
+           else f"Your sky is {cloud}% cloud." if cloud < 80
+           else f"Your sky is {cloud}% cloud - almost certainly not visible from here.")
+    draw.text((MARGIN, y + 20), sky, font=f["sm"], fill=MUTED)
+
+    _draw_kp_forecast(draw, data.get("kp_forecast") or [], y + 130, f)
+
+    when = (data.get("forecast_at") or "").replace("T", " ").rstrip("Z")
+    draw.text((MARGIN, H - 156),
+              "The figure is the chance of aurora above a model point, not a sighting.",
+              font=f["xs"], fill=DIM)
+    draw.text((MARGIN, H - 100),
+              f"OVATION forecast for {when} UTC",
+              font=f["xs"], fill=DIM)
+    draw.text((MARGIN, H - 44),
+              "Aurora model: NOAA Space Weather Prediction Center",
+              font=f["xs"], fill=DIM)
+    return img
+
+
 def build_pages(states, targets, lat, moon_ring=False):
     """Every page as an RGBA overlay. Data thread only: this fetches the hour's
     lunar frame and any deep-sky cutouts not already cached."""
@@ -929,6 +1075,13 @@ def build_pages(states, targets, lat, moon_ring=False):
     page3 = render_meteors(states, lat, LON)
     if page3 is not None:
         pages.append(page3)
+    # Aurora joins the rotation only when there is aurora to see, which is the
+    # same mechanism pages 2 and 3 use - and the reason this page is independent
+    # of UpTonight. Drawn on the targets panorama instead, a real storm could
+    # have gone unshown because an unrelated data source had failed.
+    page4 = render_aurora(states, lat, LON)
+    if page4 is not None:
+        pages.append(page4)
     return pages
 
 
@@ -980,7 +1133,12 @@ def main():
         raise ValueError(f'display.night_mode is "{night}"; expected "off", "dim" or "red"')
     moon_ring = bool(disp.get("moon_ring", False))
     global METEOR_COMPRESSION, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV
+    global AURORA_ENABLED, AURORA_THRESHOLD, AURORA_EMISSION_KM
     METEOR_COMPRESSION = float(disp.get("meteor_compression", METEOR_COMPRESSION))
+    aur = config.get("aurora", {})
+    AURORA_ENABLED = bool(aur.get("enabled", AURORA_ENABLED))
+    AURORA_THRESHOLD = float(aur.get("threshold_percent", AURORA_THRESHOLD))
+    AURORA_EMISSION_KM = float(aur.get("emission_km", AURORA_EMISSION_KM))
     skycfg = config.get("sky", {})
     REAL_STARS = bool(skycfg.get("real_stars", REAL_STARS))
     CAMERA_AZ  = float(skycfg.get("camera_azimuth", CAMERA_AZ))

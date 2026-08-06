@@ -121,6 +121,20 @@ Brightness and star size are mapped for legibility at a distance rather than pho
 
 ---
 
+### Aurora, when there is any (10.1-inch build)
+
+A fourth page that exists **only when aurora is above this site's horizon and it is dark enough to see it**. At temperate latitudes that means it will be absent for years at a time; in Iceland or northern Norway it will be a regular fixture. Both are correct, and the frequency difference is real rather than a setting.
+
+**The query is not "the probability at my latitude".** Aurora emits 100–250 km up, so it is visible far beyond the ground it sits over — from 51°N the horizon reaches past 67°N. Reading the model cell containing the site returns zero while a display is genuinely visible to the north. Every cell within the horizon is searched instead.
+
+**Nor is the direction assumed.** The auroral oval passes overhead at high latitudes and lies to the *south* in the southern hemisphere, so the bearing and elevation are computed rather than presumed. The same code answers "north and low" from southern England, "overhead" from Reykjavik and "south" from Tasmania, none of them special-cased.
+
+Two cells are reported, because they answer different questions and are routinely different: the **strongest**, and the **best placed** — the highest above the horizon. The strongest is often the one grazing the horizon, where the whole thickness of the atmosphere and any terrain at all stand in the way, so reporting it alone would send an observer to look at nothing.
+
+The page also carries SWPC's three-day Kp outlook, and says whether the local sky is clear enough to act on any of it. Everything shown is a **probability from a model, roughly 76 minutes ahead of its observation time** — never an observation, and the page says so.
+
+Source: NOAA SWPC's OVATION model. No key, no registration.
+
 ## 👆 Touch controls
 
 As the panel is a touchscreen, there are touch controls. The display reads them directly from `/dev/input/eventN`, so neither X nor Wayland is required.

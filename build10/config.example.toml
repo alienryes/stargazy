@@ -137,3 +137,28 @@ field_of_view = 90
 [touch]
 enabled = true
 strip_seconds = 6
+
+# Aurora. A fourth page that exists only when there is aurora above this site's
+# horizon and it is dark enough to see it - so at temperate latitudes it will be
+# absent for years at a time, and that is the design rather than a fault.
+#
+# The query is not "the probability at my latitude". Aurora emits 100-250 km up
+# and is visible far beyond the ground it sits over, so every model cell within
+# the horizon is searched, in every direction: the answer comes out north and
+# low from southern England, overhead in Iceland, and south in Tasmania without
+# any of those being a special case. The forecast is NOAA SWPC's OVATION model,
+# which needs no key.
+#
+# emission_km sets how far into the distance this may claim to see: 250 km is
+# the high red emission, the part that clears a distant horizon first and the
+# part actually reported from well south of the oval. Lower it to 100 for only
+# the green base, which is a much more conservative claim.
+#
+# threshold_percent is the probability below which nothing is shown. It is not
+# per-site on purpose - the same cut gives a temperate site an event every few
+# years and a high-latitude one a frequent page, because the difference in
+# frequency is real rather than a setting.
+[aurora]
+enabled = true
+threshold_percent = 10
+emission_km = 250

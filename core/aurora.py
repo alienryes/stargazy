@@ -28,6 +28,8 @@ log = logging.getLogger(__name__)
 
 OVATION_URL = "https://services.swpc.noaa.gov/json/ovation_aurora_latest.json"
 KP_URL = "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json"
+KP_FORECAST_URL = (
+    "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json")
 
 # Identifying a hobby display rather than pretending to be a browser. SWPC ask
 # for a real agent and the endpoints are free; being a good citizen is the rent.
@@ -157,6 +159,23 @@ def fetch_kp(timeout=15):
         return None
 
 
+def fetch_kp_forecast(timeout=20):
+    """[(time_tag, kp)] for the PREDICTED part of SWPC's three-day Kp outlook.
+
+    ⚠ These rows are dicts, unlike most SWPC /products/ endpoints, which return
+    an array of arrays with a header row. Code written against that shape gets
+    nothing here and fails silently, so the filter below is on a dict key.
+    """
+    try:
+        r = requests.get(KP_FORECAST_URL, headers=HEADERS, timeout=timeout)
+        r.raise_for_status()
+        return [(x["time_tag"], float(x["kp"])) for x in r.json()
+                if x.get("observed") == "predicted"]
+    except Exception as e:
+        log.warning("Kp forecast unavailable (%s).", e)
+        return []
+
+
 def visible_now(lat, lon, emission_km=DEFAULT_EMISSION_KM,
                 threshold_pct=DEFAULT_THRESHOLD_PCT, with_kp=True):
     """Everything the aurora page needs, or None when there is nothing to say.
@@ -174,6 +193,7 @@ def visible_now(lat, lon, emission_km=DEFAULT_EMISSION_KM,
     best["observed_at"] = observed
     best["forecast_at"] = forecast
     best["kp"] = fetch_kp() if with_kp else None
+    best["kp_forecast"] = fetch_kp_forecast() if with_kp else []
     return best
 
 
