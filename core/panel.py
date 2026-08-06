@@ -3,6 +3,7 @@
 Geometry is passed in rather than read from globals, so one engine drives panels
 of different sizes.
 """
+import fcntl
 import glob
 import logging
 import time
@@ -17,6 +18,11 @@ from core.palette import BG, STEEL, WHITE
 log = logging.getLogger(__name__)
 
 FB_DEV = "/dev/fb0"
+
+# linux/fb.h. Unblanking needs no privilege beyond write access to the device,
+# which the daemon already has through the video group.
+FBIOBLANK = 0x4611
+FB_BLANK_UNBLANK = 0
 
 
 def _fb_attr(dev, name):
@@ -83,7 +89,7 @@ class Framebuffer:
         return b"\x00" * (self.fb_w * self.fb_h * self.bpp // 8)
 
     def open(self):
-        """Open the framebuffer, refusing a line length this packer cannot fill.
+        """Open and wake the framebuffer, refusing a geometry it cannot fill.
 
         A stride wider than the visible line means padding between rows, which a
         flat write smears diagonally down the panel. Neither supported panel
@@ -100,7 +106,22 @@ class Framebuffer:
                 f"{self.fb_w}px at {self.bpp}bpp: padded framebuffers are not supported")
         log.info("Framebuffer %s: %dx%d at %dbpp.",
                  self.dev, self.fb_w, self.fb_h, self.bpp)
-        return open(self.dev, "wb")
+        fh = open(self.dev, "wb")
+        # Wake the panel before the first frame. fbcon=map:2 keeps the text
+        # console off this framebuffer, so on a board whose firmware does not
+        # set up a mode either - a Pi 5 with disable_fw_kms_setup=1 - nothing
+        # ever enables the CRTC, and the daemon renders perfectly into a buffer
+        # that is never scanned out. The symptom is a dark panel with a healthy
+        # service, which reads as a rendering bug and is not one. Where
+        # something else already enabled the display this is a no-op, so both
+        # builds do it unconditionally.
+        try:
+            fcntl.ioctl(fh, FBIOBLANK, FB_BLANK_UNBLANK)
+        except OSError as e:
+            # Not fatal: a panel that is already lit stays lit. Worth a line in
+            # the journal, because a dark screen after this is a different fault.
+            log.warning("Could not unblank %s: %s", self.dev, e)
+        return fh
 
 
 def _backlight(name):

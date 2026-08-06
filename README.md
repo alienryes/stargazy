@@ -288,6 +288,7 @@ The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke s
 | Symptom | Fix |
 |---|---|
 | Blank panel, or console/login text over the dashboard | The text console is still bound to `/dev/fb0`. Ensure `fbcon=map:2` is in `/boot/firmware/cmdline.txt` and reboot; `fbcon-detach.service` also unbinds it at start |
+| Dark panel while the service is healthy and logging normally | The display was never woken: `fbcon=map:2` means no console performs a modeset, and a Pi 5 with `disable_fw_kms_setup=1` has no firmware-set mode either, so the CRTC stays off while frames render into a buffer nobody scans out. The daemon now issues an unblank when it opens the framebuffer, so this should not recur — confirm with `cat /sys/class/drm/card*-DSI-*/enabled` (want `enabled`) and `cat /sys/class/backlight/*/bl_power` (want `0`, not `4`) |
 | `PermissionError` writing `/dev/fb0` | The user isn't in the `video` group — rerun `setup.sh`, or `sudo adduser <user> video` and re-login |
 | Sky looks static / no visible animation | Heavy cloud legitimately calms the sky. Confirm with `python3 display.py --demo`; check the computed mood with `python3 -c "import tomllib,display; c=tomllib.load(open('config.toml','rb')); print(display.sky_params(display.make_fetcher(c)()))"` |
 | Dashboard upside down / mirrored | Flip `ROTATE` in `display.py` between `Image.ROTATE_90` and `Image.ROTATE_270` |
