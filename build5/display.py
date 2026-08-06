@@ -849,7 +849,19 @@ def build_pages(states, targets, lat, moon_ring=False):
 
 
 def compose(frame, overlay, labels=None):
-    """Dashboard, clock and control strip over a painted sky frame."""
+    """Dashboard, clock and control strip over a painted sky frame.
+
+    This puts the clouds BEHIND the moon disc, which looks wrong and is not.
+    Cloud is a few kilometres up and the Moon is 384,000 km away, so in the sky
+    cloud always crosses in front - but the disc here is a card, not a view.
+    The sky layer runs about 10 px per degree on this panel, where the real Moon
+    is roughly 5 px across; the card draws it many times that, at a fixed place
+    in the layout rather than where the Moon is. Cloud drifting across it would
+    assert the Moon really is there, that big, in that direction, which is the
+    class of claim the starfield and the meteor radiants were changed to stop
+    making. Do not "fix" this by compositing the moon into the sky frame without
+    also solving the size and the position.
+    """
     frame.paste(overlay, (0, 0), overlay)
     d = ImageDraw.Draw(frame)
     draw_clock(d)

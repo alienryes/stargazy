@@ -91,6 +91,8 @@ The moon card shows **a real image of the Moon** (set `display.moon_ring = true`
 
 Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
 
+**The clouds pass behind the moon card, and that is deliberate.** Cloud sits a few kilometres up and the Moon is 384,000 km away, so in the sky cloud always crosses in front — but the disc on the dashboard is a *card*, not a view through a window. It is drawn about fifty times the Moon's true angular size (the sky layer runs roughly 21 pixels per degree on the 10.1-inch panel, where the real Moon is about 11 pixels across) and it sits at a fixed place in the layout rather than where the Moon actually is. Letting cloud drift across it would assert that the Moon really is there, that large, in that direction — the same kind of claim the meteors and the starfield were changed to stop making. The dashboard describes the sky; only the layer behind it depicts the sky. The Moon's true position is on the targets page, on the alt-az plot with everything else.
+
 ### The starfield is the real sky
 
 The stars behind the dashboard are not decoration. They are plotted from the Yale Bright Star Catalogue down to magnitude 6.5 — about 8,400 stars — at their true altitude and azimuth for the configured site and the current moment, recomputed every minute. Constellations are therefore recognisable, and they move because the Earth turns rather than because a drift constant says so. The catalogue ships in the repository, so this needs no network.
