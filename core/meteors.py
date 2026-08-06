@@ -17,10 +17,23 @@ SOURCE: the IMO Working List of Visual Meteor Showers
 directly; the activity limits are the IMO's published activity DATES converted
 to solar longitude here, so nothing in this table is stored as a date.
 
-The falloff B is NOT from the IMO list, which publishes the population index r
-instead. These are conventional values and only shape the curve BETWEEN the
-published activity limits - the limits and the peak, which decide whether a
-shower appears at all, are the IMO's.
+SOURCE for the falloff B: Jenniskens P., 1994, "Meteor stream activity I. The
+annual streams", Astronomy and Astrophysics 287, 990-1013, checked 2026-08-06
+against the Dutch Meteor Society's abridged datalist. The IMO list cannot supply
+this: it publishes the population index r, which describes a shower's MAGNITUDE
+distribution, not how its rate rises and falls with solar longitude. Jenniskens
+fits exactly the form used here, ZHR = ZHRmax * 10^(-B|lambda - lambda_max|).
+
+Two of the eleven are estimates rather than published values, and are marked
+below: Jenniskens gives the Lyrids and the Leonids as "rev." (under revision at
+the time of publication). His generic value for high-inclination streams,
+B = 0.19 +- 0.08, is not used for them because both are sharply peaked and 0.19
+would spread them over roughly three days. Everything else in the B column is
+his measured value.
+
+Radiants and ZHRs stay with the IMO even where Jenniskens also publishes them:
+his are equinox 1950.0 and drawn from 1980s-90s observations, so mixing the two
+sources within a row would combine different epochs.
 
 Radiants drift roughly a degree a day through a shower's activity period, as the
 Earth's vantage point moves. That is ignored here; the IMO publishes drift rates
@@ -31,22 +44,37 @@ import math
 import ephem
 
 # name, peak solar longitude, active from/to (solar longitude), radiant RA/Dec
-# (J2000, degrees), zenithal hourly rate at peak, falloff B (per degree of solar
-# longitude either side of the peak).
+# (J2000, degrees), zenithal hourly rate at peak, then the falloff B BEFORE the
+# peak and AFTER it, per degree of solar longitude.
+#
+# The two Bs are separate because a stream is not obliged to be symmetric: the
+# Geminids build gradually and cut off sharply, which a single slope cannot
+# express, and using only the ascending value made the shower appear to persist
+# almost twice as long after maximum as it does.
 SHOWERS = [
-    ("Quadrantids",           283.2, 274.1, 291.4, 230.0,  49.0, 120, 2.20),
-    ("Lyrids",                 32.3,  25.7,  34.4, 271.0,  34.0,  18, 0.22),
-    ("η-Aquariids",            45.5,  28.6,  66.3, 338.0,  -1.0,  40, 0.08),
-    ("Southern δ-Aquariids",  127.0, 109.3, 149.5, 340.0, -16.0,  25, 0.09),
-    ("Perseids",              140.0, 114.1, 150.5,  48.0,  58.0, 150, 0.20),
-    ("Southern Taurids",      197.0, 166.9, 237.3,  32.0,   9.0,   5, 0.026),
-    ("Orionids",              208.0, 188.5, 224.2,  95.0,  16.0,  15, 0.12),
-    ("Northern Taurids",      230.0, 206.2, 257.6,  58.0,  22.0,   5, 0.026),
-    ("Leonids",               235.3, 223.2, 247.4, 152.0,  22.0,  15, 0.55),
-    ("Geminids",              262.2, 251.5, 267.7, 112.0,  33.0, 120, 0.39),
-    # The IMO gives the Ursids' ZHR as "var"; 10 is the usual quiet-year figure
-    # and the only invented number in this table.
-    ("Ursids",                270.7, 264.7, 273.8, 217.0,  76.0,  10, 0.90),
+    # Jenniskens lists the Quadrantids as the Bootids: single-curve fit B = 1.8,
+    # with a 2.5 main peak over a shallower background if the two-curve form is
+    # wanted. The single-curve value is what this one-slope model can carry.
+    ("Quadrantids",           283.2, 274.1, 291.4, 230.0,  49.0, 120, 1.8,   1.8),
+    # ESTIMATE - "rev." in Jenniskens. Set to keep the shower about as narrow as
+    # the IMO's activity dates imply.
+    ("Lyrids",                 32.3,  25.7,  34.4, 271.0,  34.0,  18, 0.22,  0.22),
+    ("η-Aquariids",            45.5,  28.6,  66.3, 338.0,  -1.0,  40, 0.080, 0.080),
+    ("Southern δ-Aquariids",  127.0, 109.3, 149.5, 340.0, -16.0,  25, 0.091, 0.091),
+    ("Perseids",              140.0, 114.1, 150.5,  48.0,  58.0, 150, 0.20,  0.20),
+    # Jenniskens fits the Taurids as one stream with a twin radiant, so both
+    # branches take the same slope.
+    ("Southern Taurids",      197.0, 166.9, 237.3,  32.0,   9.0,   5, 0.026, 0.026),
+    ("Orionids",              208.0, 188.5, 224.2,  95.0,  16.0,  15, 0.12,  0.12),
+    ("Northern Taurids",      230.0, 206.2, 257.6,  58.0,  22.0,   5, 0.026, 0.026),
+    # ESTIMATE - "rev." in Jenniskens, revised only in his later outburst work.
+    ("Leonids",               235.3, 223.2, 247.4, 152.0,  22.0,  15, 0.55,  0.55),
+    # The asymmetric one. Gradual rise, rapid decline after maximum - long noted
+    # in the observational literature, which is what fixes which branch is which.
+    ("Geminids",              262.2, 251.5, 267.7, 112.0,  33.0, 120, 0.39,  0.72),
+    # The IMO gives the Ursids' ZHR as "var". 10 is not a guess: it is
+    # Jenniskens' main-peak fit, ZHRmax = 10 +- 3 with B = 0.9 +- 0.4.
+    ("Ursids",                270.7, 264.7, 273.8, 217.0,  76.0,  10, 0.90,  0.90),
 ]
 
 # A dark clear sky still shows a handful of meteors belonging to no shower at
@@ -72,14 +100,19 @@ def active(when):
     """Showers running at this instant, as dicts, strongest first.
 
     `strength` is the fraction of the shower's peak rate expected now, from the
-    standard 10^(-B|dlambda|) falloff either side of the peak.
+    standard 10^(-B|dlambda|) falloff, taking the slope for whichever side of
+    the peak the Earth is currently on.
     """
     lam = solar_longitude(when)
     out = []
-    for name, peak, lo, hi, ra, dec, zhr, b in SHOWERS:
+    for name, peak, lo, hi, ra, dec, zhr, b_rise, b_fall in SHOWERS:
         if not _wrapped(lam, lo, hi):
             continue
-        d = abs((lam - peak + 180.0) % 360.0 - 180.0)
+        # Signed first: past the peak the shower is declining, and for an
+        # asymmetric stream that is a different slope from the approach.
+        signed = (lam - peak + 180.0) % 360.0 - 180.0
+        b = b_fall if signed > 0 else b_rise
+        d = abs(signed)
         out.append({
             "name": name, "ra": ra, "dec": dec, "zhr": zhr,
             "peak_lambda": peak, "delta_lambda": d,
