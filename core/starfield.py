@@ -46,8 +46,17 @@ def catalogue():
     return _CATALOGUE
 
 
-def _appearance(mag):
+def _appearance(mag, min_size=1):
     """(base brightness, drawn size) for a magnitude.
+
+    `min_size` raises the floor for a panel whose pixels are physically coarser
+    or which is read from further away. It is a property of the hardware, not of
+    the sky: the size bands below were calibrated on the 5" panel at 0.088mm per
+    pixel, and the same bands on the 10.1" at 0.113mm draw a sky with a fifth of
+    the lit area per megapixel, because a portrait aspect narrows the field to
+    56 degrees and spreads a third fewer stars over 2.5x the pixels. Widening
+    the field cannot close that honestly - it would need 242 degrees of azimuth
+    in one flat window - so the drawn area per star is the lever that is left.
 
     NOT linear in magnitude. Magnitude is already logarithmic and the catalogue
     is overwhelmingly faint - two thirds of it is dimmer than magnitude 4.5 - so
@@ -80,7 +89,7 @@ def _appearance(mag):
         size = 2
     else:
         size = 1
-    return base, size
+    return base, max(size, min_size)
 
 
 def project_point(az, alt, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0):
@@ -104,7 +113,8 @@ def project_point(az, alt, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=
     return x, y, inside
 
 
-def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0):
+def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
+            min_size=1):
     """Stars currently above the horizon and inside the view, in Sky's format.
 
     Returns (x, y, base, twinkle phase, twinkle speed, size) tuples, which is
@@ -126,7 +136,7 @@ def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0):
                                      az_centre, alt_centre, fov_vertical)
         if not inside:
             continue
-        base, size = _appearance(mag)
+        base, size = _appearance(mag, min_size)
         rng = random.Random(i)
         stars.append((int(x), int(y), base,
                       rng.uniform(0.0, 2 * math.pi), rng.uniform(0.4, 2.6), size))

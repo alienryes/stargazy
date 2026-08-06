@@ -248,9 +248,20 @@ class Sky:
                 meteors.remove(m)
 
     def make_cloud_sprite(self):
-        """One soft, translucent cloud: overlapping blobs on an alpha mask, blurred."""
-        w = random.randint(360, 540)
-        h = random.randint(150, 240)
+        """One soft, translucent cloud: overlapping blobs on an alpha mask, blurred.
+
+        Sized as a FRACTION of the canvas, not in absolute pixels. Fixed sizes
+        were tuned on 1280x720 and covered 6-10% of it each, so seven of them
+        overlapped into a continuous cloud field. The same sprites on a 1200x1920
+        panel cover 3.5-4.7%, stop overlapping, and each one's own rectangular
+        footprint becomes visible - clouds that read as blocks rather than as
+        weather. The fractions below reproduce the original ranges on the 5"
+        canvas, so every panel now gets the same proportion of sky covered.
+
+        The blur radii are already relative to the sprite, so they follow.
+        """
+        w = random.randint(int(self.w * 0.28), int(self.w * 0.42))
+        h = random.randint(int(self.h * 0.21), int(self.h * 0.33))
         mask = Image.new("L", (w, h), 0)
         md = ImageDraw.Draw(mask)
         for _ in range(random.randint(5, 8)):

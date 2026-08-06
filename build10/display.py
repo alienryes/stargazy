@@ -57,7 +57,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.4.2"
+VERSION = "0.5.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -127,6 +127,15 @@ METEOR_COMPRESSION = 20.0
 # aspect ratio. Set sky.real_stars = false for the seeded random field instead.
 REAL_STARS = True
 CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 90.0
+# The faintest stars are drawn 2px rather than 1px here. Portrait narrows the
+# field to 56 degrees, so this panel holds a third fewer stars across 2.5x the
+# pixels: measured against the 5" build it is a fifth of the lit area per
+# megapixel, at identical per-star brightness. The field cannot be widened
+# enough to fix that without turning the window into a fisheye, and a single
+# pixel is 0.113mm here against 0.088mm on the 5", so the floor is raised
+# instead. Size already stands in for brightness in this renderer - a brighter
+# star reads as larger through glare - so this stays within that convention.
+STAR_MIN_SIZE = 2
 
 # The engine, sized for this panel. The daemon reads these three off this module
 # as its layout.
@@ -806,7 +815,7 @@ def refresh_stars():
         return
     utc = datetime.now(timezone.utc).replace(tzinfo=None)
     obs = observer(LAT or 0.0, LON or 0.0, when=utc)
-    stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
+    stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV, STAR_MIN_SIZE)
     sky.set_stars(stars)
     refresh_radiants(obs, utc)
     return len(stars)
