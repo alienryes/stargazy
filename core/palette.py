@@ -76,8 +76,20 @@ STAR_COLOUR = (232, 234, 248)
 # distant horizon first, which is why southern England reports red glow where
 # Tromso gets green. Neither carries meaning on its own: between dusk and dawn
 # the whole panel collapses to red luma, so this is naturalism, not encoding.
-AURORA_GREEN = (116, 226, 152)
-AURORA_RED   = (206, 82, 96)
+# SAMPLED from an unprocessed RAW aurora photograph, not chosen. Both hues came
+# out well away from the obvious guess: the green is a YELLOW-green at hue 77
+# (10th-90th percentile 67-88 across 10,102 core pixels), not the spring green
+# it is usually drawn as, and the upper colour is MAGENTA at hue 324 (314-330),
+# not scarlet - which is right, since it is 630nm oxygen mixed with N2+ violet.
+#
+# Hue and relative saturation come from the photograph; absolute brightness does
+# not. That picture is a dim night scene while these are drawn at an opacity
+# carrying the storm's probability, so copying its luminance would render a
+# severe storm as faintly as a real one photographs. Saturation is taken to
+# about twice the photograph's, which puts the blended green at (118,145,63)
+# against the photograph's own (118,130,87) - the same colour, brighter.
+AURORA_GREEN = (208, 255, 86)
+AURORA_RED   = (255, 78, 183)
 
 
 def verdict(score):
