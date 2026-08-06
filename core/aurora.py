@@ -88,6 +88,51 @@ def _geometry(lat, lon, glat, glon, emission_km):
     return np.degrees(theta), bearing, elevation
 
 
+# Resolution of the drawable field. Coarser than the model grid on purpose: the
+# point is the shape of the storm from here, and OVATION resolves nothing finer
+# than this at the distances that matter.
+FIELD_AZ_BINS, FIELD_ALT_BINS = 96, 48
+# Everything faintly lit goes into the field, not just what clears the alert
+# threshold - otherwise the drawn shape would be cut off at its own edge and the
+# storm would look smaller than the model says it is.
+FIELD_FLOOR_PCT = 1.0
+
+
+def lowest_visible_km(theta_deg):
+    """The lowest altitude still above the horizon at this angular distance.
+
+    Everything below it is behind the Earth. This is what decides the COLOUR an
+    observer would see: the green line sits around 100-150 km, so once the
+    lowest visible altitude climbs past that band only the red emission from
+    200 km and up is left - which is exactly why a distant aurora reads red and
+    one overhead reads green.
+    """
+    return EARTH_R_KM * (1.0 / np.cos(np.radians(theta_deg)) - 1.0)
+
+
+def _bin_field(bearing, elevation, prob, theta, alt_max=90.0):
+    """Per bearing/elevation bin: highest probability and lowest visible height.
+
+    Returned as [(az, alt, prob, lowest_visible_km)]. alt_max is the full sky,
+    matching the altitude axis a caller would plot it against; a caller drawing
+    a different axis must rebin rather than rescale.
+    """
+    if bearing.size == 0:
+        return []
+    ai = np.clip((bearing / 360.0 * FIELD_AZ_BINS).astype(int), 0, FIELD_AZ_BINS - 1)
+    ei = np.clip((elevation / alt_max * FIELD_ALT_BINS).astype(int), 0, FIELD_ALT_BINS - 1)
+    flat = ai * FIELD_ALT_BINS + ei
+    best = np.zeros(FIELD_AZ_BINS * FIELD_ALT_BINS)
+    np.maximum.at(best, flat, prob)
+    # The most favourable geometry in the bin, since that is what would be seen.
+    low = np.full(FIELD_AZ_BINS * FIELD_ALT_BINS, np.inf)
+    np.minimum.at(low, flat, lowest_visible_km(theta))
+    idx = np.flatnonzero(best > 0)
+    return [(float((i // FIELD_ALT_BINS + 0.5) * 360.0 / FIELD_AZ_BINS),
+             float((i % FIELD_ALT_BINS + 0.5) * alt_max / FIELD_ALT_BINS),
+             float(best[i]), float(low[i])) for i in idx]
+
+
 def best_visible(grid, lat, lon, emission_km=DEFAULT_EMISSION_KM,
                  threshold_pct=DEFAULT_THRESHOLD_PCT):
     """The strongest aurora above this site's horizon, or None.
@@ -132,6 +177,11 @@ def best_visible(grid, lat, lon, emission_km=DEFAULT_EMISSION_KM,
         # visible oval look identical through a maximum alone.
         "visible_cells": int(visible.sum()),
     }
+    # The storm's real extent, for drawing. Every faintly lit cell above the
+    # horizon, binned - so what gets plotted is the model's own shape from this
+    # position rather than an impression of one.
+    lit = (theta <= horizon_angle(emission_km)) & (prob >= FIELD_FLOOR_PCT)
+    out["field"] = _bin_field(bearing[lit], elevation[lit], prob[lit], theta[lit])
     return out
 
 

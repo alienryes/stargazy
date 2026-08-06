@@ -22,9 +22,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
-from core.aurora import compass
+from core.aurora import FIELD_ALT_BINS, FIELD_AZ_BINS, compass
 from core.aurora import visible_now as aurora_now
 from core.daemon import install_signal_handlers, run_daemon
 from core.fonts import font
@@ -45,6 +45,8 @@ from core.night import (
     tonight,
 )
 from core.palette import (
+    AURORA_GREEN,
+    AURORA_RED,
     BG,
     DIM,
     MOON,
@@ -66,7 +68,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -945,6 +947,63 @@ AUR_KP_H = 220
 AUR_KP_MAX, AUR_KP_STORM = 9.0, 5.0
 
 
+# Opacity IS the probability - a 60% cell is drawn 60% solid - so the shape
+# carries the strength without a legend, and no separate brightness constant can
+# drift away from the numbers printed beside it. Measured on the composited
+# frame, not on the bare overlay, where transparent reads as black and the same
+# values look far stronger than the panel renders them.
+AUR_FIELD_BLUR = 20
+# Where the colour turns over, in km of lowest-visible altitude. The green line
+# is emitted around 100-150 km, so once the Earth hides everything below about
+# 180 km only the red is left; below about 110 km the green band is fully in
+# view. An inference from geometry, not something OVATION reports.
+AUR_GREEN_SEEN_KM, AUR_RED_ONLY_KM = 110.0, 180.0
+
+
+def _draw_aurora_field(img, field):
+    """The storm's real extent on the bearing-by-altitude plot.
+
+    Every lit model cell above the horizon, binned and shaded by probability, so
+    the drawn shape is the model's own from this position. The blur is
+    PRESENTATION and nothing else: it smooths the grid's steps, which is exactly
+    why the two reported points and every number on the page come from the
+    unsmoothed cells rather than from this image.
+
+    What is deliberately not drawn is structure - curtains, rays, a green glow.
+    The model resolves nothing of the sort, so drawing it would be inventing on
+    top of data that already exists, which is the error the starfield and the
+    meteor radiants were changed to stop making.
+    """
+    if not field:
+        return
+    w, h = FIELD_AZ_BINS, FIELD_ALT_BINS
+    # The unlit background is red, not black: blurring pulls the surround into
+    # the edges, and the faint fringe of any aurora is its most distant part -
+    # which is the red one. Black would just dirty the edge.
+    hue = Image.new("RGB", (w, h), AURORA_RED)
+    alpha = Image.new("L", (w, h), 0)
+    phue, palpha = hue.load(), alpha.load()
+    for az, alt, prob, low_km in field:
+        x = min(w - 1, int(az / 360.0 * w))
+        # Altitude runs up the plot, so the top row is the zenith.
+        y = min(h - 1, int((1.0 - min(alt, PAN_ALT_MAX) / PAN_ALT_MAX) * h))
+        v = int(min(100.0, prob) / 100.0 * 255)
+        if v > palpha[x, y]:
+            palpha[x, y] = v
+            # Green only where the green-line altitudes are actually above the
+            # horizon; red where the low emission is hidden by the Earth.
+            t = (AUR_RED_ONLY_KM - low_km) / (AUR_RED_ONLY_KM - AUR_GREEN_SEEN_KM)
+            t = max(0.0, min(1.0, t))
+            phue[x, y] = tuple(int(r + (g - r) * t)
+                               for r, g in zip(AURORA_RED, AURORA_GREEN))
+
+    box = (PAN_X1 - PAN_X0, PAN_BASE - PAN_TOP)
+    blur = ImageFilter.GaussianBlur(AUR_FIELD_BLUR)
+    glow = hue.resize(box, Image.BILINEAR).filter(blur).convert("RGBA")
+    glow.putalpha(alpha.resize(box, Image.BILINEAR).filter(blur))
+    img.alpha_composite(glow, (PAN_X0, PAN_TOP))
+
+
 def _draw_kp_forecast(draw, rows, top, f):
     """SWPC's three-day Kp outlook: is this building or fading.
 
@@ -1024,6 +1083,9 @@ def render_aurora(states, lat, lon):
              if same else
              [(strongest["bearing"], strongest["elevation"], "strongest", OBJECT, 9),
               (highest["bearing"], highest["elevation"], "best placed", OBJECT, 9)])
+    # Storm first, axes and marks over it: the shape is the background the
+    # numbers are annotations on, not the other way round.
+    _draw_aurora_field(img, data.get("field") or [])
     _draw_panorama(draw, marks, "now", f["sm"], f["xs"])
 
     y = AUR_Y0
@@ -1037,6 +1099,16 @@ def render_aurora(states, lat, lon):
                   f"{d['distance_km']:.0f} km away",
                   font=f["sm"], fill=MUTED)
         y += AUR_GAP * 2 + 20
+
+    # Neither heading explains itself to somebody seeing the page for the first
+    # time, and they are the two numbers the page exists to give.
+    if not same:
+        draw.text((MARGIN, y - 10),
+                  "Strongest is the brightest patch in view; best placed is the "
+                  "one highest",
+                  font=f["xs"], fill=DIM)
+        draw.text((MARGIN, y + 32), "above your horizon.", font=f["xs"], fill=DIM)
+        y += 60
 
     # What the local sky is doing about it. A forecast the observer cannot act
     # on because it is overcast is worth saying out loud rather than leaving

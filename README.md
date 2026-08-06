@@ -131,6 +131,10 @@ A fourth page that exists **only when aurora is above this site's horizon and it
 
 Two cells are reported, because they answer different questions and are routinely different: the **strongest**, and the **best placed** — the highest above the horizon. The strongest is often the one grazing the horizon, where the whole thickness of the atmosphere and any terrain at all stand in the way, so reporting it alone would send an observer to look at nothing.
 
+**The storm itself is drawn**, not just its extremes: every lit model cell is binned by bearing and elevation and shaded by its probability, so the shape on the plot is the model's own from your position. Opacity *is* the probability — a 60% cell is drawn 60% solid — and the blur only smooths the grid's steps. No structure is invented; curtains and rays are not something the model resolves.
+
+**Colour follows emission height.** The green line is emitted around 100–150 km and the red from 200 km upward, and the Earth hides the lower part first — so the colour is computed from the lowest altitude still above your horizon at each cell's distance. A distant aurora renders red because the red tops are genuinely all that clears the horizon, and one overhead renders green. That is why southern England reports a red glow while Tromsø gets green curtains, and the same code produces both. It is an inference from geometry rather than something OVATION reports, and between dusk and dawn the panel's night mode collapses everything to red luma anyway, so the colour is naturalism and never carries meaning on its own.
+
 The page also carries SWPC's three-day Kp outlook, and says whether the local sky is clear enough to act on any of it. Everything shown is a **probability from a model, roughly 76 minutes ahead of its observation time** — never an observation, and the page says so.
 
 Source: NOAA SWPC's OVATION model. No key, no registration.

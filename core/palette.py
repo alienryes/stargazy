@@ -68,6 +68,18 @@ DIM      = (90, 98, 120)     # divider lines / subtle rules
 STAR_COLOUR = (232, 234, 248)
 
 
+# Aurora, and a deliberate exception to everything above: these are NATURALISTIC
+# rather than part of the state scheme, in the same position as the lunar
+# photograph and the DSS2 cutouts. Which one is drawn follows emission height -
+# the green line sits around 100-150 km and is what an observer under the oval
+# sees, while the red comes from 200 km and up and is the part that clears a
+# distant horizon first, which is why southern England reports red glow where
+# Tromso gets green. Neither carries meaning on its own: between dusk and dawn
+# the whole panel collapses to red luma, so this is naturalism, not encoding.
+AURORA_GREEN = (116, 226, 152)
+AURORA_RED   = (206, 82, 96)
+
+
 def verdict(score):
     """The label for a deep-sky forecast score 0-100.
 
