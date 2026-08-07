@@ -63,7 +63,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # which nothing here can be confirmed against real hardware again, so 3.7.2 marks
 # the last state that was. Repo releases are versioned separately in
 # pyproject.toml and will keep moving; the two were never going to line up.
-FIRMWARE_VERSION = "3.11.1"
+FIRMWARE_VERSION = "3.11.2"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile

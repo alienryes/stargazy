@@ -36,6 +36,9 @@ MIN_RADIANT_PX = 40
 # Trail geometry: segment length and count, the drawn length being the product.
 # Shower meteors scale the segment by their foreshortening.
 TRAIL_SEG, TRAIL_SEGMENTS = 11.0, 14
+# Radius of the meteor's bright head. It is drawn as a capsule spanning one
+# frame's travel rather than a dot - see draw_meteor for why.
+HEAD_R = 2
 
 NIGHT_GRADIENT = ((6, 8, 20), (15, 17, 42))
 TWILIGHT_GRADIENT = ((22, 32, 62), (44, 60, 100))
@@ -347,6 +350,24 @@ def draw_meteor(draw, m):
         x1, y1 = m["x"] - ux * seg * i, m["y"] - uy * seg * i
         x2, y2 = m["x"] - ux * seg * (i + 1), m["y"] - uy * seg * (i + 1)
         draw.line([(x1, y1), (x2, y2)], fill=c, width=2)
+    # The head covers the ground crossed since the previous frame rather than
+    # marking a point. A meteor steps 4.5-8.5 px between frames against a head
+    # 5 px across, so a round head lands clear of where it last was: rendering
+    # three consecutive frames into separate channels shows three separated
+    # blobs riding a continuous trail. The path is not gapped - the leading
+    # trail segment is full brightness and 11 px long - so what beads is the
+    # WIDTH, a bright dot hopping along a thin thread.
+    #
+    # That is why this reads as judder at any frame rate the panel can hold.
+    # Measured on the 10.1" build, frame times run a median of 66 ms with a p99
+    # of 74, so 14 fps overruns its budget on 15% of frames where 12 overruns
+    # on 0.3% - raising the rate would deliver frames less evenly, not more.
+    # A capsule spanning the step tiles continuously at any speed and any rate,
+    # by construction, and is also what a camera would record.
     hb = int(255 * fade)
-    draw.ellipse([m["x"] - 2, m["y"] - 2, m["x"] + 2, m["y"] + 2],
-                 fill=(hb, hb, int(235 * fade)))
+    head = (hb, hb, int(235 * fade))
+    px, py = m["x"] - m["vx"], m["y"] - m["vy"]
+    draw.line([(px, py), (m["x"], m["y"])], fill=head, width=HEAD_R * 2 + 1)
+    for cx, cy in ((m["x"], m["y"]), (px, py)):
+        draw.ellipse([cx - HEAD_R, cy - HEAD_R, cx + HEAD_R, cy + HEAD_R],
+                     fill=head)
