@@ -15,16 +15,32 @@ from core.values import _dt
 NIGHT_CYCLE = ("off", "dim", "red")
 
 
+def red_luma(arr):
+    """Luma as uint8, for the red night mode.
+
+    Rec.709 coefficients: 54/183/19 over 256 is 0.211/0.715/0.074. (This was
+    described as Rec.601 for a while, which would be 0.299/0.587/0.114 - a
+    different transform, and the numbers were always the 709 ones.)
+
+    Split out so the coefficients live in ONE place: night_filter stacks this
+    back into an HxWx3 array for the general path, while the 32bpp framebuffer
+    packs it straight into its output buffer and never builds that array at
+    all. Both must agree by construction, not by being kept in step.
+    """
+    return ((arr[:, :, 0] * 54 + arr[:, :, 1] * 183
+             + arr[:, :, 2] * 19) >> 8).astype(np.uint8)
+
+
 def night_filter(arr, mode, dim):
     """Night transform over an HxWx3 uint16 array. The transform lives here
     once; both the framebuffer path and --save go through it."""
     if mode == "dim":
         return (arr * dim) // 100
     if mode == "red":
-        # Rec.601 luma, then everything onto the red channel. Red is what
-        # observers use because long wavelengths leave scotopic vision alone;
-        # a trace of green and blue keeps it from looking like a fault.
-        lum = (arr[:, :, 0] * 54 + arr[:, :, 1] * 183 + arr[:, :, 2] * 19) >> 8
+        # Everything onto the red channel. Red is what observers use because
+        # long wavelengths leave scotopic vision alone; a trace of green and
+        # blue keeps it from looking like a fault.
+        lum = red_luma(arr).astype(arr.dtype)
         out = np.zeros_like(arr)
         out[:, :, 0] = lum
         out[:, :, 1] = lum >> 4
