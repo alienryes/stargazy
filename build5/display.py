@@ -53,7 +53,7 @@ from core.panel import Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
-from core.starfield import project, project_point
+from core.starfield import project, project_point, px_per_degree
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
@@ -65,7 +65,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.12.0"
+FIRMWARE_VERSION = "3.13.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -109,10 +109,14 @@ BTN_GAP  = 8
 # that is where everything transits from the northern hemisphere.
 #
 # 70 degrees vertical, not the 10" build's 90. The horizontal field follows from
-# the aspect ratio - so the scale stays isotropic either way - and on this
-# landscape canvas 70 gives about 790 stars in view against the seeded field's
-# 200, measured at 140% of its drawn area. 90 would give 1,419 and 240%, at the
-# cost of a wider plate-carree stretch near the zenith.
+# the aspect ratio, and on this landscape canvas 70 gives several hundred stars
+# in view against the seeded field's 200.
+#
+# The old reason for preferring it - that 90 would stretch the sky further near
+# the zenith - no longer applies: the projection is gnomonic, which has no pole
+# to stretch around. What remains is that a wider field packs more sky into the
+# same pixels, and gnomonic's own scale growth away from the axis is steeper the
+# wider it is opened.
 REAL_STARS = True
 CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 70.0
 
@@ -783,7 +787,10 @@ def refresh_radiants(obs, utc):
     by design - both cut every shower and the sporadics by the same factor and
     cancel out of the ratio. They already do their work on the cadence.
     """
-    px_per_degree = H / CAMERA_FOV
+    # From the projection itself, not h/fov: gnomonic scale at the axis is
+    # not the plate carree's uniform pixels-per-degree, and the two differ
+    # by about a quarter on the 10.1" field.
+    ppd = px_per_degree(H, CAMERA_FOV)
     radiants = []
     for s in active(utc):
         alt, az = alt_az(obs, s["ra"], s["dec"])
@@ -796,7 +803,7 @@ def refresh_radiants(obs, utc):
     # weight with no position. Its reference altitude matches the one the rate
     # uses, so the two agree on how much of tonight is sporadic.
     radiants.append((None, None, SPORADIC_ZHR * math.sin(math.radians(45.0))))
-    sky.set_radiants(radiants, px_per_degree)
+    sky.set_radiants(radiants, ppd)
 
 
 def _star_thread():

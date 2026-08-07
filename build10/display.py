@@ -63,13 +63,13 @@ from core.panel import Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
-from core.starfield import project, project_point
+from core.starfield import project, project_point, px_per_degree
 from core.targets import load_cutouts, peak, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.9.2"
+VERSION = "0.10.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -928,7 +928,10 @@ def refresh_radiants(obs, utc):
     by design - both cut every shower and the sporadics by the same factor and
     cancel out of the ratio. They already do their work on the cadence.
     """
-    px_per_degree = H / CAMERA_FOV
+    # From the projection itself, not h/fov: gnomonic scale at the axis is
+    # not the plate carree's uniform pixels-per-degree, and the two differ
+    # by about a quarter on the 10.1" field.
+    ppd = px_per_degree(H, CAMERA_FOV)
     radiants = []
     for s in active(utc):
         alt, az = alt_az(obs, s["ra"], s["dec"])
@@ -941,7 +944,7 @@ def refresh_radiants(obs, utc):
     # weight with no position. Its reference altitude matches the one the rate
     # uses, so the two agree on how much of tonight is sporadic.
     radiants.append((None, None, SPORADIC_ZHR * math.sin(math.radians(45.0))))
-    sky.set_radiants(radiants, px_per_degree)
+    sky.set_radiants(radiants, ppd)
 
 
 def _star_thread():

@@ -92,25 +92,78 @@ def _appearance(mag, min_size=1):
     return base, max(size, min_size)
 
 
+def px_per_degree(h, fov_vertical):
+    """Canvas pixels per degree at the CENTRE of the view.
+
+    Gnomonic scale grows away from the axis, roughly as 1/cos^2 of the angle
+    off it, so no single number describes the whole field. This is the value at
+    the axis, and it is what the meteor code wants: that converts a pixel
+    distance from the radiant into an angle only to shorten trails pointing
+    towards the observer, which is a soft effect rather than a measurement.
+
+    It lives here so it cannot drift from the projection it describes.
+    """
+    return math.radians(1.0) * (h / 2.0) / math.tan(math.radians(fov_vertical) / 2.0)
+
+
 def project_point(az, alt, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0):
     """One alt-az direction as (x, y, inside_view) canvas coordinates.
 
-    Shared by the starfield and by the meteor radiants, so a radiant lands where
-    the stars around it land and the two cannot drift apart.
+    GNOMONIC, about the camera axis - the tangent-plane projection a lens
+    records. The obvious alternative, and what this used to do, is to map
+    azimuth and altitude straight onto x and y. That is a plate carree, and it
+    is wrong in a way that is easy to miss because it looks fine near the
+    horizon: one degree of AZIMUTH is only cos(alt) degrees of sky, so
+    horizontal distances come out exaggerated by 1/cos(alt) - 1.41x at 45
+    degrees altitude, 3.9x at 75, without limit at the zenith. Constellations
+    overhead were smeared sideways, and a star passing near the zenith crossed
+    the whole panel in a minute because azimuth is degenerate there.
+
+    Gnomonic has no such pole: it is defined relative to where the camera
+    points, so the zenith is an ordinary direction. Scale still varies across
+    the field - every flat map of a sphere distorts something - but it varies
+    smoothly with distance from the axis instead of blowing up along a line the
+    sky happens to sweep through.
+
+    Shared by the starfield and by the meteor radiants, so a radiant lands
+    where the stars around it land and the two cannot drift apart.
 
     The coordinates are returned whether or not the direction is in view, and
     the caller decides what that means. A star outside the view is not drawn; a
     radiant outside it still governs its meteors, because the shower is
     overhead either way - the window simply is not pointed at it.
     """
-    fov_h = fov_vertical * (w / h)
-    # Signed angular distance from the centre of view, wrapped to +-180.
-    daz = (az - az_centre + 180.0) % 360.0 - 180.0
-    dalt = alt - alt_centre
-    x = w / 2.0 + (daz / fov_h) * w
-    y = h / 2.0 - (dalt / fov_vertical) * h
-    inside = abs(daz) <= fov_h / 2.0 and abs(dalt) <= fov_vertical / 2.0
-    return x, y, inside
+    a, e = math.radians(az), math.radians(alt)
+    a0, e0 = math.radians(az_centre), math.radians(alt_centre)
+    sa, ca, se, ce = math.sin(a), math.cos(a), math.sin(e), math.cos(e)
+    sa0, ca0, se0, ce0 = math.sin(a0), math.cos(a0), math.sin(e0), math.cos(e0)
+
+    # East, North, Up. `right` is the direction of increasing azimuth at the
+    # axis and `up` that of increasing altitude, so the screen keeps the same
+    # handedness the plate carree had: x grows eastward, y grows downward.
+    vx, vy, vz = sa * ce, ca * ce, se
+    axis = (sa0 * ce0, ca0 * ce0, se0)
+    right = (ca0, -sa0, 0.0)
+    up = (-sa0 * se0, -ca0 * se0, ce0)
+
+    cosc = vx * axis[0] + vy * axis[1] + vz * axis[2]
+    xr = vx * right[0] + vy * right[1] + vz * right[2]
+    yu = vx * up[0] + vy * up[1] + vz * up[2]
+    scale = (h / 2.0) / math.tan(math.radians(fov_vertical) / 2.0)
+
+    if cosc <= 1e-6:
+        # At or behind the tangent plane there is no finite projection. A
+        # radiant there still has a bearing, though, and its meteors have to
+        # sweep in from the right edge, so it is placed far off-canvas along
+        # that bearing rather than being given a wrapped position that would
+        # point them the wrong way. Never in view.
+        n = math.hypot(xr, yu) or 1.0
+        k = 10.0 * max(w, h)
+        return w / 2.0 + xr / n * k, h / 2.0 - yu / n * k, False
+
+    x = w / 2.0 + (xr / cosc) * scale
+    y = h / 2.0 - (yu / cosc) * scale
+    return x, y, (0.0 <= x < w and 0.0 <= y < h)
 
 
 def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
