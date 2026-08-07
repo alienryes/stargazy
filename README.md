@@ -303,6 +303,8 @@ A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](ca
 
 **This is for the 5" build only.** The 10.1" panel mounts and cools its Pi perfectly well with the board left open — see the note under Requirements.
 
+For the 10.1" panel there is a **stand** instead, in [`stand10/`](stand10/README.md): one printed part and two M2.5 screws, holding the panel at a 10° lean with the Pi left open on its back. It is **GPL-3.0, not CC BY** — nothing in it derives from RonnyS's case, since the 10.1" panel decouples its enclosure brackets from the Pi's own mounting pattern and none of the 5" design carries over. It has not yet been printed.
+
 The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke stand (CadQuery frame + riser + WS2812B LED bezel ring). After moving to the self-lit Touch Display 2 that design was retired and archived, with its full history, to a separate private repository.
 
 ---
@@ -399,3 +401,5 @@ This project is a thin dashboard over other people's hard work.
 **GPL-3.0** — see [LICENSE](LICENSE). Chosen to match [pilomar](https://github.com/Short-bus/pilomar), the Pi miniature-observatory project by Short-bus that this display was inspired by.
 
 **Except `case/`**, which is **CC BY** rather than GPL, because it is a remix of RonnyS's CC-BY model and that licence carries forward. Credit RonnyS and this project if remixed further.
+
+`stand10/` is **GPL-3.0** like the rest of the repository. It is the 10.1" panel's stand and is original work, not a remix, so the CC BY attribution requirement does not reach it.

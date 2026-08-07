@@ -1,13 +1,13 @@
 [project]
 name = "touch2-stargazing-display"
-version = "4.7.2"
+version = "4.8.0"
 
 [tool.ruff]
 line-length = 100
 # Search paths for first-party modules, not module names: the repo root is what
 # makes `core` first-party, and each build folder is what makes its own modules
 # (touch.py) first-party. Without these the import blocks sort as third-party.
-src = [".", "build5", "build10"]
+src = [".", "build5", "build10", "stand10"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
