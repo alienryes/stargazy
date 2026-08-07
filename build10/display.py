@@ -69,7 +69,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.10.0"
+VERSION = "0.11.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -149,18 +149,19 @@ CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 90.0
 # star reads as larger through glare - so this stays within that convention.
 STAR_MIN_SIZE = 2
 
-# Twinkle amplitude, lowered from the 0.45 the 5" build still uses. The swing
-# is not a brightness control - the centre stays at 0.55 either way - but it
-# decides how many stars survive draw_stars' cull at 0.05. Measured on this
-# panel's own catalogue: at 0.45 only 743 of 927 stars were lit at any instant
-# at gain 0.45, and every one of them went dark for part of its cycle; below
-# 0.352 all 927 stay lit at every gain.
+# Twinkle amplitude at the ZENITH, and the ceiling near the horizon. Each star
+# takes the first scaled by the airmass its light crosses and clamped to the
+# second, so a star overhead sits almost steady while one low down shimmers -
+# which is what scintillation actually does, and why a single figure looked
+# wrong in both halves of the field at once.
 #
-# 0.30 rather than 0.35 because the cliff is close and twilight sits BELOW the
-# usual floor: sky_params clamps gain to 0.45 in the ordinary case but sets it
-# to 0.40 outright in twilight, where 0.35 culls again. 0.30 holds the whole
-# field at every gain the display can produce.
-TWINKLE_AMP = 0.30
+# In magnitudes, 0.05 is a 0.20 mag swing and 0.20 is 0.83. The field shipped
+# at a flat 0.45, or 1.33 mag, against the 0.1-0.3 mag real scintillation
+# manages at mid altitude - so it read as the sky breathing.
+#
+# Both are well under 0.327, the amplitude at which the trough of the faintest
+# star meets draw_stars' cull at the lowest gain the display produces.
+TWINKLE_AMP, TWINKLE_MAX = 0.05, 0.20
 
 # How often the real positions are recomputed. Nothing interpolates between
 # refreshes - the whole field is swapped at once - so this interval IS the size
@@ -190,7 +191,7 @@ AURORA_EMISSION_KM = 250.0
 
 # The engine, sized for this panel. The daemon reads these three off this module
 # as its layout.
-sky = Sky(W, H, stars=520, twinkle=TWINKLE_AMP)
+sky = Sky(W, H, stars=520, twinkle=TWINKLE_AMP, twinkle_max=TWINKLE_MAX)
 fb = Framebuffer(W, H, FB_W, FB_H, ROTATE, FB_DEV)
 strip = Strip(W, MARGIN, STRIP_Y, STRIP_H, BTN_GAP, text_dy=24)
 

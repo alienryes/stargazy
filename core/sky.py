@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from core.palette import STAR_COLOUR
+from core.starfield import TWINKLE_SPEED, scintillation
 from core.values import _f, _i
 
 # Parallax depth, keyed by the star's size. Bigger stars read as nearer, so they
@@ -84,31 +85,49 @@ class Sky:
     rendered frame can be compared byte for byte against an earlier one.
     """
 
-    def __init__(self, w, h, stars=200, seed=7, twinkle=0.45):
+    def __init__(self, w, h, stars=200, seed=7, twinkle=0.05, twinkle_max=0.20):
         self.w, self.h = w, h
-        # How far the twinkle swings either side of 0.55. This is not a
-        # brightness control - the centre stays at 0.55 whatever it is set to,
-        # so only the depth of the trough changes. What that decides is how
-        # many stars are CULLED: draw_stars drops anything at or below 0.05,
-        # and on the 10.1" panel the faintest star's base is 0.560, so at the
-        # shipped 0.45 the bottom of the cycle lands at 0.560 x 0.10 x gain and
-        # falls under the cull for any gain below about 0.9. Measured on the
-        # real catalogue there, 743 of 927 stars were drawn at an instant at
-        # gain 0.45; below an amplitude of 0.352 all 927 are. See build10.
+        # Twinkle amplitude, either side of a centre that stays at 0.55 - so
+        # neither of these is a brightness control, only the depth of the
+        # trough. `twinkle` is the amplitude AT THE ZENITH and `twinkle_max`
+        # the ceiling near the horizon; each star's own value is `twinkle`
+        # times its scintillation factor, clamped.
+        #
+        # Amplitude reads most usefully in magnitudes: the swing is a ratio of
+        # (0.55 + a) to (0.55 - a), so 0.05 is 0.20 mag, 0.12 is 0.48 and 0.20
+        # is 0.83. The field shipped at a flat 0.45, which is 1.33 mag - four
+        # to ten times what real scintillation does - and read as the whole sky
+        # breathing rather than twinkling.
+        #
+        # The floor also has to keep stars out of draw_stars' cull at 0.05. The
+        # faintest star's base is 0.560 and the lowest gain the display
+        # produces is 0.40 in twilight, so the trough is 0.560 x (0.55 - a) x
+        # 0.40, which stays above the cull for any amplitude under 0.327. The
+        # ceiling here is well inside that.
         self.twinkle = twinkle
+        self.twinkle_max = twinkle_max
         random.seed(seed)
-        # x, y, base brightness, twinkle phase, twinkle speed, size.
-        self.stars = [
-            (
-                random.randint(0, w - 1),
-                random.randint(0, h - 1),
+        # x, y, base brightness, twinkle phase, twinkle speed, size, and the
+        # scintillation factor. This field is the fallback used when a build
+        # has not supplied real positions, so it has no true altitudes; height
+        # up the canvas stands in for one, which is the same thing the eye
+        # assumes when it looks at it.
+        # An explicit loop rather than a comprehension, so x is drawn before y
+        # exactly as before. The order matters beyond this field: the global
+        # random stream is shared with the cloud sprites and the meteors, and
+        # swapping two draws here would shift everything after them.
+        self.stars = []
+        for _ in range(stars):
+            x = random.randint(0, w - 1)
+            y = random.randint(0, h - 1)
+            self.stars.append((
+                x, y,
                 random.uniform(0.35, 1.0),
                 random.uniform(0.0, 2 * math.pi),
-                random.uniform(0.4, 2.6),
+                random.uniform(*TWINKLE_SPEED),
                 1 if random.random() > 0.28 else (2 if random.random() > 0.25 else 3),
-            )
-            for _ in range(stars)
-        ]
+                scintillation(90.0 * (1.0 - y / h)),
+            ))
         self._sprites = None
         self._bases = None
         # Meteor radiants for right now, as (x, y, weight) with x and y None for
@@ -146,8 +165,13 @@ class Sky:
             drift = {s: (t * params["drift"] * d) % w for s, d in STAR_DEPTH.items()}
         else:
             drift = dict.fromkeys(STAR_DEPTH, 0.0)
-        for x0, y, base, phase, speed, size in self.stars:
-            val = base * (0.55 + self.twinkle * math.sin(t * speed + phase)) * gain
+        for x0, y, base, phase, speed, size, scint in self.stars:
+            # Amplitude is per star, from the airmass its light crosses: nearly
+            # steady overhead, shimmering low down. A single figure for the
+            # whole field made the zenith restless and the horizon tame, which
+            # is backwards on both counts.
+            amp = min(self.twinkle_max, self.twinkle * scint)
+            val = base * (0.55 + amp * math.sin(t * speed + phase)) * gain
             if val <= 0.05:
                 continue
             c = tuple(int(ch * val) for ch in STAR_COLOUR)

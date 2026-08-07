@@ -92,6 +92,36 @@ def _appearance(mag, min_size=1):
     return base, max(size, min_size)
 
 
+# Twinkle period, as an angular speed in radians per second of wall clock.
+# 0.2-1.3 gives 4.8-31 s a cycle. Real scintillation is tens of hertz and
+# cannot be drawn at 12 fps at all - it would alias - so this is stylised
+# whatever it is set to, and the useful question is only whether the field
+# looks alive or looks like it is breathing. The earlier 0.4-2.6 read as the
+# latter, especially once the field got denser.
+TWINKLE_SPEED = (0.2, 1.3)
+
+# Scintillation grows with the airmass the light crosses, as roughly
+# airmass^1.75 (Young). Airmass is close enough to 1/sin(alt) well above the
+# horizon and runs away below it, so the factor is clamped: by the clamp a star
+# is already twinkling eight times as hard as one overhead, and the difference
+# between that and eighty is not something a panel can show.
+SCINT_EXP = 1.75
+SCINT_MAX = 8.0
+
+
+def scintillation(alt):
+    """How much harder a star at this altitude twinkles than one overhead.
+
+    Returns 1.0 at the zenith, rising towards the horizon. This is why the
+    twinkle is not one number: a star overhead is seen through the least
+    atmosphere there is and sits very nearly steady, while one low down is
+    seen through several times as much and genuinely shimmers. Applying a
+    single amplitude to the whole field makes the zenith restless and the
+    horizon tame, which is backwards on both counts.
+    """
+    return min(SCINT_MAX, (1.0 / math.sin(math.radians(max(alt, 1.0)))) ** SCINT_EXP)
+
+
 def px_per_degree(h, fov_vertical):
     """Canvas pixels per degree at the CENTRE of the view.
 
@@ -170,10 +200,11 @@ def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
             min_size=1):
     """Stars currently above the horizon and inside the view, in Sky's format.
 
-    Returns (x, y, base, twinkle phase, twinkle speed, size) tuples, which is
-    exactly what Sky.draw_stars already consumes - so the drawing, the twinkle
-    and the conditions-reactive gain are all unchanged and only the source of
-    the positions is different.
+    Returns (x, y, base, twinkle phase, twinkle speed, size, scintillation)
+    tuples, which is what Sky.draw_stars consumes - so the drawing and the
+    conditions-reactive gain are unchanged and only the source of the positions
+    is different. The last field is the per-star twinkle scaling from its
+    altitude; Sky turns it into an amplitude, so both knobs stay in one place.
 
     The twinkle phases come from a dedicated random stream keyed by catalogue
     index, NOT the global one: they must be stable as stars enter and leave the
@@ -192,5 +223,7 @@ def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
         base, size = _appearance(mag, min_size)
         rng = random.Random(i)
         stars.append((int(x), int(y), base,
-                      rng.uniform(0.0, 2 * math.pi), rng.uniform(0.4, 2.6), size))
+                      rng.uniform(0.0, 2 * math.pi),
+                      rng.uniform(*TWINKLE_SPEED), size,
+                      scintillation(alt)))
     return stars
