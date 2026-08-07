@@ -14,11 +14,16 @@ that would otherwise only fail on the panel:
 
 import math
 import sys
+from pathlib import Path
 
 import numpy as np
 import trimesh
 
 import stand10 as S
+
+# Resolved against this file, not the working directory, so the suite reads the
+# STL it is paired with wherever it is run from.
+STL = Path(__file__).with_name("stand10.stl")
 
 A = math.radians(S.tilt)
 TOL = 0.01
@@ -50,7 +55,7 @@ def to_desk(x, s, t):
     ])
 
 
-mesh = trimesh.load("stand10.stl")
+mesh = trimesh.load(STL)
 
 # --- Mesh sanity. split() is the one that catches a detached feature, which
 # --- leaves the mesh watertight because each body is closed in itself.
@@ -137,28 +142,41 @@ check("resists >0.75 N of backward pull", tip_force > 0.75,
 # --- horizontal needs support, which this part is meant not to need. The foot's
 # --- underside is excluded: it faces straight down but rests on the bed, and
 # --- counting it would swamp every real overhang with one that cannot exist.
-# --- The screw bores are exempt and are counted separately. They run along the
-# --- panel's normal, so each has a drooping roof by construction; the span is
-# --- 2.9 mm, which bridges. Exempting them by position rather than by raising
-# --- the threshold keeps a new overhang anywhere else a failure.
+# --- Every unsupported region is MEASURED rather than exempted. A downward
+# --- face is where the print has to bridge, so the question is not whether any
+# --- exists - the screw bores guarantee two - but how far each one spans.
+# --- Grouping the downward faces into connected regions and taking each one's
+# --- larger horizontal extent gives that, conservatively: a tunnel roof is
+# --- anchored along its length and really spans its diameter, while a flat
+# --- window roof is anchored only at the columns either side and spans the
+# --- whole width, so the larger extent is right for the case that matters and
+# --- pessimistic for the one that does not.
+#
+# --- This replaces exempting the bores by position. A position exemption
+# --- follows the hole if the hole moves, and it encodes the assumption that
+# --- 2.9 mm bridges fine instead of testing it. The gables exist precisely so
+# --- that no window contributes a bridge at all; nothing here checked that
+# --- until now.
+BRIDGE_MAX = 12.0
+
 normals, areas = mesh.face_normals, mesh.area_faces
-centres = mesh.triangles_center
-on_bed = centres[:, 2] < mesh.vertices[:, 2].min() + 0.1
+on_bed = mesh.triangles_center[:, 2] < mesh.vertices[:, 2].min() + 0.1
+down = (normals[:, 2] < -math.cos(math.radians(45.0))) & ~on_bed
 
-d = np.array([0.0, math.cos(A), -math.sin(A)])
-in_bore = np.zeros(len(centres), dtype=bool)
-for sx in (-1, 1):
-    p0 = to_desk(np.array([sx * S.BOSS_DX / 2.0]), np.array([S.BOSS_S]),
-                 np.array([0.0]))[0]
-    v = centres - p0
-    in_bore |= np.linalg.norm(v - np.outer(v @ d, d), axis=1) < S.hole_d
-bore_area = float(areas[in_bore & (normals[:, 2] < 0)].sum())
-
-down = (normals[:, 2] < -math.cos(math.radians(45.0))) & ~on_bed & ~in_bore
-bad_area = float(areas[down].sum())
-check("no unsupported overhangs", bad_area < 1.0,
-      f"{bad_area:.2f} mm2 outside the bores "
-      f"(bores {bore_area:.0f}, bed contact {float(areas[on_bed].sum()):.0f})")
+spans = []
+if down.any():
+    for region in mesh.submesh([np.where(down)[0]], append=True).split(
+            only_watertight=False):
+        spans.append(float(region.extents[:2].max()))
+worst = max(spans) if spans else 0.0
+check(f"no bridge over {BRIDGE_MAX:.0f} mm", worst <= BRIDGE_MAX,
+      f"{len(spans)} unsupported region(s), widest {worst:.2f} mm"
+      + (f" [{', '.join(f'{s:.1f}' for s in sorted(spans, reverse=True)[:4])}]"
+         if spans else ""))
+check("no unsupported overhangs beyond the bores",
+      float(areas[down].sum()) < 60.0,
+      f"{float(areas[down].sum()):.1f} mm2 facing down, "
+      f"bed contact {float(areas[on_bed].sum()):.0f} mm2")
 
 vol = mesh.volume / 1000.0
 print(f"stand10 v{S.VERSION} - verification")

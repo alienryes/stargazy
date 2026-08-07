@@ -59,6 +59,7 @@ or steeper for the same reason - see `window_profile`.
 """
 
 import math
+from pathlib import Path
 
 import cadquery as cq
 
@@ -242,5 +243,8 @@ if __name__ == "__main__":
         y, z = panel_to_desk(s, t)
         print(f"  {name:<16} s={s:>5.1f}  ->  Y {y:>6.2f}  Z {z:>6.2f}")
 
-    cq.exporters.export(part, "stand10.stl", tolerance=0.01, angularTolerance=0.1)
-    print("Exported: stand10.stl")
+    # Written beside this file rather than into the working directory, so
+    # building from the repo root does not leave a stray STL there.
+    out = Path(__file__).with_name("stand10.stl")
+    cq.exporters.export(part, str(out), tolerance=0.01, angularTolerance=0.1)
+    print(f"Exported: {out}")
