@@ -69,7 +69,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -161,6 +161,22 @@ STAR_MIN_SIZE = 2
 # to 0.40 outright in twilight, where 0.35 culls again. 0.30 holds the whole
 # field at every gain the display can produce.
 TWINKLE_AMP = 0.30
+
+# How often the real positions are recomputed. Nothing interpolates between
+# refreshes - the whole field is swapped at once - so this interval IS the size
+# of the step the sky takes, and the step is coherent: the mean displacement
+# vector at 60 s was (+8.6, +0.1) px, the entire field sliding sideways
+# together. Coherent motion is far more visible than the same distance
+# scattered across stars, which is why a jump this small was noticed on the
+# panel.
+#
+# At 21.3 px/degree here and 0.2507 degrees a minute, 5 s puts the step at
+# about 0.5 px. Since positions are rounded to whole pixels, most stars then do
+# not move at all on a given refresh and the rest step by one, so what was one
+# visible slide becomes a scatter of single pixels. Measured cost is 32 ms a
+# refresh, i.e. 0.64% of one core - interpolation would buy nothing this does
+# not, for a great deal more machinery.
+STAR_REFRESH_S = 5
 
 # Aurora. The emission height is the honest knob for how far into the distance
 # this may claim to see: 250 km is the high red emission, which is the part that
@@ -930,7 +946,7 @@ def refresh_radiants(obs, utc):
 
 def _star_thread():
     while True:
-        time.sleep(60)
+        time.sleep(STAR_REFRESH_S)
         try:
             refresh_stars()
         except Exception as e:      # a bad fix must not stop the display

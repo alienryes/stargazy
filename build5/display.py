@@ -59,11 +59,13 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-# Frozen. This build's panel leaves the bench once the 10" one is running, after
-# which nothing here can be confirmed against real hardware again, so 3.7.2 marks
-# the last state that was. Repo releases are versioned separately in
-# pyproject.toml and will keep moving; the two were never going to line up.
-FIRMWARE_VERSION = "3.11.2"
+# No longer frozen - that ended at 3.7.2, and this build has taken real work
+# since. What remains true is that its panel leaves the bench once the 10" one
+# is running, after which nothing here can be confirmed against hardware again;
+# the tag build5-hardware-verified marks the last state that was. Repo releases
+# are versioned separately in pyproject.toml and will keep moving; the two were
+# never going to line up.
+FIRMWARE_VERSION = "3.12.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -113,6 +115,20 @@ BTN_GAP  = 8
 # cost of a wider plate-carree stretch near the zenith.
 REAL_STARS = True
 CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 70.0
+
+# How often the real positions are recomputed. Nothing interpolates between
+# refreshes - the whole field is swapped at once - so this interval is the size
+# of the step the sky takes, and it is a coherent slide of the entire field
+# rather than scattered motion, which is what makes a small one visible.
+#
+# 15 s here against 5 s on the 10.1" build, and the difference is both scale
+# and headroom. This panel shows 70 degrees over 720 px, about 10.3 px/degree
+# against 21.3, so the same 0.2507 degrees a minute moves the field less than
+# half as far: 15 s already puts the step under a pixel. And this build's
+# render loop is the saturated one - it settles near 14 fps with fps set to 20
+# on a Pi 4 - so refreshing four times as often as it needs to would come
+# straight off the frame rate.
+STAR_REFRESH_S = 15
 
 # Meteors are drawn at the real rate, sped up. Three an hour is honest and makes
 # an animated sky look broken, so the panel runs them as though watching for this
@@ -785,7 +801,7 @@ def refresh_radiants(obs, utc):
 
 def _star_thread():
     while True:
-        time.sleep(60)
+        time.sleep(STAR_REFRESH_S)
         try:
             refresh_stars()
         except Exception as e:      # a bad fix must not stop the display
