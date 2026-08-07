@@ -6,9 +6,10 @@ that would otherwise only fail on the panel:
   - the screw axes are CLEAR. A fastener needs the ABSENCE of material, and
     asking whether the pad is present at the screw position answers a
     different question - one that returns True when the hole is missing.
-  - the step is real and lands the right way round: relieved on the boss plane
-    below the bolt line, touching the plate above it. Getting this backwards
-    would look identical in a render.
+  - the step is real and lands the right way round: the front face touches the
+    plate BOTH sides of the bolt line, with the pad band recessed between them
+    onto the boss plane. Getting this backwards looks identical in a render,
+    and bearing on only one side is what made v0.3.x rock on the desk.
   - nothing reaches into the panel, and nothing reaches up into the Pi.
 """
 
@@ -92,27 +93,42 @@ check("material beside each hole", inside_flank.all(),
 # --- The step. Below the bolt line the front face sits on the boss plane, so
 # --- a point just off the plate must be OUTSIDE the part; above it the bearing
 # --- face touches the plate, so the same point must be INSIDE.
-grid_x = np.linspace(-S.col_in + 2, S.col_in - 2, 9)
+bear_xs = [-S.BOSS_DX / 2.0, 0.0, S.BOSS_DX / 2.0]
 
+# The front face touches BOTH SIDES of the bolt line - that is what stops the
+# assembly pivoting on the screw axis, which is a defect the panel showed and
+# no render would have. Sampled on the columns and the centre rib, where the
+# windows leave material.
+lo_probe = to_desk(*np.array(
+    [(x, s, 0.5) for x in bear_xs for s in (6.0, 20.0, S.lo_bear_s1 - 2)]).T)
+lo_solid = mesh.contains(lo_probe)
+check("bearing face below the bolt line", lo_solid.all(),
+      f"n={len(lo_probe)}, {int((~lo_solid).sum())} missing")
+
+# ...and the pad band between them is held off the plate, so the bosses have
+# somewhere to sit. This is the one place the face must NOT touch.
 pad_probe = to_desk(*np.array(
-    [(x, s, 0.5) for x in grid_x for s in (20.0, 30.0, 41.0)]).T)
+    [(x, s, 0.5) for x in np.linspace(-S.col_in + 2, S.col_in - 2, 9)
+     for s in (S.pad_s0 + 1, S.BOSS_S, S.pad_s1 - 1)]).T)
 pad_clear = ~mesh.contains(pad_probe)
-check("relieved below the bolt line", pad_clear.all(),
+check("pad band held off the plate", pad_clear.all(),
       f"n={len(pad_probe)}, {int((~pad_clear).sum())} touching")
 
 # Sampled on the columns and the centre rib, where the bearing face survives
 # the windows - the windows deliberately remove it in between.
-bear_xs = [-S.BOSS_DX / 2.0, 0.0, S.BOSS_DX / 2.0]
 bear_probe = to_desk(*np.array(
     [(x, s, 0.5) for x in bear_xs for s in (S.bear_s0 + 2, 75.0, S.bear_s1 - 2)]).T)
 bear_solid = mesh.contains(bear_probe)
-check("bearing face on the plate", bear_solid.all(),
+check("bearing face above the bolt line", bear_solid.all(),
       f"n={len(bear_probe)}, {int((~bear_solid).sum())} missing")
 
 # --- The two faces really are 3 mm apart, measured off the mesh rather than
 # --- assumed from the parameters that drew it.
 pv = to_panel(mesh.vertices)
-front_pad = pv[(pv[:, 1] < S.pad_s1 - 1) & (pv[:, 1] > 5)][:, 2].min()
+# Taken inside the pad band itself, not merely below the bolt line: the face is
+# now on the plate either side of it, so a window that reached from the bottom
+# would put a t=0 vertex in the sample and report no step at all.
+front_pad = pv[(pv[:, 1] > S.pad_s0 + 1) & (pv[:, 1] < S.pad_s1 - 1)][:, 2].min()
 front_bear = pv[(pv[:, 1] > S.bear_s0 + 1)][:, 2].min()
 step = front_pad - front_bear
 check("step is 3.0 mm", abs(step - S.BOSS_PROUD) < 0.05,
@@ -121,7 +137,7 @@ check("step is 3.0 mm", abs(step - S.BOSS_PROUD) < 0.05,
 # --- Nothing may intrude into the panel, and nothing may reach the Pi.
 check("nothing in front of the plate", pv[:, 2].min() > -TOL,
       f"min t {pv[:, 2].min():.3f}")
-check("clears the Pi at s=95.5", pv[:, 1].max() < S.PI_S0 - TOL,
+check(f"clears the Pi at s={S.PI_S0:.0f}", pv[:, 1].max() < S.PI_S0 - TOL,
       f"max s {pv[:, 1].max():.2f}, Pi at {S.PI_S0}")
 
 # --- Tipping. The panel's centre of mass projects behind the front contact and

@@ -24,17 +24,22 @@ panel's bottom edge nor any printed lip appears below the bezel.
 
 THE FRONT FACE IS STEPPED, AND THE STEP IS THE WHOLE TRICK. The bosses stand
 3 mm proud of the back plate, so a part bolted flat against them is held 3 mm
-off the plate everywhere. A bearing face has to reach back across that 3 mm to
-touch the plate itself, and it has to do so ABOVE the bolt line: the centre of
-mass is above the bosses, so the panel's top rotates backward and the plate
-ABOVE the bolts presses into the stand while everything below it lifts away.
-The intuitive place for a pad - low down, near the desk - would never touch.
+off the plate everywhere, touching nothing but two small annular faces. The
+front face therefore reaches back across that 3 mm to touch the plate itself -
+and it does so on BOTH SIDES of the bolt line, so the pad band is a recess
+between two bearing faces with the bosses sitting in it.
 
-Below the bolt line the front face stays on the boss plane and is therefore
-held clear of the back plate. That is deliberate rather than lazy: it leaves
-the seat determined by the two pads and the upper bearing face alone, so a
-print tolerance low down cannot become a pivot and lift the bearing face out
-of contact.
+Both sides, because two screws in a line are an axis and the assembly will
+pivot on it. Bearing only above the bolts, which is what v0.3.x did, leaves
+the centre of mass holding that face in contact and nothing at all resisting
+rotation the other way; on the desk it rocked. Faces above and below make a
+couple that resists both senses, and because both lie on the same plane they
+cannot compete for the seat.
+
+The version that bore only above it was not an oversight but a bad trade: the
+worry was that a face low down might print proud, become a pivot, and lift the
+upper one off. That risk is real and small. It was traded against a defect
+that turned out to be certain.
 
 NOTHING HERE IS SIZED BY STRESS. The bearing face carries about 2.1 N, each
 bolt about 2.1 N of tension and 2.7 N of shear, and the upright's root sees
@@ -63,7 +68,7 @@ from pathlib import Path
 
 import cadquery as cq
 
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -85,7 +90,7 @@ BOSS_DX = 121.8        # bottom bosses, centre to centre across
 # up, the pair 46 mm from the bottom leaves only 14 mm of clear plate before the
 # Pi begins, and no stand can reach a bearing face past that. Turned over, the
 # same board spans 100 to 187, the stand bolts to the pair now 41 mm up, and
-# there is 59 mm of clear plate - the part reaches 90 and clears the Pi by 10.
+# there is 59 mm of clear plate to work in.
 #
 # The orientation also puts the Pi's port end 60 mm from the TOP edge, which is
 # where both cables want to leave from and the reason this panel needs no
@@ -114,10 +119,18 @@ up_t = 5.0             # upright thickness, and so the pad the screw threads thr
 foot_t = 5.0           # foot thickness
 root_fillet = 6.0      # where the upright's back face meets the foot
 
-# --- Where the front face does what, in s
-pad_s1 = 46.0          # boss plane runs up to here: the boss needs flat around it
-bear_s0 = 49.5         # bearing face starts here, above the bolt line
-bear_s1 = 90.0         # and stops below the Pi, whose port face is at 100
+# --- Where the front face does what, in s. Reading up the plate: it touches,
+# --- steps back onto the boss plane, then touches again - so the pad band is a
+# --- recess between two bearing faces and the bosses sit in it.
+lo_bear_s1 = 35.0      # lower bearing face runs from the bottom up to here
+pad_s0 = 38.5          # boss plane starts, after a ramp back off the plate
+pad_s1 = 46.0          # and runs up to here: the boss needs flat around it
+bear_s0 = 49.5         # upper bearing face starts, above the bolt line
+# ...and stops here. Not set by the Pi, whose port face is at 100, but by the
+# DSI ribbon, which loops UNDER the board and hangs below it. At 90 the top of
+# the stand pressed on the loop; 87 clears it. Measured by fitting, because
+# nothing about the board's own footprint predicts where a flexible cable sits.
+bear_s1 = 87.0
 
 # --- Fasteners
 hole_d = 2.9           # M2.5 clearance, print-tolerant
@@ -173,12 +186,27 @@ def panel_prism(sketch):
 
 
 def profile():
-    """The L in the desk's YZ plane, walked front-bottom to back-bottom."""
+    """The L in the desk's YZ plane, walked front-bottom to back-bottom.
+
+    The front face touches the plate BOTH SIDES of the bolt line. Bearing only
+    above it - which is what v0.3.x did - leaves the assembly free to pivot on
+    the screw axis, and it rocked on the desk. The centre of mass holds the
+    upper face in contact, but nothing at all resisted rotation the other way.
+    Two faces straddling the bolts make a couple that resists both, and since
+    both sit on the same plane they cannot fight each other for the seat.
+
+    The reasoning that produced the one-sided version was that a face low down
+    might print proud and become a pivot, lifting the upper one off. That risk
+    is real but small, and it was traded against a defect that turned out to be
+    certain.
+    """
     return [
-        panel_to_desk(s_at_z(BOSS_PROUD, 0.0), BOSS_PROUD),   # front, on the desk
+        panel_to_desk(s_at_z(0.0, 0.0), 0.0),                 # front, on the desk
+        panel_to_desk(lo_bear_s1, 0.0),                       # top of the lower face
+        panel_to_desk(pad_s0, BOSS_PROUD),                    # back onto the boss plane
         panel_to_desk(pad_s1, BOSS_PROUD),                    # top of the boss plane
-        panel_to_desk(bear_s0, 0.0),                          # foot of the bearing face
-        panel_to_desk(bear_s1, 0.0),                          # top of the bearing face
+        panel_to_desk(bear_s0, 0.0),                          # foot of the upper face
+        panel_to_desk(bear_s1, 0.0),                          # top of the upper face
         panel_to_desk(bear_s1, _BACK_T),                      # over the top
         panel_to_desk(s_at_z(_BACK_T, foot_t), _BACK_T),      # down onto the foot
         (foot_depth, foot_t),

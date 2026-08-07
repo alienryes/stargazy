@@ -56,7 +56,7 @@ hands the image to PIL and a transpose is one more pass in C.
 
 | | |
 |---|---|
-| Filament | PETG, **39.9 g** — about 2 h 5 min (PrusaSlicer, settings below) |
+| Filament | PETG, about **44 g**, roughly 2¼ h. (39.9 g and 2 h 5 min were measured in PrusaSlicer for v0.3.0, which was 8% smaller.) |
 | Screws | **2 × M2.5 × 12 mm**, pan or socket head |
 | Panel | Raspberry Pi Touch Display 2, 10.1", with the Pi already mounted |
 
@@ -109,18 +109,23 @@ entire purpose is being looked at.
 
 The panel's bosses stand **3 mm proud** of the back plate. A part bolted flat
 against them is therefore held 3 mm off the plate everywhere, touching nothing
-but two small annular faces — which would let the panel rock.
+but two small annular faces — which lets the panel rock.
 
-So the stand reaches back across that 3 mm with a **bearing face**, and it does
-so **above the bolt line**. The centre of mass sits above the bosses, so the
-panel's top rotates backward: the plate *above* the screws presses into the
-stand while everything *below* them lifts away. A pad placed low down, near the
-desk, is the intuitive spot and would never touch anything.
+So the stand reaches back across that 3 mm to touch the plate itself, and it
+does so on **both sides of the bolt line**. The pad band is a recess between
+two bearing faces, with the bosses sitting in it.
 
-Below the bolt line the front face deliberately stays back on the boss plane,
-clear of the plate. That leaves the seat determined by the two pads and the
-upper bearing face alone, so a print tolerance low down cannot become a pivot
-and lever the bearing face out of contact.
+Both sides, because two screws in a line are an axis and the assembly will
+pivot on it. The centre of mass is above the bosses, so it holds an upper face
+in contact by itself — but nothing resists rotation the other way, and v0.3.0
+rocked on the desk for exactly that reason. Faces above and below make a couple
+that resists both senses, and since both lie on the same plane they cannot
+compete for the seat.
+
+*The one-sided version was a bad trade rather than an oversight: the worry was
+that a face low down might print proud, become a pivot and lift the upper one
+off. That risk is real and small, and it was traded against a defect that
+turned out to be certain.*
 
 ### One part, not two legs
 
@@ -182,7 +187,9 @@ measure from, and the Pi's clearance reads 59 mm one way and 14 mm the other.
 | Pi, port face to SD end | **100 – 187 mm** up the back plate |
 | Mass, panel + Pi | 558 g |
 
-The stand stops at 90 mm up the plate, clearing the Pi by 10 mm.
+The stand stops at **87 mm** up the plate. That ceiling is set by the DSI
+ribbon, which loops *under* the board and hangs below it — not by the board's
+own edge at 100 mm. At 90 mm the top of the stand pressed on the loop.
 
 ## Files
 
@@ -206,16 +213,23 @@ step is 3.000 mm and lands the right way round, relieved below the bolt line
 and touching above it; that nothing reaches into the panel or up into the Pi;
 and that no surface outside the screw bores faces downward at under 45°.
 
-## Not yet validated on hardware
+## What the first print changed
 
-This has not been printed. Two things to look at on the first fit:
+v0.3.0 was printed and fitted, and two things came back that no render would
+have shown:
 
-- **Whether the bearing face actually touches.** It should be the second thing
-  to make contact, after the two pads. If the part rocks about the screws, the
-  bearing face is not reaching the plate.
-- **Whether hanging 2 mm clear feels secure enough.** If it does not, the
-  fallback is `clear_z = 0` with a shallow toe, which is a parameter change
-  rather than a redesign.
+- **It rocked**, pivoting on the screw axis, because the front face bore only
+  above the bolt line. v0.4.0 bears both sides — see above.
+- **The top pressed on the DSI ribbon** where it loops under the board. The
+  upright is 3 mm shorter for it.
+
+It also fitted perfectly at the wrong end of the display, which is what
+established that the panel mounts upside down. **v0.4.0 has not itself been
+printed.**
+
+Still open, and only the hardware can answer it: whether hanging 2 mm clear of
+the desk feels secure. If not, `clear_z = 0` plus a shallow toe is a parameter
+change rather than a redesign.
 
 ## Parameters worth changing
 
