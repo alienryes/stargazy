@@ -81,8 +81,18 @@ class Sky:
     rendered frame can be compared byte for byte against an earlier one.
     """
 
-    def __init__(self, w, h, stars=200, seed=7):
+    def __init__(self, w, h, stars=200, seed=7, twinkle=0.45):
         self.w, self.h = w, h
+        # How far the twinkle swings either side of 0.55. This is not a
+        # brightness control - the centre stays at 0.55 whatever it is set to,
+        # so only the depth of the trough changes. What that decides is how
+        # many stars are CULLED: draw_stars drops anything at or below 0.05,
+        # and on the 10.1" panel the faintest star's base is 0.560, so at the
+        # shipped 0.45 the bottom of the cycle lands at 0.560 x 0.10 x gain and
+        # falls under the cull for any gain below about 0.9. Measured on the
+        # real catalogue there, 743 of 927 stars were drawn at an instant at
+        # gain 0.45; below an amplitude of 0.352 all 927 are. See build10.
+        self.twinkle = twinkle
         random.seed(seed)
         # x, y, base brightness, twinkle phase, twinkle speed, size.
         self.stars = [
@@ -134,7 +144,7 @@ class Sky:
         else:
             drift = dict.fromkeys(STAR_DEPTH, 0.0)
         for x0, y, base, phase, speed, size in self.stars:
-            val = base * (0.55 + 0.45 * math.sin(t * speed + phase)) * gain
+            val = base * (0.55 + self.twinkle * math.sin(t * speed + phase)) * gain
             if val <= 0.05:
                 continue
             c = tuple(int(ch * val) for ch in STAR_COLOUR)

@@ -142,6 +142,30 @@ def visible_rate(zhr, strength, radiant_alt, cloud_pct=0.0, moon_illum=0.0):
     return rate
 
 
+def upcoming(when, exclude=(), within_days=200, limit=5):
+    """[(name, days away, zhr)] for the next peaks, soonest first.
+
+    Same search as next_shower and the same rule about units - solar longitude
+    throughout, days only at the end - but it returns the run of them rather
+    than the first, because the space a page has for this is exactly the space
+    the active showers left, and that varies from night to night.
+
+    `exclude` is the showers already being reported as active: a shower can be
+    running AND have its peak ahead of it, and it already says so in its own
+    row, so repeating it under "coming up" would be the same fact twice in two
+    different formats.
+    """
+    lam = solar_longitude(when)
+    out = []
+    for name, peak, _lo, _hi, _ra, _dec, zhr, *_ in SHOWERS:
+        if name in exclude:
+            continue
+        days = ((peak - lam) % 360.0) / 0.9856
+        if days <= within_days:
+            out.append((name, days, zhr))
+    return sorted(out, key=lambda r: r[1])[:limit]
+
+
 def next_shower(when, within_days=120):
     """(name, days away) for the next shower peak, or None.
 
