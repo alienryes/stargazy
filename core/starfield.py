@@ -112,12 +112,11 @@ SCINT_MAX = 8.0
 def scintillation(alt):
     """How much harder a star at this altitude twinkles than one overhead.
 
-    Returns 1.0 at the zenith, rising towards the horizon. This is why the
-    twinkle is not one number: a star overhead is seen through the least
-    atmosphere there is and sits very nearly steady, while one low down is
-    seen through several times as much and genuinely shimmers. Applying a
-    single amplitude to the whole field makes the zenith restless and the
-    horizon tame, which is backwards on both counts.
+    Returns 1.0 at the zenith, rising towards the horizon. The twinkle is not
+    one number because a star overhead is seen through the least atmosphere
+    available and sits very nearly steady, while one low down is seen through
+    several times as much and shimmers noticeably. A single amplitude across
+    the whole field overstates the zenith and understates the horizon.
     """
     return min(SCINT_MAX, (1.0 / math.sin(math.radians(max(alt, 1.0)))) ** SCINT_EXP)
 

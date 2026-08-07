@@ -89,12 +89,10 @@ class Framebuffer:
         # checked byte for byte against the general path below, and the checks
         # live in tools/check_fb_paths.py.
         #
-        # This matters because the two modes are NOT the same cost and the
-        # expensive one is the one that runs: on the 10.1" panel the general
-        # path took 98 ms a frame in red against a 83 ms budget at 12 fps, so
-        # the configured rate was simply unreachable between dusk and dawn -
-        # which is the only time the display is red, and the only time meteors
-        # exist to look jerky.
+        # The two night modes are not the same cost. On the 10.1" panel the
+        # general path took 98 ms a frame in red against an 83 ms budget at
+        # 12 fps, so the configured rate was unreachable between dusk and dawn,
+        # which is when the display is red and when meteors are drawn.
         if self.bpp == 32:
             if night == "off":
                 # PIL does the channel swap and the pad byte in its own C loop.

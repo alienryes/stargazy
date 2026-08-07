@@ -22,24 +22,23 @@ THE PANEL HANGS CLEAR OF THE DESK. Its weight goes through the two M2.5 bolts
 in shear and nothing but the stand's own foot touches the desk. Neither the
 panel's bottom edge nor any printed lip appears below the bezel.
 
-THE FRONT FACE IS STEPPED, AND THE STEP IS THE WHOLE TRICK. The bosses stand
-3 mm proud of the back plate, so a part bolted flat against them is held 3 mm
-off the plate everywhere, touching nothing but two small annular faces. The
-front face therefore reaches back across that 3 mm to touch the plate itself -
-and it does so on BOTH SIDES of the bolt line, so the pad band is a recess
-between two bearing faces with the bosses sitting in it.
+THE FRONT FACE IS STEPPED. The bosses stand 3 mm proud of the back plate, so a
+part bolted flat against them is held 3 mm off the plate everywhere, touching
+nothing but two small annular faces. The front face therefore reaches back
+across that 3 mm to touch the plate itself, and does so on BOTH SIDES of the
+bolt line - the pad band is a recess between two bearing faces, with the bosses
+sitting in it.
 
-Both sides, because two screws in a line are an axis and the assembly will
-pivot on it. Bearing only above the bolts, which is what v0.3.x did, leaves
-the centre of mass holding that face in contact and nothing at all resisting
-rotation the other way; on the desk it rocked. Faces above and below make a
-couple that resists both senses, and because both lie on the same plane they
-cannot compete for the seat.
+Both sides are required because two screws in a line form an axis the assembly
+can pivot on. Bearing only above the bolts, as v0.3.x did, leaves the centre of
+mass holding that face in contact with nothing resisting rotation the other
+way; the printed part rocked on the desk. Faces above and below form a couple
+that resists both senses, and both lie on the same plane so they cannot compete
+for the seat.
 
-The version that bore only above it was not an oversight but a bad trade: the
-worry was that a face low down might print proud, become a pivot, and lift the
-upper one off. That risk is real and small. It was traded against a defect
-that turned out to be certain.
+The one-sided version guarded against a face low down printing proud, becoming
+a pivot and lifting the upper one off. That failure is possible but was not
+observed; the rocking was.
 
 NOTHING HERE IS SIZED BY STRESS. The bearing face carries about 2.1 N, each
 bolt about 2.1 N of tension and 2.7 N of shear, and the upright's root sees
@@ -83,9 +82,9 @@ BOSS_DX = 121.8        # bottom bosses, centre to centre across
 # Bottom bosses, up from the panel's bottom edge.
 #
 # ⇒ THE PANEL MOUNTS ROTATED 180 DEGREES FROM THE ORIENTATION IT ARRIVES IN.
-# This is not arbitrary and it is what makes the part fit. The two boss pairs
-# sit at DIFFERENT offsets - 41 mm from one short edge, 46 from the other, 159
-# apart - and the Pi is NOT vertically centred: measured on the panel, it spans
+# The part does not fit the other way up. The two boss pairs sit at DIFFERENT
+# offsets - 41 mm from one short edge, 46 from the other, 159 apart - and the
+# Pi is NOT vertically centred: measured on the panel, it spans
 # 60 to 147 mm from one edge, so it sits hard against that end. Mounted that way
 # up, the pair 46 mm from the bottom leaves only 14 mm of clear plate before the
 # Pi begins, and no stand can reach a bearing face past that. Turned over, the

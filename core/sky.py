@@ -168,8 +168,7 @@ class Sky:
         for x0, y, base, phase, speed, size, scint in self.stars:
             # Amplitude is per star, from the airmass its light crosses: nearly
             # steady overhead, shimmering low down. A single figure for the
-            # whole field made the zenith restless and the horizon tame, which
-            # is backwards on both counts.
+            # whole field overstates the zenith and understates the horizon.
             amp = min(self.twinkle_max, self.twinkle * scint)
             val = base * (0.55 + amp * math.sin(t * speed + phase)) * gain
             if val <= 0.05:
