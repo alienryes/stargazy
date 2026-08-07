@@ -25,7 +25,7 @@ welcome, not required.
 
 | | |
 |---|---|
-| Filament | PETG, about 50 g |
+| Filament | PETG, **39.9 g** — about 2 h 5 min (PrusaSlicer, settings below) |
 | Screws | **2 × M2.5 × 12 mm**, pan or socket head |
 | Panel | Raspberry Pi Touch Display 2, 10.1", with the Pi already mounted |
 
