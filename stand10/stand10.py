@@ -63,7 +63,7 @@ from pathlib import Path
 
 import cadquery as cq
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -75,10 +75,31 @@ VERSION = "0.3.0"
 PANEL_W = 167.0        # outline across
 PANEL_H = 247.0        # outline up
 BOSS_DX = 121.8        # bottom bosses, centre to centre across
-BOSS_S = 41.0          # bottom bosses, up from the panel's bottom edge
+# Bottom bosses, up from the panel's bottom edge.
+#
+# ⇒ THE PANEL MOUNTS ROTATED 180 DEGREES FROM THE ORIENTATION IT ARRIVES IN.
+# This is not arbitrary and it is what makes the part fit. The two boss pairs
+# sit at DIFFERENT offsets - 41 mm from one short edge, 46 from the other, 159
+# apart - and the Pi is NOT vertically centred: measured on the panel, it spans
+# 60 to 147 mm from one edge, so it sits hard against that end. Mounted that way
+# up, the pair 46 mm from the bottom leaves only 14 mm of clear plate before the
+# Pi begins, and no stand can reach a bearing face past that. Turned over, the
+# same board spans 100 to 187, the stand bolts to the pair now 41 mm up, and
+# there is 59 mm of clear plate - the part reaches 90 and clears the Pi by 10.
+#
+# The orientation also puts the Pi's port end 60 mm from the TOP edge, which is
+# where both cables want to leave from and the reason this panel needs no
+# cable-strain lift. The display image is rotated to match in the DSI overlay.
+BOSS_S = 41.0
 BOSS_PROUD = 3.0       # boss faces stand this far off the back plate
 BOSS_THREAD = 8.0      # M2.5 thread depth available in the boss
-PI_S0 = 95.5           # the Pi's lower edge, up the back plate
+# The Pi's lower edge, up the back plate, in the mounted orientation. MEASURED,
+# not derived: the earlier 95.5 came from assuming the board was 56 mm tall and
+# vertically centred, and it is neither - it is 87 mm from port face to SD end
+# and sits well off centre. The arithmetic happened to land close enough to the
+# truth here that nothing failed, which is exactly why it survived; on the other
+# way up the same assumption hid a 45 mm collision.
+PI_S0 = 100.0
 
 # --- Stance
 tilt = 10.0            # backward lean from vertical
@@ -94,7 +115,7 @@ root_fillet = 6.0      # where the upright's back face meets the foot
 # --- Where the front face does what, in s
 pad_s1 = 46.0          # boss plane runs up to here: the boss needs flat around it
 bear_s0 = 49.5         # bearing face starts here, above the bolt line
-bear_s1 = 90.0         # and stops below the Pi at 95.5
+bear_s1 = 90.0         # and stops below the Pi, whose port face is at 100
 
 # --- Fasteners
 hole_d = 2.9           # M2.5 clearance, print-tolerant

@@ -21,6 +21,33 @@ the 10.1" panel mounts differently enough that no part of the 5" design carries
 over — so it is not encumbered by the attribution requirement. Credit is
 welcome, not required.
 
+## ⚠ The panel mounts upside down
+
+**Turn the display 180° from the way it arrives, and rotate the image to match.**
+This is not a preference — the part does not fit the other way up.
+
+The panel's two bracket pairs sit at *different* offsets (41 mm from one short
+edge, 46 mm from the other), and the Pi is **not vertically centred**: it spans
+60–147 mm from the edge with the 46 mm pair. Mounted that way up, there is only
+**14 mm** of clear back plate above the lower brackets before the Pi begins, and
+the stand needs to reach a bearing face well past that. Turned over, the same
+board spans 100–187 mm, the stand bolts to the pair now 41 mm up, and it has
+**59 mm** of clear plate to work in — the part reaches 90 mm and clears the Pi
+by 10.
+
+It also puts the Pi's port face 60 mm from the **top** edge, which is where both
+cables want to leave from, and is why this panel needs no cable-strain lift.
+
+Rotate the image in the DSI overlay rather than in software — it is free there,
+and a full-frame transpose is not. In `/boot/firmware/config.txt`:
+
+```
+dtoverlay=vc4-kms-dsi-ili79600-10-1inch,rotation=180,invx,invy
+```
+
+`rotation` turns the display; `invx,invy` turn the touchscreen, which does not
+follow it. Reboot to apply.
+
 ## What you need
 
 | | |
@@ -139,13 +166,19 @@ production data.
 
 | | |
 |---|---|
+All in the **mounted** orientation, i.e. after the 180° turn described above.
+Stating which way up a figure was taken is not pedantry here: the same panel
+reads 41 mm and 46 mm for its two bracket pairs depending on which end you
+measure from, and the Pi's clearance reads 59 mm one way and 14 mm the other.
+
 | Panel outline | 167 × 247 mm |
+|---|---|
 | Lower bosses | 121.8 mm apart, 41 mm up from the bottom edge |
 | Bosses | M2.5, 3 mm proud of the back plate, 8 mm thread depth |
-| Pi's lower edge | 95.5 mm up the back plate |
+| Pi, port face to SD end | **100 – 187 mm** up the back plate |
 | Mass, panel + Pi | 558 g |
 
-The stand stops at 90 mm up the plate, clearing the Pi by 5.5 mm.
+The stand stops at 90 mm up the plate, clearing the Pi by 10 mm.
 
 ## Files
 
