@@ -89,7 +89,9 @@ BOSS_DX = 121.8        # bottom bosses, centre to centre across
 #
 # The orientation also puts the Pi's port end 60 mm from the TOP edge, which is
 # where both cables want to leave from and the reason this panel needs no
-# cable-strain lift. The display image is rotated to match in the DSI overlay.
+# cable-strain lift. The image is turned to match in the render path, not in
+# the DSI overlay: the overlay's rotation= sets a KMS property, which a process
+# writing bytes straight at /dev/fb0 never sees.
 BOSS_S = 41.0
 BOSS_PROUD = 3.0       # boss faces stand this far off the back plate
 BOSS_THREAD = 8.0      # M2.5 thread depth available in the boss

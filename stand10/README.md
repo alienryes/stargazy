@@ -38,15 +38,19 @@ by 10.
 It also puts the Pi's port face 60 mm from the **top** edge, which is where both
 cables want to leave from, and is why this panel needs no cable-strain lift.
 
-Rotate the image in the DSI overlay rather than in software — it is free there,
-and a full-frame transpose is not. In `/boot/firmware/config.txt`:
+**The build already does this** — `ROTATE_DEG = 180` in `build10/display.py`
+turns both the image and the touch mapping. No change to `config.txt` is needed
+or wanted.
 
-```
-dtoverlay=vc4-kms-dsi-ili79600-10-1inch,rotation=180,invx,invy
-```
+The DSI overlay's own `rotation=180` looks like the obvious place for it and
+does **not** work here: that sets a KMS property, which `fbcon` honours but a
+process writing bytes straight at `/dev/fb0` never sees — the hardware scans
+out whatever it is handed. Its `invx,invy` *would* turn the touchscreen in the
+driver, but do not set them as well or they cancel against the software
+mapping and taps come back inverted.
 
-`rotation` turns the display; `invx,invy` turn the touchscreen, which does not
-follow it. Reboot to apply.
+Doing it in the render path costs 2.4 ms a frame, because the packing already
+hands the image to PIL and a transpose is one more pass in C.
 
 ## What you need
 

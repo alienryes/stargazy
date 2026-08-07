@@ -27,6 +27,14 @@ log = logging.getLogger(__name__)
 
 FB_DEV = "/dev/fb0"
 
+# Degrees to PIL's constants, so a build can carry ONE rotation figure and hand
+# it to both the framebuffer and the touch reader. They have to agree: the
+# touchscreen reports in the panel's frame whatever the renderer does, so a
+# rotation applied to the image and not to the taps puts every press somewhere
+# else on the screen.
+PIL_ROTATION = {0: None, 90: Image.ROTATE_90,
+                180: Image.ROTATE_180, 270: Image.ROTATE_270}
+
 # linux/fb.h. Unblanking needs no privilege beyond write access to the device,
 # which the daemon already has through the video group.
 FBIOBLANK = 0x4611

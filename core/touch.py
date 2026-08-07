@@ -82,10 +82,13 @@ class TouchReader:
     so an idle or chattering touchscreen can never hold up the frame loop.
     """
 
-    def __init__(self, w, h, fb_w, fb_h, rotated=True):
+    def __init__(self, w, h, fb_w, fb_h, rotate_deg=0):
         self.w, self.h = w, h
         self.fb_w, self.fb_h = fb_w, fb_h
-        self.rotated = rotated
+        # Degrees rather than a PIL constant: this module reads evdev records
+        # and nothing else, and it is worth keeping it that way. The build owns
+        # the single figure and hands the same one to the framebuffer.
+        self.rotate_deg = rotate_deg % 360
         self.taps = queue.Queue()
         self.path, self._mx, self._my = find_device()
 
@@ -108,19 +111,28 @@ class TouchReader:
     def _map(self, tx, ty):
         """Controller coordinates -> render coordinates.
 
-        The touchscreen always reports in the panel's native portrait frame. A
-        build that draws landscape and rotates on its way to the framebuffer has
-        to undo that rotation here, or every tap lands a quarter turn away from
-        the finger. A build that draws portrait does not rotate at all, so the
-        mapping is a straight scale.
+        The touchscreen always reports in the panel's native portrait frame,
+        whatever the build draws, so this undoes exactly the rotation the frame
+        took on its way to the framebuffer. Get it wrong and every tap lands
+        somewhere else - a quarter turn away at 90 degrees, diagonally opposite
+        at 180.
+
+        The 180 case is the 10.1" build, whose panel is mounted upside down
+        because that is the only orientation its stand fits. Note that the DSI
+        overlay's own invx/invy would do the same job in the driver - do not
+        set both, or they cancel and touch comes back inverted.
 
         Verify by tapping four corners rather than by reasoning about it - axis
         inversion is the classic bug here and it is cheap to check.
         """
         px = tx / self._mx * (self.fb_w - 1)
         py = ty / self._my * (self.fb_h - 1)
-        if self.rotated:
+        if self.rotate_deg == 90:
             return int(self.w - 1 - py), int(px)
+        if self.rotate_deg == 180:
+            return int(self.w - 1 - px), int(self.h - 1 - py)
+        if self.rotate_deg == 270:
+            return int(py), int(self.h - 1 - px)
         return int(px), int(py)
 
     def _run(self):
@@ -148,7 +160,7 @@ if __name__ == "__main__":
     import time
 
     logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
-    reader = TouchReader(1280, 720, 720, 1280)
+    reader = TouchReader(1280, 720, 720, 1280, rotate_deg=90)
     if reader.start():
         log.info("Tap the corners; Ctrl-C to stop.")
         while True:

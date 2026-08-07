@@ -49,7 +49,7 @@ from core.palette import (
     WHITE,
     verdict,
 )
-from core.panel import Framebuffer, Strip
+from core.panel import PIL_ROTATION, Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
@@ -65,7 +65,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.14.0"
+FIRMWARE_VERSION = "3.15.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -85,7 +85,8 @@ log = logging.getLogger(__name__)
 # rotated to this before packing to RGB565. Flip ROTATE if the panel is upside down.
 FB_DEV = "/dev/fb0"
 FB_W, FB_H = 720, 1280
-ROTATE = Image.ROTATE_90
+ROTATE_DEG = 90
+ROTATE = PIL_ROTATION[ROTATE_DEG]
 
 W, H = 1280, 720
 
@@ -973,7 +974,8 @@ def main():
         log.info("Real sky: %d catalogue stars in view, az %.0f alt %.0f fov %.0f.",
                  n, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
         threading.Thread(target=_star_thread, daemon=True).start()
-    reader = TouchReader(W, H, FB_W, FB_H) if tch.get("enabled", True) else None
+    reader = (TouchReader(W, H, FB_W, FB_H, rotate_deg=ROTATE_DEG)
+          if tch.get("enabled", True) else None)
     # This module is the layout the daemon draws through: it supplies sky, fb,
     # strip, build_pages, compose and night_window.
     run_daemon(sys.modules[__name__], fetch, read_targets, out_dir, lat,

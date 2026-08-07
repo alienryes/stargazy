@@ -59,7 +59,7 @@ from core.palette import (
     WHITE,
     verdict,
 )
-from core.panel import Framebuffer, Strip
+from core.panel import PIL_ROTATION, Framebuffer, Strip
 from core.positions import alt_az, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
@@ -69,7 +69,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.11.0"
+VERSION = "0.12.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -87,12 +87,26 @@ log = logging.getLogger(__name__)
 LAT = None
 LON = None
 
-# Native portrait: the frame is written to the framebuffer as drawn, with no
-# transpose. ROTATE stays None unless the panel is ever mounted on its side.
+# Native portrait, but mounted UPSIDE DOWN - see stand10/README.md. The panel's
+# two bracket pairs sit at different offsets and its Pi is not vertically
+# centred, so only one way up leaves a stand anywhere to bolt to; that way up
+# also puts the Pi's port face at the top, where the cables want to leave from.
+#
+# The turn happens here rather than in the DSI overlay. The overlay's own
+# rotation= sets a KMS property, which fbcon honours and a process writing
+# bytes straight at /dev/fb0 does not - the hardware simply scans out what it
+# is given. Measured cost of doing it here is 2.4 ms a frame, because to_bytes
+# already had to hand the image to PIL and a transpose is one more C pass.
+#
+# ONE figure, handed to both the framebuffer and the touch reader. The
+# touchscreen reports in the panel's own frame whatever the renderer does, so a
+# rotation applied to the image and not to the taps puts every press
+# diagonally opposite where the finger went.
 FB_DEV = "/dev/fb0"
 W, H = 1200, 1920
 FB_W, FB_H = 1200, 1920
-ROTATE = None
+ROTATE_DEG = 180
+ROTATE = PIL_ROTATION[ROTATE_DEG]
 
 # ── Layout constants (1200x1920 portrait) ─────────────────────────────────
 # Bands, top to bottom: header, verdict, the Moon as the centrepiece, the
@@ -1324,7 +1338,7 @@ def main():
         log.info("Real sky: %d catalogue stars in view, az %.0f alt %.0f fov %.0f.",
                  n, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
         threading.Thread(target=_star_thread, daemon=True).start()
-    reader = (TouchReader(W, H, FB_W, FB_H, rotated=ROTATE is not None)
+    reader = (TouchReader(W, H, FB_W, FB_H, rotate_deg=ROTATE_DEG)
               if tch.get("enabled", True) else None)
     # This module is the layout the daemon draws through: it supplies sky, fb,
     # strip, build_pages, compose and night_window.
