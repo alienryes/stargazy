@@ -68,7 +68,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -768,7 +768,7 @@ def render_meteors(states, lat, lon):
         days_to = (s["peak_lambda"] - lam) % 360.0 / 0.9856
         days_since = s["delta_lambda"] / 0.9856
         peak_note = ("peaking now" if s["delta_lambda"] < 0.5
-                     else f"peak in {days_to:.0f} days" if days_to < 180
+                     else f"{days_to:.0f} days before peak" if days_to < 180
                      else f"{days_since:.0f} days past peak")
         _right(draw, peak_note, y + 14, MUTED, f["sm"])
 

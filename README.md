@@ -72,7 +72,7 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 **Page 3 — meteors.** Which showers are actually running, from a table of orbital constants indexed by solar longitude, with the rate an observer would really count once radiant altitude, cloud and moonlight are accounted for.
 
-![The 10.1-inch meteor page: solar longitude 133.2 degrees, with Southern Delta Aquariids 6 degrees past peak and Perseids peaking in 7 days, each showing radiant altitude and bearing and an estimated rate of one to two per hour against its zenithal hourly rate at peak, plus a sporadic background of about two per hour.](screenshots/10in-meteors.png)
+![The 10.1-inch meteor page: solar longitude 135.1 degrees, with the Perseids 5 days before peak at about six per hour and the Southern Delta Aquariids 8 days past peak at about one per hour, each showing radiant altitude and bearing against its zenithal hourly rate at peak, plus a sporadic background of about three per hour and the next peak named in the footer.](screenshots/10in-meteors.png)
 
 ---
 
