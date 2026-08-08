@@ -60,7 +60,7 @@ from core.palette import (
     verdict,
 )
 from core.panel import PIL_ROTATION, Framebuffer, Strip
-from core.positions import alt_az, observer, plot_instant
+from core.positions import alt_az, next_rise, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
 from core.starfield import project, project_point, px_per_degree
@@ -69,7 +69,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.12.0"
+VERSION = "0.13.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -478,9 +478,14 @@ P2_TIMELINE_Y = 168
 PAN_TOP, PAN_BASE = 348, 806
 PAN_X0, PAN_X1 = MARGIN, W - MARGIN - 64
 PAN_ALT_MAX = 90.0
+# The 'below the horizon' line, clear of the compass row at PAN_BASE + 14.
+PAN_BELOW_Y = 848
 
 P2_CARDS = 6
-CARD_Y0, CARD_TILE, CARD_GAP = 940, 130, 16
+# CARD_Y0 moved down 24 to make room for the below-horizon line above it.
+# Six cards at CARD_TILE + CARD_GAP end at 1840, clear of the footer at
+# H - 44.
+CARD_Y0, CARD_TILE, CARD_GAP = 964, 130, 16
 # Requested larger than the tile so the downscale stays crisp; hips2fits renders
 # whatever size is asked for, and the 5" build's 200px was only ever its own
 # card size.
@@ -711,12 +716,20 @@ def render_targets(states, targets, images, lat=None, lon=None):
     obs = observer(lat or 0.0, lon or 0.0, when=when.astimezone(timezone.utc).replace(tzinfo=None))
 
     marks = []
+    # Bodies below the horizon are dropped from the plot, which leaves nothing
+    # to distinguish "no planets tonight" from "none of them has risen yet".
+    # They are collected here and reported with their rise times underneath,
+    # which is most useful exactly when the plot looks empty.
+    below = []
     for b in bodies:
         ra, dec = b.get("right ascension"), b.get("declination")
         if ra is None or dec is None:
             continue
         alt, az = alt_az(obs, ra, dec)
         name = str(b.get("target name", "?"))
+        if alt < 0:
+            rise = next_rise(obs, name, ra, dec)
+            below.append((name, rise))
         # Three populations share this plot, so each gets its own ink: the Moon
         # ivory, the planets MUTED, and everything further out - comets and deep
         # sky alike - the OBJECT green. Comet against deep sky is not a
@@ -745,6 +758,18 @@ def render_targets(states, targets, images, lat=None, lon=None):
     draw.text((MARGIN + draw.textlength("WHERE TO LOOK", font=f["med"]) + 20, 272),
               when_label, font=f["sm"], fill=MUTED)
     _draw_panorama(draw, marks, when_label, f["sm"], f["xs"])
+
+    if below:
+        # Soonest first: the next thing to rise is the actionable one. A body
+        # ephem reports as never rising carries no time rather than a guess.
+        below.sort(key=lambda r: (r[1] is None, r[1]))
+        parts = [f"{n} {t:%H:%M}" if t else n for n, t in below]
+        # MUTED throughout, not DIM. DIM is for rules and ticks; at 3.2:1 on
+        # this background it is below AA wherever it is legible at all, and
+        # these are rise times someone acts on.
+        draw.text((MARGIN, PAN_BELOW_Y),
+                  "Below the horizon:   " + "   ·   ".join(parts),
+                  font=f["xs"], fill=MUTED)
 
     shown = min(P2_CARDS, len(objects))
     count = (f"first {shown} of {len(objects)}" if shown < len(objects)

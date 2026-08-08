@@ -28,6 +28,48 @@ def observer(lat, lon, elevation=0.0, when=None):
     return o
 
 
+_NAMED = {
+    "sun": ephem.Sun, "moon": ephem.Moon, "mercury": ephem.Mercury,
+    "venus": ephem.Venus, "mars": ephem.Mars, "jupiter": ephem.Jupiter,
+    "saturn": ephem.Saturn, "uranus": ephem.Uranus, "neptune": ephem.Neptune,
+    "pluto": ephem.Pluto,
+}
+
+
+def next_rise(obs, name, ra_deg=None, dec_deg=None):
+    """When the named body next clears the horizon, local time, or None.
+
+    Named bodies use ephem's own ephemeris rather than the right ascension and
+    declination from the report. A planet moves a little between the report and
+    its rising and the Moon moves about half a degree an hour, which is enough
+    to shift a rise time by minutes; a fixed position frozen at report time
+    would carry that error. Anything not recognised falls back to the supplied
+    coordinates treated as fixed.
+
+    Returns None for a body that is circumpolar or never rises, both of which
+    are answers rather than failures, and for a name with no usable position.
+    """
+    key = str(name).strip().lower()
+    if key in _NAMED:
+        body = _NAMED[key]()
+    elif ra_deg is not None and dec_deg is not None:
+        body = ephem.FixedBody()
+        body._ra = math.radians(ra_deg)
+        body._dec = math.radians(dec_deg)
+        body._epoch = ephem.J2000
+    else:
+        return None
+    # next_rising advances the observer's date, so it is put back: callers hold
+    # one observer for the whole plot and every later position would shift.
+    saved = obs.date
+    try:
+        return ephem.localtime(obs.next_rising(body))
+    except (ephem.AlwaysUpError, ephem.NeverUpError, ValueError):
+        return None
+    finally:
+        obs.date = saved
+
+
 def alt_az(obs, ra_deg, dec_deg):
     """(altitude, azimuth) in degrees for a J2000 position."""
     body = ephem.FixedBody()

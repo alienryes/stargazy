@@ -198,12 +198,33 @@ def fetch_ovation(timeout=30):
 
 
 def fetch_kp(timeout=15):
-    """Latest planetary Kp, or None. Context only - never gates the display."""
+    """Planetary Kp over the last three hours, or None.
+
+    The highest reading in that span, NOT the most recent one. Kp is a
+    three-hourly index and this feed reports a running estimate of the interval
+    in progress, so it restarts from zero at 00, 03, 06 ... UTC and climbs. The
+    final row is therefore a partial figure whenever a new interval has just
+    begun, and reads far below the activity actually happening.
+
+    Observed on the panel during the first real storm this page ever displayed
+    (2026-08-08): rows to 20:59 read Kp 6, 21:00 to 21:02 read 0, and 21:03
+    read 1, while OVATION still put a 72% cell in view. The header said "Kp 0"
+    beside it. A three-hour window always spans at least one complete interval,
+    so the maximum over it cannot fall back to zero mid-storm.
+
+    Context only - this never gates the display.
+    """
     try:
         r = requests.get(KP_URL, headers=HEADERS, timeout=timeout)
         r.raise_for_status()
         rows = r.json()
-        return float(rows[-1]["kp_index"]) if rows else None
+        if not rows:
+            return None
+        # The feed is one row a minute, so 180 rows is three hours. Taking a
+        # count rather than parsing time_tag keeps this free of the feed's
+        # timestamp format, and a short feed simply yields what it has.
+        recent = rows[-180:]
+        return max(float(x["kp_index"]) for x in recent)
     except Exception as e:
         log.warning("Kp unavailable (%s).", e)
         return None
