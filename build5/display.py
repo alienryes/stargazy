@@ -65,7 +65,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.15.1"
+FIRMWARE_VERSION = "3.16.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -903,6 +903,9 @@ def main():
     parser = argparse.ArgumentParser(description="Touch Display 2 stargazing display")
     parser.add_argument("--save", metavar="PATH", help="Save a single composited frame and exit")
     parser.add_argument("--once", action="store_true", help="Render one frame to the panel and exit")
+    parser.add_argument("--no-night", action="store_true",
+                        help="Save in the daylight palette whatever the hour "
+                             "(for documentation; the panel is unaffected)")
     parser.add_argument("--demo", action="store_true", help="Force vivid clear-sky animation (ignore conditions)")
     parser.add_argument("--compare", action="store_true",
                         help="Fetch from both weather sources and print a per-value diff")
@@ -947,9 +950,12 @@ def main():
         targets = read_targets(out_dir)
         params = sky_params(states)
         pages = build_pages(states, targets, lat, moon_ring)
-        # A saved preview should look like the panel does right now, night mode
-        # included - otherwise --save quietly lies once the sun goes down.
-        now_mode = night_mode_now(night, night_window(states))
+        # --save normally applies night mode so a preview does not lie about
+        # how the panel looks after dark. A screenshot documenting colour
+        # wants the opposite, since red mode collapses everything to luma -
+        # the aurora page in particular renders its emission-height colours
+        # and night mode hides exactly what they are there to show.
+        now_mode = "off" if args.no_night else night_mode_now(night, night_window(states))
         frames = [compose(sky.paint(params, 1.7, [], sky.initial_clouds(params)), p)
                   for p in pages]
         if args.save:

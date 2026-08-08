@@ -125,9 +125,9 @@ Brightness and star size are mapped for legibility at a distance rather than pho
 
 A fourth page that exists **only when aurora is above this site's horizon and it is dark enough to see it**. At temperate latitudes that means it will be absent for years at a time; in Iceland or northern Norway it will be a regular fixture. Both are correct, and the frequency difference is real rather than a setting.
 
-![The aurora page during a real storm: 71 percent probability at bearing 342 degrees on the horizon, a second cell 30 degrees up to the north, a drawn field along the northern horizon, and the three-day Kp forecast.](screenshots/10in-aurora.png)
+![The aurora page during a real storm: 69 percent probability at bearing 342 degrees on the horizon, a second cell 25 degrees up to the north-north-west, a drawn field along the northern horizon shading from yellow-green low down to magenta above, and the three-day Kp forecast.](screenshots/10in-aurora.png)
 
-> **A real storm, 8 August 2026, Kp 6**, captured from the panel in its night mode — which is why it is red. The strongest cell was 71% at 1,754 km, on the horizon to the north-north-west; the best-placed one 10% at 30° elevation and 396 km. This replaces the injected-storm screenshot the page shipped with, which is retained as `screenshots/10in-aurora-simulated.png`.
+> **A real storm, 8 August 2026, Kp 6.** The strongest cell was 69% at 1,754 km on the horizon to the north-north-west; the best-placed one 10% at 25° elevation and 477 km. Captured with `--no-night` so the emission-height colours are visible — between dusk and dawn the panel renders this page in red, which is when it exists. This replaces the injected-storm screenshot the page shipped with, retained as `screenshots/10in-aurora-simulated.png`.
 
 **The query is not "the probability at my latitude".** Aurora emits 100–250 km up, so it is visible far beyond the ground it sits over — from 51°N the horizon reaches past 67°N. Reading the model cell containing the site returns zero while a display is genuinely visible to the north. Every cell within the horizon is searched instead.
 
