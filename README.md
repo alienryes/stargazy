@@ -12,7 +12,7 @@ Rendered with Pillow and written straight to the Linux framebuffer (`/dev/fb0`) 
 | Board | Pi 4 | **Pi 5 or CM** — four-lane DSI, a Pi 4 cannot drive it |
 | Canvas | 1280×720 landscape, rotated to the panel | 1200×1920 portrait, no rotation |
 | Pages | Conditions, targets | Conditions, targets, **meteors** |
-| Status | **Proven in service** | **In development — not yet run on hardware** |
+| Status | **Proven in service** | **In service** |
 
 Everything that is not layout — both weather sources, the target reports, the imagery, the animated sky, night mode, touch, the framebuffer — lives in [`core/`](core/) and is shared. The rest of this README describes the 5" build unless it says otherwise; substitute `build10/` for `build5/` in the commands to install the other one.
 
@@ -303,7 +303,7 @@ A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](ca
 
 **This is for the 5" build only.** The 10.1" panel mounts and cools its Pi perfectly well with the board left open — see the note under Requirements.
 
-For the 10.1" panel there is a **stand** instead, in [`stand10/`](stand10/README.md): one printed part and two M2.5 screws, holding the panel at a 10° lean with the Pi left open on its back. It is **GPL-3.0, not CC BY** — nothing in it derives from RonnyS's case, since the 10.1" panel decouples its enclosure brackets from the Pi's own mounting pattern and none of the 5" design carries over. It has not yet been printed.
+For the 10.1" panel there is a **stand** instead, in [`stand10/`](stand10/README.md): one printed part and two M2.5 screws, holding the panel at a 10° lean with the Pi left open on its back. It is **GPL-3.0, not CC BY** — nothing in it derives from RonnyS's case, since the 10.1" panel decouples its enclosure brackets from the Pi's own mounting pattern and none of the 5" design carries over. Printed and in use. Note that the panel mounts 180° from the way it arrives, which is the only orientation the stand fits — see [`stand10/README.md`](stand10/README.md).
 
 The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke stand (CadQuery frame + riser + WS2812B LED bezel ring). After moving to the self-lit Touch Display 2 that design was retired and archived, with its full history, to a separate private repository.
 
