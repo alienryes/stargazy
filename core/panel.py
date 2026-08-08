@@ -256,8 +256,22 @@ class Controls:
     def show(self):
         self.shown_until = time.time() + self.strip_seconds
 
-    def labels(self):
-        return [f"Night: {self.override or self.config_night}",
+    def labels(self, window=None):
+        """Button captions. Every one names what pressing it will DO.
+
+        The night button used to name the mode in force, which read as state
+        beside five buttons naming actions - and was not even the mode in
+        force, since it showed the configured value while `night_now` returns
+        "off" in daylight whatever the config says. It now names the mode the
+        press will select, the way Pause and Resume name the state being moved
+        to rather than the one being left.
+
+        The panel already shows which mode is active by being that colour, so
+        nothing is lost by labelling the destination instead.
+        """
+        cur = self.night_now(window)
+        nxt = NIGHT_CYCLE[(NIGHT_CYCLE.index(cur) + 1) % len(NIGHT_CYCLE)]
+        return [f"Night → {nxt}",
                 "Resume" if self.paused else "Pause",
                 "Next", "Dimmer", "Brighter", "Blank"]
 
@@ -309,7 +323,7 @@ class Controls:
             self.show()
             return
         self.show()
-        idx = self.strip.at(x, y, len(self.labels()))
+        idx = self.strip.at(x, y, len(self.labels(window)))
         if idx == 0:
             cur = self.night_now(window)
             self.override = NIGHT_CYCLE[(NIGHT_CYCLE.index(cur) + 1) % len(NIGHT_CYCLE)]

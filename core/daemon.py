@@ -142,7 +142,8 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
                 if not (controls and controls.paused):
                     page_i += 1
                 next_flip = now + page_seconds
-            labels = controls.labels() if controls and controls.visible else None
+            labels = (controls.labels(state["window"])
+                      if controls and controls.visible else None)
             frame = layout.compose(sky.paint(params, t, meteors, clouds),
                                    pages[page_i % len(pages)], labels)
             mode = controls.night_now(state["window"]) if controls \
