@@ -48,7 +48,7 @@ The page-2 timeline only appears once UpTonight has run, and the page leaves the
 
 **Night mode — the same page after dark**
 
-![The conditions page in red night mode: the identical layout rendered entirely in shades of red on black, including the photograph of the Moon. The verdict, the condition bars, the percentages and the footer are all still legible, and the hollow Seeing bar still reads as hollow; only hue has gone.](screenshots/night-red.png)
+![The conditions page in red night mode: the identical layout rendered entirely in shades of red on black, including the photograph of the Moon. The verdict, the condition bars, the percentages and the footer are all still legible, and the bars that fall below their warning marks still read as hollow outlines against the filled ones; only hue has gone.](screenshots/night-red.png)
 
 Between real dusk and dawn — not on a clock schedule — the finished frame is put through a red filter, because long wavelengths leave dark-adapted vision alone. The whole frame is filtered rather than the palette swapped, which keeps the lunar photograph and the deep-sky cutouts from glowing white.
 
