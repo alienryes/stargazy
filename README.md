@@ -36,13 +36,13 @@ Two pages rotate over the same continuous animated sky. Both shots are real fram
 
 **Page 1 — tonight's conditions**
 
-![The conditions page: a large EXCELLENT verdict in pale blue-white, four labelled condition bars with percentages, and a photographic last-quarter Moon captioned Last Quarter in Aries. The Seeing bar reads 36% and is drawn as a hollow outline rather than filled, because it falls below its warning mark; the other three are filled. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind.](screenshots/conditions.png)
+![The conditions page: a large GOOD verdict in pale blue-white, four labelled condition bars with percentages, and a photographic waning crescent Moon captioned Waning Crescent in Gemini. Each bar is filled to its value inside a hollow outline, so Seeing at about half sits visibly short of the other three, which are nearly full. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind.](screenshots/conditions.png)
 
 > **Dusk / Dawn** is used in that footer, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
 
 **Page 2 — tonight's targets**
 
-![The targets page: a dusk-to-dawn timeline with the astronomical dark window highlighted and a moon-up strip above it; an altitude-versus-bearing plot of the Moon and planets; and four deep-sky cards, each with a real sky photograph, object type, constellation, peak altitude and time.](screenshots/targets.png)
+![The targets page: a dusk-to-dawn timeline with the astronomical dark window highlighted and a moon-up strip above it; an altitude-versus-bearing plot of the Moon and planets, with a line beneath it naming the bodies still below the horizon and the times they rise; and four deep-sky cards, each with a real sky photograph, object type, constellation, peak altitude and time.](screenshots/targets.png)
 
 The page-2 timeline only appears once UpTonight has run, and the page leaves the rotation entirely if it has produced nothing, so an empty page is never shown.
 

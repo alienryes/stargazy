@@ -50,7 +50,7 @@ from core.palette import (
     verdict,
 )
 from core.panel import PIL_ROTATION, Framebuffer, Strip
-from core.positions import alt_az, observer, plot_instant
+from core.positions import alt_az, next_rise, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
 from core.starfield import project, project_point, px_per_degree
@@ -65,7 +65,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.16.0"
+FIRMWARE_VERSION = "3.17.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -432,6 +432,10 @@ PAN_X0, PAN_X1 = MARGIN, P2_DIV_X - 24
 # dead space that squeezed everything else together. Latitude-specific: raise
 # this if the display is ever used much further south.
 PAN_ALT_MAX = 70.0
+# The "below the horizon" line, in the band between the compass labels (which
+# end near 600) and the comet note at 656. Unlike the 10" build, the cards sit
+# in the right-hand column past P2_DIV_X, so nothing has to move to make room.
+PAN_BELOW_Y = 612
 
 
 def _tl_x(t, t0, t1, x0, x1):
@@ -687,6 +691,48 @@ def _panorama_marks(bodies, comets, obs):
     return marks
 
 
+def _draw_below_horizon(draw, marks, bodies, obs, f_xs):
+    """Name the bodies the panorama dropped, and when they rise.
+
+    The plot shows nothing below the horizon, which leaves no way to tell "no
+    planets tonight" from "none of them has risen yet" - and the two look
+    identical exactly when the plot is emptiest. Soonest first, because the next
+    body to rise is the one worth waiting for.
+
+    Comets are left out, as they are on the 10" build: their rise times would
+    come from the report's frozen coordinates rather than an ephemeris.
+    """
+    pos = {str(b.get("target name", "?")):
+           (b.get("right ascension"), b.get("declination")) for b in bodies}
+    below = [(name, next_rise(obs, name, *pos[name]))
+             for _, alt, name, _, _ in marks if alt < 0 and name in pos]
+    if not below:
+        return
+    # A body that never rises carries no time rather than a guess, and sorts last.
+    below.sort(key=lambda r: (r[1] is None, r[1]))
+    parts = [f"{n} {t:%H:%M}" if t else n for n, t in below]
+
+    # The left column is 584px against the 10" build's full 1200, so this line
+    # is the one place the two layouts cannot share a rule: four bodies would
+    # run into the divider. Entries are dropped from the far end - the latest to
+    # rise, i.e. the least actionable - until the line fits its own column.
+    label, sep = "Below the horizon:   ", "   ·   "
+    avail = PAN_X1 - MARGIN
+
+    def line(k):
+        s = sep.join(parts[:k])
+        if k < len(parts):
+            s += f"{sep}+{len(parts) - k} more"
+        return label + s
+
+    shown = len(parts)
+    while shown > 1 and draw.textlength(line(shown), font=f_xs) > avail:
+        shown -= 1
+    # MUTED, not DIM: DIM is for rules and ticks, and these are rise times
+    # someone acts on.
+    draw.text((MARGIN, PAN_BELOW_Y), line(shown), font=f_xs, fill=MUTED)
+
+
 def render_targets(states, targets, images, lat=None):
     """Page 2 as an RGBA overlay, or None when UpTonight has produced nothing."""
     objects = targets.get("objects") or []
@@ -718,7 +764,9 @@ def render_targets(states, targets, images, lat=None):
     when, when_label = plot_instant(night_window(states))
     obs = observer(lat or 0.0, LON or 0.0,
                    when=when.astimezone(timezone.utc).replace(tzinfo=None))
-    _draw_panorama(draw, _panorama_marks(bodies, comets, obs), when_label, f_sm, f_xs)
+    marks = _panorama_marks(bodies, comets, obs)
+    _draw_panorama(draw, marks, when_label, f_sm, f_xs)
+    _draw_below_horizon(draw, marks, bodies, obs, f_xs)
 
     ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
     _draw_cards(img, draw, ranked, images, lat, f_med, f_sm, f_xs)
