@@ -244,6 +244,7 @@ class Controls:
         self.override_dark  = None   # dusk-to-dawn state when it was chosen
         self.paused         = False
         self.next_page      = False
+        self.next_cards     = False
         self.blanked        = False
         self.shown_until    = 0.0
         self.max_brightness = read_brightness("max_brightness")
@@ -256,8 +257,14 @@ class Controls:
     def show(self):
         self.shown_until = time.time() + self.strip_seconds
 
-    def labels(self, window=None):
+    def labels(self, window=None, paged=False):
         """Button captions. Every one names what pressing it will DO.
+
+        `paged` adds a seventh button, and only the targets page passes it: the
+        other pages hold one screenful, so a More there would either lie or do
+        nothing. The strip divides its width by the number of captions, so the
+        button count changing between pages moves every button - which is safe
+        only because the loop holds the page still while the strip is up.
 
         The night button used to name the mode in force, which read as state
         beside five buttons naming actions - and was not even the mode in
@@ -273,7 +280,7 @@ class Controls:
         nxt = NIGHT_CYCLE[(NIGHT_CYCLE.index(cur) + 1) % len(NIGHT_CYCLE)]
         return [f"Night → {nxt}",
                 "Resume" if self.paused else "Pause",
-                "Next", "Dimmer", "Brighter", "Blank"]
+                "Next", "Dimmer", "Brighter", "Blank"] + (["More"] if paged else [])
 
     def night_now(self, window):
         """The night mode to apply right now, honouring a manual override.
@@ -295,6 +302,11 @@ class Controls:
         stepped, self.next_page = self.next_page, False
         return stepped
 
+    def take_next_cards(self):
+        """True once after the More button is pressed."""
+        stepped, self.next_cards = self.next_cards, False
+        return stepped
+
     def _step_brightness(self, direction):
         # Never down to 0: going fully dark is what Blank is for, and the strip
         # must stay visible for the change to be reversible.
@@ -312,8 +324,13 @@ class Controls:
         self.blanked = False
         set_brightness(self.brightness)
 
-    def touched(self, x, y, window):
-        """Handle one tap, in render coordinates."""
+    def touched(self, x, y, window, paged=False):
+        """Handle one tap, in render coordinates.
+
+        `paged` must be the value the strip was DRAWN with, or the hit test
+        divides the width into a different number of cells than the user is
+        looking at and every button is offset.
+        """
         if self.blanked:
             self.wake()
             return
@@ -323,7 +340,7 @@ class Controls:
             self.show()
             return
         self.show()
-        idx = self.strip.at(x, y, len(self.labels(window)))
+        idx = self.strip.at(x, y, len(self.labels(window, paged)))
         if idx == 0:
             cur = self.night_now(window)
             self.override = NIGHT_CYCLE[(NIGHT_CYCLE.index(cur) + 1) % len(NIGHT_CYCLE)]
@@ -338,3 +355,5 @@ class Controls:
             self._step_brightness(+1)
         elif idx == 5:
             self.blank()
+        elif idx == 6:
+            self.next_cards = True

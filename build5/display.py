@@ -26,7 +26,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from core.daemon import install_signal_handlers, run_daemon
+from core.daemon import Paged, flatten, install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
 from core.meteors import SPORADIC_ZHR, active, visible_rate
@@ -65,7 +65,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.18.0"
+FIRMWARE_VERSION = "3.19.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -602,7 +602,11 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
 
 
 def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
-    """Deep-sky targets, best first, with a real cutout of each patch of sky."""
+    """One screenful of deep-sky targets, with a real cutout of each patch of sky.
+
+    Takes the objects already chosen rather than slicing here, so the caller's
+    heading and these cards cannot disagree about which screenful is showing.
+    """
     # Starts clear of the column heading, which descends to about y 210.
     x0, y = P2_DIV_X + 24, 220
     tile, gap = 96, 16
@@ -616,7 +620,7 @@ def _draw_cards(img, draw, objects, images, lat, f_med, f_sm, f_xs):
     draw.text((bar_x + bar_w - draw.textlength(cap, font=f_xs), 186), cap,
               font=f_xs, fill=MUTED)
 
-    for o in objects[:P2_CARDS]:
+    for o in objects:
         oid = str(o.get("id", "?"))
         pic = images.get(oid)
         if pic is not None:
@@ -733,8 +737,14 @@ def _draw_below_horizon(draw, marks, bodies, obs, f_xs):
     draw.text((MARGIN, PAN_BELOW_Y), line(shown), font=f_xs, fill=MUTED)
 
 
-def render_targets(states, targets, images, lat=None):
-    """Page 2 as an RGBA overlay, or None when UpTonight has produced nothing."""
+def render_targets(states, targets, images, lat=None, offset=0):
+    """One screenful of page 2, or None when UpTonight has produced nothing.
+
+    `offset` is the first card's place in the ranking. Unlike the 10" build the
+    panorama does NOT follow it: this layout keeps the objects off the plot
+    entirely - they and the planets do not share a scale in the vertical room
+    available - so there is no second view of the same six to keep in step.
+    """
     objects = targets.get("objects") or []
     bodies  = targets.get("bodies") or []
     comets  = targets.get("comets") or []
@@ -756,9 +766,9 @@ def render_targets(states, targets, images, lat=None):
     draw.text((MARGIN, 182), "WHERE TO LOOK", font=f_sm, fill=NOMINAL)
     # Say what the column is actually showing. On a dark night the cap lets 40
     # objects through against four cards, so "(40 up)" alone was misleading.
-    shown = min(P2_CARDS, len(objects))
-    count = (f"first {shown} of {len(objects)}" if shown < len(objects)
-             else f"all {len(objects)}")
+    page_objects = rank_objects(objects)[offset:offset + P2_CARDS]
+    count = (f"all {len(objects)}" if len(objects) <= P2_CARDS
+             else f"{offset + 1}-{offset + len(page_objects)} of {len(objects)}")
     draw.text((P2_DIV_X + 24, 182), f"DEEP SKY  ({count})", font=f_sm, fill=NOMINAL)
     # One instant, computed here: the report files are sampled hours apart.
     when, when_label = plot_instant(night_window(states))
@@ -768,8 +778,7 @@ def render_targets(states, targets, images, lat=None):
     _draw_panorama(draw, marks, when_label, f_sm, f_xs)
     _draw_below_horizon(draw, marks, bodies, obs, f_xs)
 
-    ranked = rank_objects(objects)
-    _draw_cards(img, draw, ranked, images, lat, f_med, f_sm, f_xs)
+    _draw_cards(img, draw, page_objects, images, lat, f_med, f_sm, f_xs)
 
     # No "+N more": it dangled an object the page never shows, and the column
     # heading already carries the total.
@@ -903,6 +912,29 @@ def sky_params(states):
     return params
 
 
+def target_pages(states, targets, lat):
+    """Every screenful of page 2, as a Paged run, or empty if there is nothing.
+
+    All of them are rendered here because stepping between them happens on the
+    render loop, which can afford neither a re-render nor the cutout fetches
+    behind one. Cutouts are therefore fetched for the whole list rather than the
+    first screenful; they are cached on disk, so it is a one-off cost per object.
+
+    This build shows four at a time against the 10" build's six, so a list of
+    forty runs to ten screenfuls here and seven there.
+    """
+    objects = targets.get("objects") or []
+    n = max(1, -(-len(objects) // P2_CARDS))   # ceiling division
+    images = load_cutouts(targets, len(objects) or P2_CARDS)
+    out = Paged()
+    for i in range(n):
+        page = render_targets(states, targets, images, lat, i * P2_CARDS)
+        if page is None:      # no objects and no bodies: there is no page at all
+            return Paged()
+        out.append(page)
+    return out
+
+
 def build_pages(states, targets, lat, moon_ring=False):
     """Both dashboard pages as RGBA overlays.
 
@@ -913,9 +945,11 @@ def build_pages(states, targets, lat, moon_ring=False):
     # frame and drops them; the 10" build shows them.
     pages = [render_foreground(states, moon_image()[0], moon_ring)]
     # The targets page joins the rotation only when there is something on it -
-    # better a single page than a dead one before UpTonight's first run.
-    page2 = render_targets(states, targets, load_cutouts(targets, P2_CARDS), lat)
-    if page2 is not None:
+    # better a single page than a dead one before UpTonight's first run. It
+    # carries every object UpTonight passed, as a Paged run stepped by its own
+    # button; four cards against a list of forty is the case that most needs it.
+    page2 = target_pages(states, targets, lat)
+    if page2:
         pages.append(page2)
     return pages
 
@@ -1004,16 +1038,22 @@ def main():
         # the aurora page in particular renders its emission-height colours
         # and night mode hides exactly what they are there to show.
         now_mode = "off" if args.no_night else night_mode_now(night, night_window(states))
+        # Flattened: with no button and no rotation, a one-shot takes every
+        # screenful of a paged page rather than only its first.
         frames = [compose(sky.paint(params, 1.7, [], sky.initial_clouds(params)), p)
-                  for p in pages]
+                  for p in flatten(pages)]
         if args.save:
             apply_night(frames[0], now_mode, night_dim).save(args.save)
             log.info("Saved %s", args.save)
             if len(frames) > 1:
                 p = Path(args.save)
-                out = str(p.with_name(p.stem + "_targets" + p.suffix))
-                apply_night(frames[1], now_mode, night_dim).save(out)
-                log.info("Saved %s", out)
+                # The first screenful keeps the plain _targets name the README
+                # refers to; the rest are numbered after it.
+                for i, frame in enumerate(frames[1:], 1):
+                    stem = p.stem + "_targets" + ("" if i == 1 else f"_{i}")
+                    out = str(p.with_name(stem + p.suffix))
+                    apply_night(frame, now_mode, night_dim).save(out)
+                    log.info("Saved %s", out)
             else:
                 log.warning("No UpTonight reports in %s - targets page skipped.", out_dir)
         else:

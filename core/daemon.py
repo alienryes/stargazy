@@ -14,6 +14,11 @@ build_pages is only ever called from the data thread, so it is the right place
 for the network calls that fetch the lunar frame and the deep-sky cutouts. It
 returns one overlay per page; a page that has nothing to show should simply not
 be returned, because one live page beats two with a dead one.
+
+An entry may instead be a `Paged` list of overlays, for a page holding more than
+one screenful. It occupies a single slot in the rotation and is stepped by its
+own button, so the rotation still turns at the same rate whether the deep-sky
+list runs to six objects or forty.
 """
 import logging
 import random
@@ -28,6 +33,33 @@ from core.sky import DEMO_PARAMS
 log = logging.getLogger(__name__)
 
 _RUNNING = True  # cleared by SIGTERM/SIGINT so the daemon exits gracefully
+
+
+class Paged(list):
+    """Several overlays occupying one slot in the page rotation.
+
+    Every variant is rendered up front on the data thread, because stepping to
+    the next one happens on the render loop, where a re-render - and the cutout
+    fetches behind it - cannot be afforded. The cost is memory rather than
+    frame time: one full-size RGBA overlay per screenful.
+    """
+
+
+def flatten(pages):
+    """Every screenful in order, with Paged runs expanded.
+
+    For the one-shot paths. The daemon steps a Paged page with a button, but
+    --save and --once have no button and no rotation, so they take the lot;
+    without this they hand a list where an image is expected. The daemon's own
+    loop is not the only consumer of build_pages, and that is easy to forget.
+    """
+    out = []
+    for page in pages:
+        if isinstance(page, Paged):
+            out.extend(page)
+        else:
+            out.append(page)
+    return out
 
 
 def install_signal_handlers():
@@ -107,7 +139,8 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
         meteors = []
         clouds = sky.initial_clouds(state["params"])
         next_meteor = t0 + random.uniform(1.0, 3.0)
-        page_i, next_flip = 0, t0 + page_seconds
+        page_i, card_i, next_flip = 0, 0, t0 + page_seconds
+        paged = False   # set from the page actually composed, one frame behind
         dark = fb.dark_frame()
         blanked = False
         while _RUNNING:
@@ -117,7 +150,10 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
             if controls:
                 tap = reader.get()
                 if tap:
-                    controls.touched(tap[0], tap[1], state["window"])
+                    # Dispatched against the strip as last DRAWN, which is what
+                    # the user aimed at. `paged` is from the previous frame for
+                    # exactly that reason.
+                    controls.touched(tap[0], tap[1], state["window"], paged)
                 if controls.blanked:
                     # Backlight off and nothing composited: the one state in
                     # which this display is not using a whole core.
@@ -134,18 +170,33 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
                 next_meteor = now + random.uniform(params["met_min"], params["met_max"])
             sky.step_meteors(meteors)
             pages = state["pages"]
+            # The page holds while the strip is up as well as while paused.
+            # Rotating out from under a finger is the hostility Pause exists to
+            # fix, and it is now also a correctness matter: a Paged page carries
+            # an extra button, so a flip mid-strip would reflow every button
+            # under the user's hand. Holding while the strip is up makes the
+            # layout stable by construction rather than by luck.
+            holding = bool(controls and (controls.paused or controls.visible))
             if controls and controls.take_next():
-                page_i, next_flip = page_i + 1, now + page_seconds
+                page_i, card_i, next_flip = page_i + 1, 0, now + page_seconds
             elif now >= next_flip:
-                # A paused page holds; the deadline still moves, so resuming
-                # gives a full turn on the page rather than an instant flip.
-                if not (controls and controls.paused):
-                    page_i += 1
+                # The deadline still moves while holding, so releasing gives a
+                # full turn on the page rather than an instant flip.
+                if not holding:
+                    page_i, card_i = page_i + 1, 0
                 next_flip = now + page_seconds
-            labels = (controls.labels(state["window"])
+            page = pages[page_i % len(pages)]
+            paged = isinstance(page, Paged)
+            if paged:
+                if controls and controls.take_next_cards():
+                    card_i += 1
+                # Wraps, so pressing past the last screenful returns to the
+                # best targets rather than stopping on the worst.
+                page = page[card_i % len(page)]
+            labels = (controls.labels(state["window"], paged)
                       if controls and controls.visible else None)
             frame = layout.compose(sky.paint(params, t, meteors, clouds),
-                                   pages[page_i % len(pages)], labels)
+                                   page, labels)
             mode = controls.night_now(state["window"]) if controls \
                 else night_mode_now(night, state["window"])
             out.seek(0)

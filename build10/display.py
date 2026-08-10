@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from core.aurora import FIELD_ALT_BINS, FIELD_AZ_BINS, compass
 from core.aurora import visible_now as aurora_now
-from core.daemon import install_signal_handlers, run_daemon
+from core.daemon import Paged, flatten, install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
 from core.meteors import (
@@ -69,7 +69,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.15.0"
+VERSION = "0.16.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -630,7 +630,12 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
 
 
 def _draw_cards(img, draw, objects, images, lat, obs, f):
-    """Deep-sky targets, best first, with a real cutout of each patch of sky."""
+    """One screenful of deep-sky targets, with a real cutout of each patch of sky.
+
+    Takes the objects already chosen rather than slicing here, so the caller's
+    heading, the panorama marks and these cards cannot disagree about which
+    screenful is showing.
+    """
     x0, y = MARGIN, CARD_Y0
     tile = CARD_TILE
     tx = x0 + tile + 24
@@ -640,7 +645,7 @@ def _draw_cards(img, draw, objects, images, lat, obs, f):
     draw.text((bar_x + bar_w - draw.textlength(cap, font=f["xs"]), CARD_Y0 - 52),
               cap, font=f["xs"], fill=MUTED)
 
-    for o in objects[:P2_CARDS]:
+    for o in objects:
         oid = str(o.get("id", "?"))
         pic = images.get(oid)
         if pic is not None:
@@ -693,8 +698,14 @@ def _draw_cards(img, draw, objects, images, lat, obs, f):
         y += tile + CARD_GAP
 
 
-def render_targets(states, targets, images, lat=None, lon=None):
-    """Page 2 as an RGBA overlay, or None when UpTonight has produced nothing."""
+def render_targets(states, targets, images, lat=None, lon=None, offset=0):
+    """One screenful of page 2, or None when UpTonight has produced nothing.
+
+    `offset` is the first card's place in the ranking. The panorama marks follow
+    it, so the plot and the cards always describe the same objects; showing
+    marks for the first six while the cards list the next six would be two
+    answers to one question.
+    """
     objects = targets.get("objects") or []
     bodies  = targets.get("bodies") or []
     comets  = targets.get("comets") or []
@@ -744,7 +755,8 @@ def render_targets(states, targets, images, lat=None, lon=None):
             marks.append((az, alt, str(c.get("target name", "?")), OBJECT, 7.0))
 
     ranked = rank_objects(objects)
-    for o in ranked[:P2_CARDS]:
+    page_objects = ranked[offset:offset + P2_CARDS]
+    for o in page_objects:
         ra, dec = o.get("right ascension"), o.get("declination")
         if ra is None or dec is None:
             continue
@@ -771,11 +783,10 @@ def render_targets(states, targets, images, lat=None, lon=None):
                   "Below the horizon:   " + "   ·   ".join(parts),
                   font=f["xs"], fill=MUTED)
 
-    shown = min(P2_CARDS, len(objects))
-    count = (f"first {shown} of {len(objects)}" if shown < len(objects)
-             else f"all {len(objects)}")
+    count = (f"all {len(objects)}" if len(objects) <= P2_CARDS
+             else f"{offset + 1}-{offset + len(page_objects)} of {len(objects)}")
     draw.text((MARGIN, CARD_Y0 - 60), f"DEEP SKY  ({count})", font=f["med"], fill=NOMINAL)
-    _draw_cards(img, draw, ranked, images, lat, obs, f)
+    _draw_cards(img, draw, page_objects, images, lat, obs, f)
 
     draw.text((MARGIN, H - 44), "Sky imagery: DSS2 / CDS Strasbourg",
               font=f["xs"], fill=DIM)
@@ -1242,16 +1253,38 @@ def render_aurora(states, lat, lon):
     return img
 
 
+def target_pages(states, targets, lat):
+    """Every screenful of page 2, as a Paged run, or empty if there is nothing.
+
+    All of them are rendered here because stepping between them happens on the
+    render loop, which can afford neither a re-render nor the cutout fetches
+    behind one. Cutouts are therefore fetched for the whole list, not the first
+    screenful; they are cached on disk, so this is a one-off cost per object.
+    """
+    objects = targets.get("objects") or []
+    n = max(1, -(-len(objects) // P2_CARDS))   # ceiling division
+    images = load_cutouts(targets, len(objects) or P2_CARDS, CUTOUT_PX)
+    out = Paged()
+    for i in range(n):
+        page = render_targets(states, targets, images, lat, LON, i * P2_CARDS)
+        if page is None:      # no objects and no bodies: there is no page at all
+            return Paged()
+        out.append(page)
+    return out
+
+
 def build_pages(states, targets, lat, moon_ring=False):
     """Every page as an RGBA overlay. Data thread only: this fetches the hour's
     lunar frame and any deep-sky cutouts not already cached."""
     photo, facts = moon_image()
     pages = [render_conditions(states, photo, moon_ring, facts)]
     # The targets page joins the rotation only when there is something on it -
-    # better one live page than two with a dead one.
-    page2 = render_targets(states, targets,
-                           load_cutouts(targets, P2_CARDS, CUTOUT_PX), lat, LON)
-    if page2 is not None:
+    # better one live page than two with a dead one. It carries every object
+    # UpTonight passed rather than the first screenful, as a Paged run stepped
+    # by its own button: the heading has always said "of 40" while showing six,
+    # and naming what it is withholding is not the same as offering it.
+    page2 = target_pages(states, targets, lat)
+    if page2:
         pages.append(page2)
     page3 = render_meteors(states, lat, LON)
     if page3 is not None:
@@ -1349,8 +1382,10 @@ def main():
         # the aurora page in particular renders its emission-height colours
         # and night mode hides exactly what they are there to show.
         now_mode = "off" if args.no_night else night_mode_now(night, night_window(states))
+        # Flattened: with no button and no rotation, a one-shot takes every
+        # screenful of a paged page rather than only its first.
         frames = [compose(sky.paint(params, 1.7, [], sky.initial_clouds(params)), p)
-                  for p in pages]
+                  for p in flatten(pages)]
         if args.save:
             p = Path(args.save)
             for i, frame in enumerate(frames):

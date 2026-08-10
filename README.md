@@ -24,7 +24,7 @@ Everything that is not layout — both weather sources, the target reports, the 
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
 - **Live animated night sky** behind the dashboard: **the actual stars overhead**, plotted from a catalogue at their real positions for the site and the moment, plus drifting clouds and meteors from tonight's active showers — all **reactive to the actual conditions**
-- **Touch controls** hidden until the screen is tapped: night mode, page rotation, brightness and a true blank that drops the display to 0% CPU
+- **Touch controls** hidden until the screen is tapped: night mode, page rotation, paging through the full deep-sky list, brightness and a true blank that drops the display to 0% CPU
 
 ---
 
@@ -156,6 +156,11 @@ No controls are drawn until the screen is touched. **The first tap only reveals 
 | **Next** | Jumps to the next page straight away |
 | **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
 | **Blank** | Backlight off and compositing stopped — the display drops to **0% CPU** until it is touched again. |
+| **More** | *Targets page only.* Steps to the next screenful of deep-sky objects, and wraps at the end |
+
+**More** exists because the deep-sky list is far longer than one screenful. UpTonight commonly passes forty objects on a dark night, against six cards on the 10-inch panel and four on the 5-inch, and the heading has always said so — `DEEP SKY (1–6 of 40)`. Pressing **More** reaches the rest, six or four at a time; on the 10-inch build the altitude-versus-bearing plot follows, so the plot and the cards always describe the same objects.
+
+Every screenful is drawn in advance on the data thread, along with the sky photograph for each object, because stepping between them happens on the render loop where a fetch cannot be afforded. The page rotation also holds while the control strip is showing, so a page cannot turn under your hand mid-press.
 
 A night mode picked by hand lapses the next time the sky crosses dusk or dawn: it is a change of state for that night, not a second schedule competing with the automatic one. Nothing else in the touch controls is persisted — `config.toml` is restored on restart, so the display always comes back to a known state.
 
