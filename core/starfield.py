@@ -29,6 +29,40 @@ CATALOGUE = Path(__file__).resolve().parent / "data" / "stars.tsv"
 # means one faint star dropping out cannot re-scale the whole sky.
 MAG_BRIGHT, MAG_FAINT = -1.5, 6.5
 
+# Drawn size per magnitude, as (fainter-than, size) with the last entry the
+# catch-all. A tuple rather than an if-ladder because the two panels need
+# different tables and because the drawn area it implies is the thing that gets
+# measured - see tools/star_field.py.
+#
+# SIZE_BANDS_DENSE is the original, and pairs with drawing the whole catalogue.
+# SIZE_BANDS_SPARSE pairs with a limiting magnitude near what a real suburban
+# sky reaches. Measured over the 5" field of view, the catalogue puts 1204 stars
+# on the panel, of which 983 - 82% - are fainter than magnitude 5 and so are not
+# visible to the naked eye from the site at all. They carried 56% of the lit
+# area, and they are what made a real sky look like noise: the sixteen stars
+# that actually form the patterns were 1.3% of what was drawn.
+SIZE_BANDS_DENSE = ((1.5, 3), (4.0, 2), (None, 1))
+# Paired with a limiting magnitude near what a real suburban sky reaches, and
+# with the steeper brightness ratio below - the three only work together.
+#
+# Cutting at magnitude 5 removes 82% of the stars; the recorded failure mode
+# here is a sky that loses its drawn area and reads as empty rather than dark,
+# so the survivors are enlarged to keep the panel's presence. Measured on the
+# composited frame: 233 stars against 1237, and 2051 lit pixels against 1503.
+SIZE_BANDS_SPARSE = ((1.5, 5), (2.5, 4), (3.5, 3), (None, 2))
+
+# Brightness ratio per magnitude, and the floor, for each profile.
+#
+# THE FLAT DEFAULT EXISTS TO PROTECT STARS THE SPARSE PROFILE NO LONGER DRAWS.
+# 0.93 with a 0.55 floor spans 1.78:1 - 0.63 magnitudes - for a sky spanning
+# eight, because a steeper map piled the faint majority onto the floor and the
+# sky rendered half as present. Once the catalogue is cut at magnitude 5 there
+# is no faint majority to protect, and the compression only flattens the
+# ordering that makes a sky recognisable: every star came out the same grey and
+# differed only in width. 0.81 with a 0.25 floor spans 1.48 magnitudes.
+DENSE_RATIO, DENSE_FLOOR = 0.93, 0.55
+SPARSE_RATIO, SPARSE_FLOOR = 0.81, 0.25
+
 _CATALOGUE = None
 
 
@@ -46,7 +80,8 @@ def catalogue():
     return _CATALOGUE
 
 
-def _appearance(mag, min_size=1):
+def _appearance(mag, min_size=1, bands=SIZE_BANDS_DENSE,
+                ratio=DENSE_RATIO, floor=DENSE_FLOOR):
     """(base brightness, drawn size) for a magnitude.
 
     `min_size` raises the floor for a panel whose pixels are physically coarser
@@ -75,20 +110,18 @@ def _appearance(mag, min_size=1):
     # counting lit pixels in a fixed strip of sky gave 117 against the old
     # field's 257, i.e. a sky half as present. This ratio and floor put the mean
     # back around 0.65 while keeping the ordering - Sirius still dominates.
-    base = max(0.55, min(1.0, 0.93 ** (mag - MAG_BRIGHT)))
-    # Size bands are set for a magnitude 6.5 catalogue, where a 3.0 cut left
-    # 99% of stars as single pixels and the sky lost half its drawn area
-    # (measured: 121 lit pixels against the old field's 257 in the same strip).
-    # It is not only a rendering convenience - a brighter star really does read
-    # as larger to the eye, through glare - but the honest limit is that a
-    # single pixel is 0.11mm on this panel and simply is not visible from across
-    # a room, so the faint majority is carried by brightness rather than size.
-    if mag < 1.5:
-        size = 3
-    elif mag < 4.0:
-        size = 2
-    else:
-        size = 1
+    base = max(floor, min(1.0, ratio ** (mag - MAG_BRIGHT)))
+    # Size, not brightness, is what carries the magnitude ordering: the drawn
+    # brightness range above spans 1.78:1, which is 0.63 magnitudes for a sky
+    # that spans eight. It is not only a rendering convenience - a brighter star
+    # really does read as larger to the eye, through glare - and a single pixel
+    # is 0.11mm on this panel, so the faintest stars are at the edge of being
+    # visible from across a room whatever brightness they are given.
+    size = bands[-1][1]
+    for limit, value in bands[:-1]:
+        if mag < limit:
+            size = value
+            break
     return base, max(size, min_size)
 
 
@@ -196,7 +229,8 @@ def project_point(az, alt, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=
 
 
 def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
-            min_size=1):
+            min_size=1, limit=MAG_FAINT, bands=SIZE_BANDS_DENSE,
+            ratio=DENSE_RATIO, floor=DENSE_FLOOR):
     """Stars currently above the horizon and inside the view, in Sky's format.
 
     Returns (x, y, base, twinkle phase, twinkle speed, size, scintillation)
@@ -212,6 +246,12 @@ def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
     """
     stars = []
     for i, (ra, dec, mag) in enumerate(catalogue()):
+        if mag > limit:
+            # Fainter than the site can actually see. Drawing it is not extra
+            # fidelity: the catalogue reaches 6.5 and a suburban sky reaches
+            # about 5, so these are stars nobody at the panel could ever pick
+            # out, and in bulk they bury the ones that make the sky recognisable.
+            continue
         alt, az = alt_az(obs, ra, dec)
         if alt <= 0.0:
             continue                      # below the horizon: genuinely not there
@@ -219,7 +259,7 @@ def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
                                      az_centre, alt_centre, fov_vertical)
         if not inside:
             continue
-        base, size = _appearance(mag, min_size)
+        base, size = _appearance(mag, min_size, bands, ratio, floor)
         rng = random.Random(i)
         stars.append((int(x), int(y), base,
                       rng.uniform(0.0, 2 * math.pi),

@@ -67,9 +67,9 @@ from core.starfield import project, project_point, px_per_degree
 from core.targets import load_cutouts, peak, rank_objects, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
-from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
+from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.18.0"
+VERSION = "0.24.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -205,7 +205,7 @@ AURORA_EMISSION_KM = 250.0
 
 # The engine, sized for this panel. The daemon reads these three off this module
 # as its layout.
-sky = Sky(W, H, stars=520, twinkle=TWINKLE_AMP, twinkle_max=TWINKLE_MAX)
+sky = Sky(W, H, stars=520, twinkle=TWINKLE_AMP, twinkle_max=TWINKLE_MAX, fov=CAMERA_FOV)
 fb = Framebuffer(W, H, FB_W, FB_H, ROTATE, FB_DEV)
 strip = Strip(W, MARGIN, STRIP_Y, STRIP_H, BTN_GAP, text_dy=24)
 
@@ -327,7 +327,10 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None)
     dsky_tmrw       = _i(s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow"))
     dsky_tmrw_desc  = _phrase(s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow_description", ""))
 
-    cloud  = _i(s.get("sensor.astroweather_backyard_cloud_cover"))
+    # Obscuration, not raw cover: 100% thin cirrus stops far less light than
+    # 100% stratus, and the Cloudless bar is a judgement about observing.
+    # See core.weather.cloud_obscuration.
+    cloud  = obscuration_of(s)
     seeing = _i(s.get("sensor.astroweather_backyard_seeing_percentage"))
     transp = _i(s.get("sensor.astroweather_backyard_transparency"))
     calm   = _i(s.get("sensor.astroweather_backyard_calm_percentage"))
@@ -821,7 +824,7 @@ def render_meteors(states, lat, lon):
         return None
 
     obs = observer(lat or 0.0, lon or 0.0, when=utc)
-    cloud = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+    cloud = obscuration_of(states)
     moon_illum = _f(states.get("sensor.astroweather_backyard_moon_phase")) / 100.0
 
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -1028,7 +1031,7 @@ def sky_params(states):
     when, _ = plot_instant(night_window(states))
     utc = when.astimezone(timezone.utc).replace(tzinfo=None)
     obs = observer(LAT or 0.0, LON or 0.0, when=utc)
-    cloud = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+    cloud = obscuration_of(states)
     moon_illum = _f(states.get("sensor.astroweather_backyard_moon_phase")) / 100.0
 
     rate = visible_rate(SPORADIC_ZHR, 1.0, 45.0, cloud, moon_illum)
@@ -1174,7 +1177,7 @@ def render_aurora(states, lat, lon):
         return None
 
     strongest, highest = data["strongest"], data["highest"]
-    cloud = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+    cloud = obscuration_of(states)
 
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -1234,8 +1237,8 @@ def render_aurora(states, lat, lon):
     # on because it is overcast is worth saying out loud rather than leaving
     # them to look up and find out.
     sky = ("Your sky is clear." if cloud <= 20
-           else f"Your sky is {cloud}% cloud." if cloud < 80
-           else f"Your sky is {cloud}% cloud - almost certainly not visible from here.")
+           else f"Your sky is {cloud}% obscured." if cloud < 80
+           else f"Your sky is {cloud}% obscured - almost certainly not visible from here.")
     draw.text((MARGIN, y + 20), sky, font=f["sm"], fill=MUTED)
 
     _draw_kp_forecast(draw, data.get("kp_forecast") or [], y + 130, f)
@@ -1361,6 +1364,11 @@ def main():
     CAMERA_AZ  = float(skycfg.get("camera_azimuth", CAMERA_AZ))
     CAMERA_ALT = float(skycfg.get("camera_altitude", CAMERA_ALT))
     CAMERA_FOV = float(skycfg.get("field_of_view", CAMERA_FOV))
+    # sky was constructed at import with the default field of view, and the
+    # cloud drift converts degrees to pixels through its angular scale. A
+    # configured field of view has to reach it or the clouds keep the default's
+    # rate while everything else uses the configured one.
+    sky.px_per_degree = px_per_degree(H, CAMERA_FOV)
     tch = config.get("touch", {})
 
     if args.compare:
@@ -1384,7 +1392,7 @@ def main():
         now_mode = "off" if args.no_night else night_mode_now(night, night_window(states))
         # Flattened: with no button and no rotation, a one-shot takes every
         # screenful of a paged page rather than only its first.
-        frames = [compose(sky.paint(params, 1.7, [], sky.initial_clouds(params)), p)
+        frames = [compose(sky.paint(params, 1.7, [], 0.0), p)
                   for p in flatten(pages)]
         if args.save:
             p = Path(args.save)

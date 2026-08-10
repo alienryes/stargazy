@@ -4,6 +4,7 @@ cache/
 case/reference/
 __pycache__/
 *.pyc
+.venv/
 *.png
 !case/assembly_pi4.png
 !case/assembly_pi5.png

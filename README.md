@@ -19,7 +19,7 @@ Everything that is not layout — both weather sources, the target reports, the 
 **Highlights**
 
 - Tonight's deep-sky verdict (EXCELLENT → NONE) spelled out in bold display type
-- Condition bars: cloudless %, seeing, transparency, calm — a reading below its warning mark is drawn hollow instead of filled
+- Condition bars: cloudless %, seeing, transparency, calm — a reading below its warning mark is drawn hollow instead of filled. **Cloudless is the inverse of obscuration, not of raw cloud cover**: a sky fully covered by thin cirrus is largely observable and is reported that way
 - **A real image of the Moon** for the current hour — true phase, libration and terminator — with constellation and next new/full moon dates
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
@@ -83,8 +83,8 @@ The sky is a live layer composited behind the dashboard each frame (12 fps on a 
 | Condition | Effect |
 |---|---|
 | Seeing / transparency / calm | Star brightness and twinkle (crisper when clear) |
-| Cloud cover | Number of soft drifting clouds (0 → 7), which dim the stars they pass |
-| Wind speed | Drift speed of stars and clouds |
+| Cloud **obscuration** | Fraction of the sky the cloud field obscures, and the stars behind it go out. Derived from the forecast's high/medium/low split rather than its raw cloud fraction — 100% thin cirrus stops far less starlight than 100% stratus, and the raw figure counts them the same. Layers combine as independent transmittances, weighted by `cloudcover_*_weakening`. Falls back to raw cover where the per-layer figures are unavailable |
+| Wind speed | How fast the cloud drifts, derived from the wind and a nominal 1500 m cloud base and then time-compressed (`CLOUD_COMPRESSION`, default 8) — the honest rate is far too slow to read as motion. Stated as degrees of sky per second, so both panels show the same weather at the same apparent speed despite their different angular scales |
 | No astronomical darkness | Sky washes to twilight blue; meteors suppressed |
 
 The moon card shows **a real image of the Moon** (set `display.moon_ring = true` to outline the full disc), fetched hourly from NASA SVS's Dial-a-Moon and cached on disk — actual phase, libration and terminator rather than a drawn approximation. If it can't be reached the display falls back to drawing the phase geometrically, so it degrades rather than breaks. It deliberately will not reuse an older cached frame: the phase moves about 12° a day, so yesterday's picture is simply wrong and the correct drawing is better than an attractive inaccuracy.
@@ -364,7 +364,7 @@ video=DSI-1:720x1280-32@60
 
 **The connector name differs by board.** It is `DSI-1` on a Pi 4 and `DSI-2` on a Pi 5; `ls /sys/class/drm` gives the right one. The resolution and refresh are required, as the bit-depth suffix alone is ignored. Confirm the result with `cat /sys/class/graphics/fb0/bits_per_pixel`.
 
-**What it buys.** Red night mode packs luma into the five red bits at 16bpp — **32 levels for the whole image**. At 32bpp it is 256. The twilight gradient and the cloud sheet are both smooth ramps drawn almost entirely in one channel after dark, so that is where banding shows if it shows anywhere.
+**What it buys.** Red night mode packs luma into the five red bits at 16bpp — **32 levels for the whole image**. At 32bpp it is 256. The twilight gradient and the cloud field's soft edges are both smooth ramps drawn almost entirely in one channel after dark, so that is where banding shows if it shows anywhere.
 
 **What it costs.** Measured on a Pi 4, packing one frame:
 

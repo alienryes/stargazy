@@ -13,27 +13,20 @@ import math
 import random
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
+from core import cloudfield
 from core.palette import STAR_COLOUR
-from core.starfield import TWINKLE_SPEED, scintillation
+from core.starfield import TWINKLE_SPEED, px_per_degree, scintillation
 from core.values import _f, _i
 
 # Parallax depth, keyed by the star's size. Bigger stars read as nearer, so they
 # drift faster; brightness and depth then reinforce each other instead of
 # fighting. Three offsets are computed per frame, not per star.
-STAR_DEPTH = {1: 0.25, 2: 0.6, 3: 1.3}
-
-# Drifting cloud sprites. Pre-rendered blurred blobs, count scaled by cloud
-# cover; they drift across the sky and dim the stars they pass over.
-MAX_CLOUDS = 7
-CLOUD_COLOUR = (48, 53, 72)   # muted blue-grey, lighter than the navy sky
-# Opacity at the densest point of a sprite. Cloud thick enough to report is
-# thick enough to hide stars, so the core is nearly opaque and the softness
-# lives at the edges, where thin cloud belongs. Stated as a fraction because
-# the previous blind multiplier left the peak at 36-45% - measured - and no
-# number of half-transparent sprites reads as overcast.
-CLOUD_PEAK_ALPHA = 0.92
+# Sizes must cover every band any build's SIZE_BANDS can produce: draw_stars
+# indexes this by size, so a band table introducing a size absent here fails on
+# the panel rather than in a test.
+STAR_DEPTH = {1: 0.25, 2: 0.6, 3: 1.3, 4: 1.8, 5: 2.2}
 
 # A meteor's streak is the trail seen side-on, so it shortens towards nothing as
 # the path points at the observer. Within this distance of the radiant the
@@ -47,17 +40,56 @@ TRAIL_SEG, TRAIL_SEGMENTS = 11.0, 14
 # frame's travel rather than a dot - see draw_meteor for why.
 HEAD_R = 2
 
+# Cloud drift, stated as an ANGLE and converted to pixels by each build.
+#
+# It used to be `6.0 + wind * 1.2` pixels a second, two invented numbers with no
+# units. Two things were wrong with that. It ran fast: at 6 mph it came to
+# 1.97 deg/s on the 5" build against a real 0.077 deg/s for cloud at 2000 m,
+# and the offset alone put dead calm at 0.67 deg/s. And because it was in
+# PIXELS, the same weather was drawn nearly twice as fast on the 5" panel as on
+# the 10", which have different angular scales - a number that reads as a
+# property of cloud but is really a property of the canvas.
+#
+# Cloud at height h moving at v subtends v/h radians a second at the zenith, so
+# the base height is the whole calibration and is an assumption, stated here
+# rather than buried. Away from the zenith the true rate is lower, so this is
+# the fast end of the real range.
+CLOUD_BASE_M = 1500.0
+# Time compression, declared for the same reason METEOR_COMPRESSION is: the
+# honest rate is far too slow to read as motion on an ambient display. This
+# scales what the wind is actually doing rather than inventing a speed.
+CLOUD_COMPRESSION = 8.0
+# Below this the drift is imperceptible over any time anyone looks at the panel.
+# Real calm does mean stationary cloud, but a sky that never moves reads as a
+# frozen display rather than as still air.
+MIN_WIND_KMH = 2.0
+MPS_PER_KMH = 1000.0 / 3600.0
+
 NIGHT_GRADIENT = ((6, 8, 20), (15, 17, 42))
 TWILIGHT_GRADIENT = ((22, 32, 62), (44, 60, 100))
 
 # Forced vivid clear-sky mood for --demo (visual testing regardless of weather).
 DEMO_PARAMS = {"twilight": False, "gain": 1.0, "drift": 6.0, "meteors": True,
-               "met_min": 7.0, "met_max": 15.0, "cloud": 30, "cloud_speed": 14.0}
+               "met_min": 7.0, "met_max": 15.0, "cloud": 30, "cloud_deg_s": 1.7}
+
+
+def cloud_deg_s(wind_kmh):
+    """Apparent drift of cloud across the sky, in degrees a second."""
+    v = max(MIN_WIND_KMH, wind_kmh) * MPS_PER_KMH
+    return math.degrees(v / CLOUD_BASE_M) * CLOUD_COMPRESSION
 
 
 def sky_params(states):
     """Derive the sky animation's mood from the conditions."""
-    cloud   = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+    # Obscuration, not raw cover: what the cloud actually stops, which is what
+    # the sky layer depicts. See core.weather.cloud_obscuration.
+    #
+    # Read inline rather than through core.weather.obscuration_of. That module
+    # imports requests, and this one is on the render path - pulling requests
+    # and urllib3 in behind the starfield is a dependency the sky layer has no
+    # use for.
+    cloud   = _i(states.get("sensor.astroweather_backyard_cloud_obscuration",
+                            states.get("sensor.astroweather_backyard_cloud_cover")))
     seeing  = _i(states.get("sensor.astroweather_backyard_seeing_percentage"))
     transp  = _i(states.get("sensor.astroweather_backyard_transparency"))
     calm    = _i(states.get("sensor.astroweather_backyard_calm_percentage"))
@@ -79,8 +111,8 @@ def sky_params(states):
         "meteors": not no_dark,
         "met_min": met_min,
         "met_max": met_min + 8.0,
-        "cloud": cloud,                      # % -> number of drifting cloud sprites
-        "cloud_speed": 6.0 + wind * 1.2,     # px/sec
+        "cloud": cloud,                      # % of sky the cloud field obscures
+        "cloud_deg_s": cloud_deg_s(wind),    # degrees of sky per second
     }
 
 
@@ -91,8 +123,13 @@ class Sky:
     rendered frame can be compared byte for byte against an earlier one.
     """
 
-    def __init__(self, w, h, stars=200, seed=7, twinkle=0.05, twinkle_max=0.20):
+    def __init__(self, w, h, stars=200, seed=7, twinkle=0.05, twinkle_max=0.20, *, fov):
         self.w, self.h = w, h
+        # Keyword-only and required, with no default. The cloud drift arrives as
+        # an angle and has to be converted here, and the two builds have
+        # different angular scales - so any default would be silently wrong on
+        # one panel, which is the failure this conversion exists to fix.
+        self.px_per_degree = px_per_degree(h, fov)
         # Twinkle amplitude, either side of a centre that stays at 0.55 - so
         # neither of these is a brightness control, only the depth of the
         # trough. `twinkle` is the amplitude AT THE ZENITH and `twinkle_max`
@@ -134,10 +171,11 @@ class Sky:
                 1 if random.random() > 0.28 else (2 if random.random() > 0.25 else 3),
                 scintillation(90.0 * (1.0 - y / h)),
             ))
-        self._sprites = None
-        self._bases = None
-        self._sprite_cover = None
-        self._veil = None
+        # The cloud field, built once; and the strip built from it for the
+        # current (twilight, cover), which is rebuilt when either moves.
+        self._field = None
+        self._cloud_rgb = None
+        self._cloud = ()
         # Meteor radiants for right now, as (x, y, weight) with x and y None for
         # the sporadic floor. Empty means no build supplied any, and meteors
         # then spawn from nowhere in particular as they always did.
@@ -153,39 +191,85 @@ class Sky:
         self.stars = stars
         self.star_drift = drift
 
-    def make_base(self, top, bot):
-        """Vertical gradient background, built once."""
+    def gradient_column(self, twilight):
+        """The sky gradient as one column, (H, 1, 3), to be broadcast over the field.
+
+        A column rather than a full canvas because the gradient is constant
+        along x: materialising it at field width cost a 27 MB allocation per
+        cover change on the 10" build and bought nothing that broadcasting does
+        not do for free.
+        """
+        top, bot = TWILIGHT_GRADIENT if twilight else NIGHT_GRADIENT
         top = np.array(top, dtype=np.float32)
         bot = np.array(bot, dtype=np.float32)
-        col = (top + (bot - top) * (np.arange(self.h)[:, None] / self.h)).astype(np.uint8)
-        arr = np.repeat(col[:, None, :], self.w, axis=1)  # (H,W,3)
-        return Image.fromarray(arr, "RGB")
+        col = top + (bot - top) * (np.arange(self.h, dtype=np.float32)[:, None] / self.h)
+        return col[:, None, :]
 
-    def base(self, twilight):
-        if self._bases is None:
-            self._bases = (self.make_base(*NIGHT_GRADIENT),
-                           self.make_base(*TWILIGHT_GRADIENT))
-        return self._bases[1] if twilight else self._bases[0]
+    @property
+    def field_w(self):
+        """Width of the cloud field, and the distance drift travels before it repeats."""
+        return self.w * cloudfield.FIELD_WIDTHS
 
-    def veiled_base(self, twilight, v):
-        """The gradient with the cloud sheet already blended in, cached.
+    def clouded_base(self, twilight, cover):
+        """Gradient with the cloud field composited on, plus a wrap margin, cached.
 
-        The blend costs 12.7 ms a frame on a Pi 4 at 1280x720 and 14.8 on a Pi 5
-        at 1200x1920 - against an 83 ms budget on a build that had about 17 ms
-        spare, so doing it per frame would have spent the whole of that build's
-        headroom on a layer that changes every fifteen minutes.
+        WIDER THAN THE CANVAS SO THAT DRIFT IS A CROP. Sliding a window along a
+        prepared strip is a memcpy; compositing a full-canvas cloud layer every
+        frame instead would cost more than the whole animation has spare on a
+        build already at 12 fps.
 
-        Cover only moves on a data refresh, so one cached canvas per (twilight,
-        veil) serves thousands of frames. Only the current pair is kept: the key
-        changes rarely and each canvas is a full frame of memory.
+        The strip is the field once plus its first canvas-width repeated at the
+        end, so a window running off the end wraps onto the start without a
+        seam - the field being periodic over its own width is what makes the
+        join invisible.
+
+        Cover only moves on a data refresh, so one strip serves thousands of
+        frames.
+
+        TWO ARE KEPT, NOT ONE, and one entry was measured to defeat the whole
+        arrangement. The refresher builds the new strip ahead of the render
+        loop so the loop never pays for it; with a single slot, building the new
+        one evicts the old, and the loop - still drawing the previous cover
+        until the new parameters are published - misses and rebuilds it. The two
+        threads then take turns evicting each other. Holding the previous key as
+        well makes the handover free from either direction, and removes any need
+        to order the publish against the build.
+
+        Entries are newest-last and the tuple is REBOUND rather than mutated, so
+        a reader takes a consistent snapshot without a lock.
         """
-        key = (bool(twilight), round(v, 2))
-        if self._veil is None or self._veil[0] != key:
-            sheet = Image.new("RGB", (self.w, self.h), CLOUD_COLOUR)
-            self._veil = (key, Image.blend(self.base(twilight), sheet, key[1]))
-        return self._veil[1]
+        key = (bool(twilight), int(cover))
+        cached = next((e for e in self._cloud if e[0] == key), None)
+        if cached is None:
+            if self._field is None:
+                # Feature size comes from the CANVAS, not from this array - see
+                # make_field. The cloud's own colour follows the field and not
+                # the cover, so it is built once alongside it.
+                self._field = cloudfield.make_field(
+                    self.field_w, self.h, min(self.w, self.h))
+                self._cloud_rgb = cloudfield.make_tone_rgb(self._field)
+            alpha = cloudfield.alpha_for(self._field, cover / 100.0)
+            # Blended here rather than through Image.alpha_composite, which
+            # wants both sides as full RGBA canvases - two more allocations the
+            # width of the field, for a blend numpy does in one pass.
+            a = alpha[..., None].astype(np.float32) / 255.0
+            arr = (self.gradient_column(twilight) * (1.0 - a)
+                   + self._cloud_rgb * a).astype(np.uint8)
+            one = Image.fromarray(arr, "RGB")
+            strip = Image.new("RGB", (self.field_w + self.w, self.h))
+            strip.paste(one, (0, 0))
+            strip.paste(one.crop((0, 0, self.w, self.h)), (self.field_w, 0))
+            # Kept as flat BYTES, not as the numpy array it was built from.
+            # Stars and meteors read it one point at a time, and indexing a
+            # numpy array per point builds a numpy scalar object each time:
+            # measured at 13.2 ms a frame for 841 stars on the Pi 4, over half
+            # the whole sky layer. Indexing bytes yields a plain int and costs
+            # a fraction of that. Nothing here ever needs it as an array.
+            cached = (key, strip, alpha.tobytes(), alpha.shape[1])
+            self._cloud = (self._cloud[-1:] + (cached,))[-2:]
+        return cached[1], cached[2], cached[3]
 
-    def draw_stars(self, draw, t, params):
+    def draw_stars(self, draw, t, params, alpha=None, alpha_w=0, off=0):
         w, gain = self.w, params["gain"]
         if self.star_drift:
             drift = {s: (t * params["drift"] * d) % w for s, d in STAR_DEPTH.items()}
@@ -197,16 +281,26 @@ class Sky:
             # whole field overstates the zenith and understates the horizon.
             amp = min(self.twinkle_max, self.twinkle * scint)
             val = base * (0.55 + amp * math.sin(t * speed + phase)) * gain
+            x = (x0 + drift[size]) % w
+            if alpha is not None:
+                # Occluded by the cloud actually in front of THIS star, rather
+                # than by a single factor applied to the whole field. A global
+                # dimming cannot tell a covered star from an uncovered one, so
+                # it washes out the clear half of a broken sky as well.
+                #
+                # Wrapped on the FIELD's width, not the canvas's: the field is
+                # several canvases wide, and taking the modulo of the narrower
+                # one would sample the wrong column for most of the drift.
+                val *= 1.0 - alpha[y * alpha_w + int(x + off) % alpha_w] / 255.0
             if val <= 0.05:
                 continue
             c = tuple(int(ch * val) for ch in STAR_COLOUR)
-            x = (x0 + drift[size]) % w
             if size == 1:
                 draw.point((x, y), fill=c)
             else:
                 r = size - 1
                 draw.ellipse([x - r, y - r, x + r, y + r], fill=c)
-                if size == 3 and val > 0.7:  # faint glint on the brightest stars
+                if size >= 3 and val > 0.7:  # faint glint on the brightest stars
                     g = tuple(int(ch * val * 0.5) for ch in STAR_COLOUR)
                     draw.line([(x - 4, y), (x + 4, y)], fill=g, width=1)
                     draw.line([(x, y - 4), (x, y + 4)], fill=g, width=1)
@@ -309,176 +403,64 @@ class Sky:
             if m["life"] >= m["max"] or off:
                 meteors.remove(m)
 
-    def make_cloud_sprite(self):
-        """One soft, translucent cloud: overlapping blobs on an alpha mask, blurred.
+    def paint(self, params, t, meteors, scroll):
+        """A fresh sky frame: cloud over gradient, then stars, then meteors.
 
-        Sized as a FRACTION of the canvas, not in absolute pixels. Fixed sizes
-        were tuned on 1280x720 and covered 6-10% of it each, so seven of them
-        overlapped into a continuous cloud field. The same sprites on a 1200x1920
-        panel cover 3.5-4.7%, stop overlapping, and each one's own rectangular
-        footprint becomes visible - clouds that read as blocks rather than as
-        weather. The fractions below reproduce the original ranges on the 5"
-        canvas, so every panel now gets the same proportion of sky covered.
-
-        The blur radii are already relative to the sprite, so they follow.
-
-        THE BLOBS ARE THEIR OWN SILHOUETTE. An earlier version multiplied the
-        mask by a blurred RECTANGLE, to feather the alpha to zero before the
-        tile border. That did stop the edge being HARD, which is what its
-        comment claimed, but it did not stop it being STRAIGHT: the blobs
-        reached past the rectangle, so wherever they did, the visible outline
-        was the envelope, and clouds came out flat-sided. Measured on the 10"
-        sprites, 12-49% of each one's rows ended within 2 px of its widest
-        point, against about 13% for a circle.
-
-        The envelope is gone. The blobs are kept far enough inside that the
-        blur falls to zero within the tile on its own, so the outline is the
-        union of overlapping ellipses.
-
-        THAT IS NOT ENOUGH ON ITS OWN, and the first attempt at this proved it:
-        removing the envelope left the silhouette just as flat, because 5-8
-        lobes that large, packed into a band 40% of the tile wide, meet in long
-        smooth arcs that read as straight once blurred. A lumpy outline needs
-        MORE and SMALLER lobes spread WIDER, each comfortably larger than the
-        blur so its bump survives it.
+        `scroll` is how far the cloud has drifted, in DEGREES of sky - the unit
+        the weather is in. Converting here rather than at the source is what
+        makes the two builds depict the same wind at the same apparent rate
+        despite their different angular scales. Cloud moves left to right, so
+        the window travels the other way along the strip.
         """
-        w = random.randint(int(self.w * 0.28), int(self.w * 0.42))
-        h = random.randint(int(self.h * 0.21), int(self.h * 0.33))
-        mask = Image.new("L", (w, h), 0)
-        md = ImageDraw.Draw(mask)
-        # The count changes the number of draws taken from the shared stream, so
-        # cloud and meteor spawn positions differ from before. The fallback
-        # starfield does not: it is drawn in __init__, before any sprite exists.
-        for _ in range(random.randint(9, 14)):
-            # Radii bounded so blob span plus blur stays inside the tile: there
-            # is no envelope to rescue an overshoot, and a blob reaching the
-            # border would put back the hard edge this is avoiding.
-            cx = random.uniform(w * 0.30, w * 0.70)
-            cy = random.uniform(h * 0.36, h * 0.64)
-            rw = random.uniform(w * 0.11, w * 0.16)
-            rh = random.uniform(h * 0.13, h * 0.20)
-            md.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=random.randint(120, 200))
-        # Softer than the lobes are wide, so the bumps survive it. Scaled by the
-        # SHORTER side: the 5" tiles are about 2.3:1, so a radius taken from the
-        # width alone would be as large as their lobes are tall and would smooth
-        # the outline straight back out on that build.
-        mask = mask.filter(ImageFilter.GaussianBlur(min(w, h) * 0.05))
-        # Scaled to a STATED peak rather than by a blind fraction. Overlapping
-        # ellipses overwrite rather than accumulate, and the blur then takes the
-        # maximum down further, so what a multiplier leaves at the core is not
-        # knowable by reading it - it measured 36-45% where 60% was intended.
-        peak = mask.getextrema()[1]
-        if peak:
-            k = CLOUD_PEAK_ALPHA * 255.0 / peak
-            mask = mask.point(lambda p: min(255, int(p * k)))
-        sprite = Image.new("RGBA", (w, h), CLOUD_COLOUR + (0,))
-        sprite.putalpha(mask)
-        return sprite
-
-    def cloud_sprites(self):
-        if self._sprites is None:
-            self._sprites = [self.make_cloud_sprite() for _ in range(5)]
-        return self._sprites
-
-    def sprite_cover(self):
-        """Sky fraction one sprite obscures, as equivalent fully-opaque area.
-
-        Summing the alpha rather than measuring the tile: a sprite fills only
-        the middle of its tile, and does so at varying opacity, so the tile's
-        area overstates it. Measured off the sprites themselves so it cannot
-        drift when their size or shape changes.
-        """
-        if self._sprite_cover is None:
-            sprites = self.cloud_sprites()
-            total = sum(np.asarray(s.split()[-1], dtype=np.float64).sum() / 255.0
-                        for s in sprites)
-            self._sprite_cover = total / len(sprites) / (self.w * self.h)
-        return self._sprite_cover
-
-    def veil_alpha(self, cover_pct, n):
-        """Opacity of the uniform cloud sheet drawn behind the sprites.
-
-        SPRITES ALONE CANNOT REPORT HIGH COVER. Each covers about a tenth of the
-        sky, and the count is capped at MAX_CLOUDS, so total overcast drew seven
-        discrete puffs with clear sky and stars between them - roughly half the
-        sky - while the dashboard beside it read 100% cloud. The panel
-        contradicted its own number.
-
-        The sheet makes up the difference, and its opacity is DERIVED rather
-        than chosen: n sprites covering `a` each obscure 1-(1-a)^n between them,
-        and the veil supplies whatever is left to reach the reported figure.
-        That keeps the two in step if MAX_CLOUDS, the sprite size or the count
-        mapping ever change.
-
-        It is deliberately not a substitute for the sprites. At low cover it is
-        nearly transparent and the sky keeps its discrete clouds; at overcast it
-        dominates, which is what overcast looks like - a sheet, not a crowd.
-        """
-        c = max(0.0, min(1.0, cover_pct / 100.0))
-        by_sprites = 1.0 - (1.0 - self.sprite_cover()) ** max(0, n)
-        if by_sprites >= c:
-            return 0.0
-        return (c - by_sprites) / (1.0 - by_sprites)
-
-    def spawn_cloud(self):
-        sp = random.choice(self.cloud_sprites())
-        if random.random() < 0.5:
-            sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
-        return {"sprite": sp,
-                "x": random.uniform(-sp.width, self.w),
-                "y": random.randint(-40, int(self.h * 0.72)),
-                "depth": random.uniform(0.75, 1.35)}   # parallax: clouds separate
-
-    def initial_clouds(self, params):
-        n = round(params.get("cloud", 0) / 100 * MAX_CLOUDS)
-        return [self.spawn_cloud() for _ in range(n)]
-
-    def step_clouds(self, clouds, params, frame_dt):
-        """Match the count to cover, drift across, recycle off the right edge."""
-        tgt = round(params["cloud"] / 100 * MAX_CLOUDS)
-        while len(clouds) > tgt:
-            clouds.pop()
-        while len(clouds) < tgt:
-            clouds.append(self.spawn_cloud())
-        for c in clouds:
-            c["x"] += params["cloud_speed"] * c["depth"] * frame_dt
-            if c["x"] > self.w:
-                c["x"] = -c["sprite"].width
-                c["y"] = random.randint(-40, int(self.h * 0.72))
-
-    def paint(self, params, t, meteors, clouds):
-        """A fresh sky frame: gradient, stars, veil, clouds, meteors."""
-        # The sheet is baked into the cached gradient rather than blended over
-        # the finished sky. Stars are therefore drawn ON TOP of it, so their
-        # gain carries the obscuration instead: cloud that hides the sky hides
-        # the stars, and at full cover the veil is 1.0 and they go out
-        # altogether. Both come from the same number, so they cannot disagree.
-        v = self.veil_alpha(params.get("cloud", 0), len(clouds))
-        if v > 0.01:
-            frame = self.veiled_base(params["twilight"], v).copy()
-            params = {**params, "gain": params["gain"] * (1.0 - v)}
-        else:
-            frame = self.base(params["twilight"]).copy()
+        cover = params.get("cloud", 0)
+        strip, alpha, alpha_w = self.clouded_base(params["twilight"], cover)
+        off = int(-scroll * self.px_per_degree) % self.field_w
+        frame = strip.crop((off, 0, off + self.w, self.h))
         d = ImageDraw.Draw(frame)
-        self.draw_stars(d, t, params)
-        for c in clouds:
-            frame.paste(c["sprite"], (int(c["x"]), c["y"]), c["sprite"])
+        self.draw_stars(d, t, params, alpha, alpha_w, off)
         for m in meteors:
-            draw_meteor(d, m)
+            draw_meteor(d, m, alpha, alpha_w, off)
         return frame
 
 
-def draw_meteor(draw, m):
+def _clear_at(alpha, w, off, x, y):
+    """How much light gets through the cloud at one canvas point, 0 to 1.
+
+    A meteor burns up around 100 km and cloud sits at two or three, so cloud is
+    always the nearer of the two and a trail crossing it is hidden. Sampled
+    along the trail rather than applied to the meteor as a whole, because a
+    streak is long enough to be under cloud at one end and in the clear at the
+    other.
+
+    Meteors are retired a little way off the canvas, so a sampled point can be
+    outside it; those count as clear, which is what the sky beyond the panel is
+    for anything the display cannot see.
+    """
+    if alpha is None:
+        return 1.0
+    yi = int(y)
+    if yi < 0 or yi * w >= len(alpha):
+        return 1.0
+    return 1.0 - alpha[yi * w + int(x + off) % w] / 255.0
+
+
+def draw_meteor(draw, m, alpha=None, alpha_w=0, off=0):
     frac = m["life"] / m["max"]
     fade = math.sin(math.pi * min(1.0, frac))
     mag = math.hypot(m["vx"], m["vy"])
     ux, uy = m["vx"] / mag, m["vy"] / mag
     seg, nseg = m["seg"], TRAIL_SEGMENTS
     for i in range(nseg):
-        b = fade * (1.0 - i / nseg)
-        c = (int(255 * b), int(255 * b), int(235 * b))
         x1, y1 = m["x"] - ux * seg * i, m["y"] - uy * seg * i
         x2, y2 = m["x"] - ux * seg * (i + 1), m["y"] - uy * seg * (i + 1)
+        b = fade * (1.0 - i / nseg)
+        b *= _clear_at(alpha, alpha_w, off, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
+        # Skipped rather than drawn dark. A fully occluded segment still has a
+        # colour, and drawing it would paint the trail on in black instead of
+        # leaving the cloud where it is.
+        if b <= 0.02:
+            continue
+        c = (int(255 * b), int(255 * b), int(235 * b))
         draw.line([(x1, y1), (x2, y2)], fill=c, width=2)
     # The head covers the ground crossed since the previous frame rather than
     # marking a point. A meteor steps 4.5-8.5 px between frames against a head
@@ -494,9 +476,12 @@ def draw_meteor(draw, m):
     # on 0.3% - raising the rate would deliver frames less evenly, not more.
     # A capsule spanning the step tiles continuously at any speed and any rate,
     # by construction, and is also what a camera would record.
-    hb = int(255 * fade)
-    head = (hb, hb, int(235 * fade))
     px, py = m["x"] - m["vx"], m["y"] - m["vy"]
+    hf = fade * _clear_at(alpha, alpha_w, off, (px + m["x"]) / 2.0, (py + m["y"]) / 2.0)
+    if hf <= 0.02:
+        return
+    hb = int(255 * hf)
+    head = (hb, hb, int(235 * hf))
     draw.line([(px, py), (m["x"], m["y"])], fill=head, width=HEAD_R * 2 + 1)
     for cx, cy in ((m["x"], m["y"]), (px, py)):
         draw.ellipse([cx - HEAD_R, cy - HEAD_R, cx + HEAD_R, cy + HEAD_R],

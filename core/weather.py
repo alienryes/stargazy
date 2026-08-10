@@ -14,7 +14,7 @@ from datetime import datetime
 
 import requests
 
-from core.values import _dt, _f
+from core.values import _dt, _f, _i
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +31,12 @@ FIELDS = {
     "deepsky_forecast_tomorrow":             "deepsky_forecast_tomorrow",
     "deepsky_forecast_tomorrow_description": "deepsky_forecast_tomorrow_desc",
     "cloud_cover":                           "cloudcover_percentage",
+    # The same sky split by height. cloud_cover above is the RAW fraction, which
+    # counts thin cirrus as heavily as thick stratus; these are what OBSCURATION
+    # is derived from. See cloud_obscuration.
+    "cloud_area_fraction_high":              "cloud_area_fraction_high_percentage",
+    "cloud_area_fraction_medium":            "cloud_area_fraction_medium_percentage",
+    "cloud_area_fraction_low":               "cloud_area_fraction_low_percentage",
     "seeing_percentage":                     "seeing_percentage",
     # NB the plain `transparency` property is a magnitude figure; the HA sensor
     # of that name carries the PERCENTAGE, which is what the bars expect.
@@ -66,6 +72,51 @@ ENTITIES = [HA_PREFIX + suffix for suffix in FIELDS]
 # stays the internal unit. Only the footer converts again, to mph, for display.
 MS_TO_KMH = 3.6
 KMH_TO_MPH = 1 / 1.609344
+
+# Derived, and not one of pyastroweatherio's own properties. Kept beside the
+# real entities because everything downstream is keyed on an entity id.
+OBSCURATION = HA_PREFIX + "cloud_obscuration"
+
+
+def obscuration_of(states):
+    """The obscuration figure for a states dict, for everything that reads it.
+
+    Falls back to raw cover so a states dict from before this was derived - a
+    fixture, or a Home Assistant instance queried directly - still works.
+    """
+    return _i(states.get(OBSCURATION, states.get(HA_PREFIX + "cloud_cover")))
+
+
+def cloud_obscuration(states, tuning):
+    """How much of the sky's light the cloud actually stops, as a percentage.
+
+    WHY NOT cloud_cover. That property is int(cloud_area_fraction) - the raw
+    fraction of sky with any cloud in it, at any height and any thickness. A sky
+    of thin cirrus reads 100 there and looks like blue sky with veins in it. On
+    2026-08-10 the feed reported 90% while the sky over the site was cirrus with
+    the blue plainly visible through it, and the panel drew the 90.
+
+    The layers combine as independent transmittances - 1 minus the product of
+    what each lets through - with each weakened by how much that height of cloud
+    obstructs. Those weakenings already exist in the configuration and already
+    feed the deep-sky verdict; only the figure the sky layer drew ignored them.
+
+    Falls back to the raw cover when the split is unavailable, which is how a
+    Home Assistant instance whose AstroWeather integration does not publish the
+    per-layer sensors will behave. Absence is tested on the state string, not on
+    the parsed number: a missing sensor reads "unknown" and parses to 0, which
+    is indistinguishable from a genuinely clear layer and would silently report
+    a covered sky as clear.
+    """
+    layers = ("high", "medium", "low")
+    raw = [states.get(f"{HA_PREFIX}cloud_area_fraction_{n}") for n in layers]
+    if any(v is None or str(v).lower() in ("unknown", "unavailable", "none", "")
+           for v in raw):
+        return _i(states.get(HA_PREFIX + "cloud_cover"))
+    transmitted = 1.0
+    for name, value in zip(layers, raw):
+        transmitted *= 1.0 - min(1.0, _i(value) * tuning[f"cloudcover_{name}_weakening"] / 100.0)
+    return int(round((1.0 - transmitted) * 100.0))
 
 # pyastroweatherio's own defaults. They are NOT the AstroWeather HA
 # integration's DEFAULT_ constants, which are on a different scale for the
@@ -176,16 +227,26 @@ def make_fetcher(config):
     """Return a zero-argument callable giving the states dict for this config."""
     weather = config.get("weather", {})
     source = weather.get("source", "direct")
+    tuning = {**TUNING_DEFAULTS, **{k: v for k, v in weather.items() if k != "source"}}
+
+    def with_obscuration(fetch):
+        # Derived once, here, so both sources deliver it and the render code
+        # never has to know which one it is talking to.
+        def go():
+            states = fetch()
+            states[OBSCURATION] = str(cloud_obscuration(states, tuning))
+            return states
+        return go
+
     if source == "homeassistant":
         ha = config["ha"]
         url, token = ha["url"].rstrip("/"), ha["token"]
-        return lambda: fetch_states(url, token)
+        return with_obscuration(lambda: fetch_states(url, token))
     if source != "direct":
         raise ValueError(
             f'weather.source is "{source}"; expected "direct" or "homeassistant"')
     loc = config["location"]
-    tuning = {**TUNING_DEFAULTS, **{k: v for k, v in weather.items() if k != "source"}}
-    return lambda: fetch_states_direct(loc, tuning)
+    return with_obscuration(lambda: fetch_states_direct(loc, tuning))
 
 
 def compare_sources(config):

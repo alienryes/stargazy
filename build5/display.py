@@ -53,11 +53,18 @@ from core.panel import PIL_ROTATION, Framebuffer, Strip
 from core.positions import alt_az, next_rise, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
-from core.starfield import project, project_point, px_per_degree
+from core.starfield import (
+    SIZE_BANDS_SPARSE,
+    SPARSE_FLOOR,
+    SPARSE_RATIO,
+    project,
+    project_point,
+    px_per_degree,
+)
 from core.targets import load_cutouts, peak, rank_objects, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
-from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
+from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
 # No longer frozen - that ended at 3.7.2, and this build has taken real work
 # since. What remains true is that its panel leaves the bench once the 10" one
@@ -65,7 +72,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.22.0"
+FIRMWARE_VERSION = "3.29.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -121,6 +128,19 @@ BTN_GAP  = 8
 REAL_STARS = True
 CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 70.0
 
+# Faintest star drawn. The catalogue reaches 6.5; a suburban sky reaches about
+# 5, so the difference is stars nobody standing at the panel could see.
+#
+# It is a legibility setting as much as an honesty one. Measured over this field
+# of view, the full catalogue puts 1204 stars on the panel and 983 of them - 82%
+# - are fainter than magnitude 5, carrying 56% of the lit area between them. The
+# sixteen stars that make the sky recognisable as a real one were 1.3% of what
+# was drawn, and the patterns were lost in the rest. At 5.0 about 224 remain.
+#
+# Configurable because it depends on the site's own light pollution, which the
+# panel cannot know.
+LIMITING_MAG = 5.0
+
 # How often the real positions are recomputed. Nothing interpolates between
 # refreshes - the whole field is swapped at once - so this interval is the size
 # of the step the sky takes, and it is a coherent slide of the entire field
@@ -146,7 +166,7 @@ METEOR_COMPRESSION = 20.0
 # in the same order - which still matters for the clouds and meteors even though
 # the stars themselves are now replaced at startup. The daemon reads these three
 # off this module as its layout.
-sky = Sky(W, H)
+sky = Sky(W, H, fov=CAMERA_FOV)
 fb = Framebuffer(W, H, FB_W, FB_H, ROTATE, FB_DEV)
 strip = Strip(W, MARGIN, STRIP_Y, STRIP_H, BTN_GAP)
 
@@ -231,7 +251,10 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
     dsky_tmrw       = _i(s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow"))
     dsky_tmrw_desc  = _phrase(s.get("sensor.astroweather_backyard_deepsky_forecast_tomorrow_description", ""))
 
-    cloud  = _i(s.get("sensor.astroweather_backyard_cloud_cover"))
+    # Obscuration, not raw cover: 100% thin cirrus stops far less light than
+    # 100% stratus, and the Cloudless bar is a judgement about observing.
+    # See core.weather.cloud_obscuration.
+    cloud  = obscuration_of(s)
     seeing = _i(s.get("sensor.astroweather_backyard_seeing_percentage"))
     transp = _i(s.get("sensor.astroweather_backyard_transparency"))
     calm   = _i(s.get("sensor.astroweather_backyard_calm_percentage"))
@@ -827,7 +850,9 @@ def refresh_stars():
         return None
     utc = datetime.now(timezone.utc).replace(tzinfo=None)
     obs = observer(LAT or 0.0, LON or 0.0, when=utc)
-    stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV)
+    stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV,
+                    limit=LIMITING_MAG, bands=SIZE_BANDS_SPARSE,
+                    ratio=SPARSE_RATIO, floor=SPARSE_FLOOR)
     sky.set_stars(stars)
     refresh_radiants(obs, utc)
     return len(stars)
@@ -894,7 +919,7 @@ def sky_params(states):
     when, _ = plot_instant(night_window(states))
     utc = when.astimezone(timezone.utc).replace(tzinfo=None)
     obs = observer(LAT or 0.0, LON or 0.0, when=utc)
-    cloud = _i(states.get("sensor.astroweather_backyard_cloud_cover"))
+    cloud = obscuration_of(states)
     moon_illum = _f(states.get("sensor.astroweather_backyard_moon_phase")) / 100.0
 
     rate = visible_rate(SPORADIC_ZHR, 1.0, 45.0, cloud, moon_illum)
@@ -993,7 +1018,7 @@ def main():
                         help="Fetch from both weather sources and print a per-value diff")
     args = parser.parse_args()
 
-    global LAT, LON, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV, METEOR_COMPRESSION
+    global LAT, LON, LIMITING_MAG, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV, METEOR_COMPRESSION
     config = load_config(CONFIG_PATH)
     out_dir = config.get("uptonight", {}).get("out_dir", "")
     lat    = config.get("location", {}).get("latitude")
@@ -1004,6 +1029,12 @@ def main():
     CAMERA_AZ  = float(skycfg.get("camera_azimuth", CAMERA_AZ))
     CAMERA_ALT = float(skycfg.get("camera_altitude", CAMERA_ALT))
     CAMERA_FOV = float(skycfg.get("field_of_view", CAMERA_FOV))
+    LIMITING_MAG = float(skycfg.get("limiting_magnitude", LIMITING_MAG))
+    # sky was constructed at import with the default field of view, and the
+    # cloud drift converts degrees to pixels through its angular scale. A
+    # configured field of view has to reach it or the clouds keep the default's
+    # rate while everything else uses the configured one.
+    sky.px_per_degree = px_per_degree(H, CAMERA_FOV)
     disp   = config.get("display", {})
     mode   = disp.get("mode", "animated")
     fps    = float(disp.get("fps", 12))
@@ -1040,7 +1071,7 @@ def main():
         now_mode = "off" if args.no_night else night_mode_now(night, night_window(states))
         # Flattened: with no button and no rotation, a one-shot takes every
         # screenful of a paged page rather than only its first.
-        frames = [compose(sky.paint(params, 1.7, [], sky.initial_clouds(params)), p)
+        frames = [compose(sky.paint(params, 1.7, [], 0.0), p)
                   for p in flatten(pages)]
         if args.save:
             apply_night(frames[0], now_mode, night_dim).save(args.save)

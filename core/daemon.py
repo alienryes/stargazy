@@ -82,13 +82,26 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
 
     def load():
         states = fetch()
-        state["pages"] = layout.build_pages(states, read_targets(out_dir), lat, moon_ring)
+        pages = layout.build_pages(states, read_targets(out_dir), lat, moon_ring)
         # Through the layout, not core.sky directly: a build that knows what is
         # actually falling tonight can say so here. The 5" build re-exports
         # core.sky.sky_params unchanged.
-        state["params"] = DEMO_PARAMS if demo else layout.sky_params(states)
+        params = DEMO_PARAMS if demo else layout.sky_params(states)
         # Dusk/dawn drive night mode, and they only change when the data does.
-        state["window"] = layout.night_window(states)
+        window = layout.night_window(states)
+        # Build the cloud strip on THIS thread, and BEFORE the new parameters
+        # are published. It is a field-width image costing about 0.6 s on either
+        # Pi, which mid-frame is some seven dropped frames at 12 fps; leaving it
+        # for the render loop to discover missing is what that would do, four
+        # times an hour. Measured at a 550 ms worst frame that way against 19 ms
+        # this way.
+        #
+        # The order is the point. Published first, the render loop would ask for
+        # a cover whose strip did not exist yet and build it itself - the stall
+        # this exists to avoid, simply moved. At startup this is the main thread
+        # and nothing is being drawn yet.
+        sky.clouded_base(params["twilight"], params.get("cloud", 0))
+        state["pages"], state["params"], state["window"] = pages, params, window
 
     log.info("Fetching conditions...")
     load()
@@ -126,7 +139,7 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
                 if page is not last or mode != last_mode:
                     params = state["params"]
                     frame = layout.compose(
-                        sky.paint(params, 0.0, [], sky.initial_clouds(params)), page, None)
+                        sky.paint(params, 0.0, [], 0.0), page, None)
                     out.seek(0)
                     out.write(fb.to_bytes(frame, mode, night_dim))
                     last, last_mode = page, mode
@@ -137,7 +150,7 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
         frame_dt = 1.0 / fps
         t0 = time.time()
         meteors = []
-        clouds = sky.initial_clouds(state["params"])
+        cloud_scroll = 0.0
         next_meteor = t0 + random.uniform(1.0, 3.0)
         page_i, card_i, next_flip = 0, 0, t0 + page_seconds
         paged = False   # set from the page actually composed, one frame behind
@@ -164,7 +177,7 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
                     time.sleep(0.05)
                     continue
                 blanked = False
-            sky.step_clouds(clouds, params, frame_dt)
+            cloud_scroll += params["cloud_deg_s"] * frame_dt
             if params["meteors"] and now >= next_meteor:
                 meteors.append(sky.spawn_meteor())
                 next_meteor = now + random.uniform(params["met_min"], params["met_max"])
@@ -195,7 +208,7 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
                 page = page[card_i % len(page)]
             labels = (controls.labels(state["window"], paged)
                       if controls and controls.visible else None)
-            frame = layout.compose(sky.paint(params, t, meteors, clouds),
+            frame = layout.compose(sky.paint(params, t, meteors, cloud_scroll),
                                    page, labels)
             mode = controls.night_now(state["window"]) if controls \
                 else night_mode_now(night, state["window"])
