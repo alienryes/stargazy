@@ -65,7 +65,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.21.0"
+FIRMWARE_VERSION = "3.22.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
