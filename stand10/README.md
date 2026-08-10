@@ -11,7 +11,7 @@ Only a way to stand the panel on a desk is missing.
 **Highlights**
 
 - One part, two M2.5 screws, no other fasteners.
-- About 45 g of PETG, roughly 2¼ hours, no supports and no brim.
+- 41.5 g of PETG, 2 hours 3 minutes, no supports and no brim.
 - The panel hangs clear of the desk, so nothing shows below the bezel.
 - Bolts to the lower bracket pair only, clear of the DSI ribbon.
 - Two moulded-in collars carry the power lead down the back to the desk.
@@ -44,7 +44,7 @@ The image and touch mapping are turned to match by `build10/display.py`
 | Panel | Raspberry Pi Touch Display 2, 10.1", Pi already mounted |
 | Screws | **2 × M2.5 × 12 mm**, pan or socket head |
 | Power lead | 4 mm across the jacket — see [Cable routing](#-cable-routing) |
-| Filament | PETG, about 45 g |
+| Filament | PETG, 41.5 g |
 | Print bed | 140 × 65 mm minimum, 88 mm height |
 
 M2.5 × 12 is confirmed on hardware. The bosses are threaded 8 mm deep and the
@@ -68,7 +68,10 @@ The cable collars keep that true. Each is a ring extruded along the panel's own
 up direction, so it leans back with the upright rather than presenting a new
 overhang, and each sits on a plinth sloped at 50° that carries its projection
 back to the wall. `check_stand10.py` measures the result: the downward-facing
-area is the same 22.4 mm² with the collars as without them.
+area is the same 22.4 mm² with the collars as without them, and PrusaSlicer
+flags no support-requiring geometry.
+
+The weight and time above are taken from that slice rather than estimated.
 
 ## 🔩 Assembly
 
