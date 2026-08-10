@@ -12,7 +12,7 @@ Only a way to stand the panel on a desk is missing.
 
 - One part, two M2.5 screws, no other fasteners.
 - 41.5 g of PETG, 2 hours 3 minutes, no supports and no brim.
-- The panel hangs clear of the desk, so nothing shows below the bezel.
+- No printed part appears below the bezel.
 - Bolts to the lower bracket pair only, clear of the DSI ribbon.
 - Two moulded-in collars carry the power lead down the back to the desk.
 
@@ -85,8 +85,10 @@ The weight and time above are taken from that slice rather than estimated.
 4. Stand the assembly up.
 5. Press the power lead into the two collars — see below.
 
-The panel ends up hanging about 2 mm clear of the desk. Its weight is carried
-by the two screws in shear.
+The model leaves the panel's bottom edge 2 mm above the desk (`clear_z`). On the
+assembled article that edge comes to rest on the desk instead, so the desk takes
+part of the weight and the two screws carry the rest in shear. Either way no
+printed part appears below the bezel, which is what the clearance is there for.
 
 ## 🔌 Cable routing
 
@@ -169,7 +171,7 @@ python stand10.py && python check_stand10.py
 |---|---|---|
 | `tilt` | 10.0 | Backward lean, degrees |
 | `foot_depth` | 65.0 | Rearward reach; sized for the hanging cable, not the panel |
-| `clear_z` | 2.0 | Gap between the panel's bottom edge and the desk |
+| `clear_z` | 2.0 | Modelled gap under the panel's bottom edge; the assembled edge rests on the desk |
 | `stand_w` | 140.0 | Width across; stays hidden behind the 167 mm panel |
 | `bear_s1` | 87.0 | Top of the upright; limited by the DSI ribbon |
 | `hole_d` | 2.9 | M2.5 clearance |

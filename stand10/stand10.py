@@ -18,9 +18,15 @@ two bosses along its lower edge, so a leg per side would carry a single bolt
 each and could rotate about it, resisted by nothing but friction. Both bolts
 on one part removes that freedom entirely.
 
-THE PANEL HANGS CLEAR OF THE DESK. Its weight goes through the two M2.5 bolts
-in shear and nothing but the stand's own foot touches the desk. Neither the
-panel's bottom edge nor any printed lip appears below the bezel.
+NO PRINTED PART APPEARS BELOW THE BEZEL. `clear_z` holds the panel's bottom edge
+2 mm above the desk in the model, so no lip or toe is needed under the screen.
+
+On the assembled article that edge comes to rest on the desk rather than hanging
+clear, so the desk shares the load with the two M2.5 bolts instead of the bolts
+carrying all of it in shear. Bolt-hole clearance, plate flex and the lean all
+push the same way and the cause has not been isolated; the part works, so it has
+not been chased. `clear_z` is therefore a modelled clearance, not a measured gap
+- do not treat it as one when editing.
 
 THE FRONT FACE IS STEPPED. The bosses stand 3 mm proud of the back plate, so a
 part bolted flat against them is held 3 mm off the plate everywhere, touching
@@ -133,7 +139,8 @@ PI_S0 = 100.0
 
 # --- Stance
 tilt = 10.0            # backward lean from vertical
-clear_z = 2.0          # panel's bottom edge above the desk
+clear_z = 2.0          # modelled gap under the panel's bottom edge - see the
+                       # header; the assembled edge rests on the desk
 foot_depth = 65.0      # how far the foot reaches behind the panel's bottom edge
 
 # --- Section
