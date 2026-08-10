@@ -140,6 +140,104 @@ check("nothing in front of the plate", pv[:, 2].min() > -TOL,
 check(f"clears the Pi at s={S.PI_S0:.0f}", pv[:, 1].max() < S.PI_S0 - TOL,
       f"max s {pv[:, 1].max():.2f}, Pi at {S.PI_S0}")
 
+# --- The cable collars. A bore is a hole, so the test is for the ABSENCE of
+# --- material along it; asking whether the collar is present answers a
+# --- different question, and that one passes when the bore was never cut. The
+# --- mouth needs both halves of the same argument: open where the lead goes
+# --- in, and closed the whole way round everywhere else.
+bore_pts, wall_pts, mouth_pts = [], [], []
+lip = S.clip_bore / 2.0 + S.clip_wall / 2.0
+for s0, msign in zip(S.clip_s0, S.clip_mouth_sign):
+    for s in np.linspace(s0 + 0.5, s0 + S.clip_h - 0.5, 12):
+        bore_pts.append((S._CLIP_X, s, S._CLIP_T))
+        # The wall opposite the mouth, then the lips over and under the bore.
+        # Between them these say the ring closes everywhere the mouth is not.
+        for dx, dt in ((-msign * 2.9, 0.6), (-msign * 3.8, 0.6),
+                       (0.0, lip), (0.0, -lip)):
+            wall_pts.append((S._CLIP_X + dx, s, S._CLIP_T + dt))
+        # Straight out through the mouth, from the bore wall into clear air.
+        for d in np.linspace(S.clip_bore / 2.0 + 0.2, S._CLIP_R + 2.0, 10):
+            mouth_pts.append((S._CLIP_X + msign * d, s, S._CLIP_T + 0.6))
+
+bore = to_desk(*np.array(bore_pts).T)
+bore_blocked = mesh.contains(bore)
+check("clip bores clear", not bore_blocked.any(),
+      f"n={len(bore)}, {int(bore_blocked.sum())} obstructed")
+
+wall = to_desk(*np.array(wall_pts).T)
+wall_solid = mesh.contains(wall)
+check("collar closed around each bore", wall_solid.all(),
+      f"n={len(wall)}, {int((~wall_solid).sum())} missing")
+
+mouth = to_desk(*np.array(mouth_pts).T)
+mouth_open = ~mesh.contains(mouth)
+check("mouths open outward", mouth_open.all(),
+      f"n={len(mouth)}, {int((~mouth_open).sum())} blocked")
+
+# --- Retention is the alternation, not a snap fit: the lead cannot leave
+# --- without moving two ways at once. A run of collars all opening the same
+# --- way would pass every check above and hold nothing.
+alternates = all(a * b < 0 for a, b in zip(S.clip_mouth_sign, S.clip_mouth_sign[1:]))
+check("mouths alternate", alternates,
+      " ".join("-X" if m < 0 else "+X" for m in S.clip_mouth_sign))
+
+# --- The mouth gap, measured off the mesh rather than read back from the
+# --- parameter that drew it. Sampled at a radius where both cut faces exist:
+# --- further out the collar has curved away and there is nothing to measure
+# --- between, which would report the constriction as wide open.
+STEP = 0.02
+gaps = []
+for s0, msign in zip(S.clip_s0, S.clip_mouth_sign):
+    ts = np.arange(S._CLIP_T - 4.0, S._CLIP_T + 4.0, STEP)
+    scan = to_desk(np.full(len(ts), S._CLIP_X + msign * 3.0),
+                   np.full(len(ts), s0 + S.clip_h / 2.0), ts)
+    free = ~mesh.contains(scan)
+    mid = int(np.argmin(np.abs(ts - S._CLIP_T)))
+    if not free[mid]:
+        gaps.append(0.0)
+        continue
+    lo = hi = mid
+    while lo > 0 and free[lo - 1]:
+        lo -= 1
+    while hi < len(ts) - 1 and free[hi + 1]:
+        hi += 1
+    gaps.append((hi - lo + 1) * STEP)
+
+check("mouth gap is the drawn width", max(abs(g - S.clip_mouth) for g in gaps) < 0.15,
+      f"n={len(gaps)}, " + ", ".join(f"{g:.2f}" for g in gaps)
+      + f" vs {S.clip_mouth}")
+check("mouth narrower than the lead", max(gaps) < S.CABLE_D,
+      f"widest {max(gaps):.2f} vs a {S.CABLE_D} lead")
+
+# --- The top collar is held clear of the upright's top so the lead's overmould
+# --- has room to turn into it, and the middle one clears the bolt head. Both
+# --- are stated as distances rather than as the positions that produce them,
+# --- so moving a collar has to move the reason with it.
+top_gap = S.bear_s1 - (S.clip_s0[-1] + S.clip_h)
+check("top collar clear of the upright's top", abs(top_gap - S.clip_top_clear) < TOL,
+      f"{top_gap:.1f} mm, wanted {S.clip_top_clear}")
+above = to_desk(*np.array(
+    [(S._CLIP_X, s, S._CLIP_T)
+     for s in np.linspace(S.clip_s0[-1] + S.clip_h + 0.5, S.bear_s1, 12)]).T)
+above_clear = ~mesh.contains(above)
+check("nothing protrudes above the top collar", above_clear.all(),
+      f"n={len(above)}, {int((~above_clear).sum())} obstructing")
+
+# --- A driver has to reach both bolts, and the middle collar is now the
+# --- nearest material to one of them.
+DRIVER_D = 6.0
+drv = []
+for sx in (-1, 1):
+    for t in np.linspace(S._BACK_T + 0.5, S._BACK_T + 30.0, 20):
+        for a in range(8):
+            th = 2.0 * math.pi * a / 8.0
+            drv.append((sx * S.BOSS_DX / 2.0 + DRIVER_D / 2.0 * math.cos(th),
+                        S.BOSS_S + DRIVER_D / 2.0 * math.sin(th), t))
+driver = to_desk(*np.array(drv).T)
+driver_blocked = mesh.contains(driver)
+check(f"driver access, {DRIVER_D:.0f} mm shaft", not driver_blocked.any(),
+      f"n={len(driver)}, {int(driver_blocked.sum())} obstructed")
+
 # --- Tipping. The panel's centre of mass projects behind the front contact and
 # --- ahead of the rear, and the backward pull it takes to lift the front is
 # --- what the cable has to beat.

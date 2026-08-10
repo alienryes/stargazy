@@ -40,6 +40,30 @@ The one-sided version guarded against a face low down printing proud, becoming
 a pivot and lifting the upper one off. That failure is possible but was not
 observed; the rocking was.
 
+THE POWER LEAD IS CLIPPED DOWN THE BACK. Two collars run up one bolt column,
+taking the lead from the Pi down to the desk instead of letting it hang out to
+the side and behind. They are on the column rather than the centre rib, and as
+far outboard on it as they go without overhanging the edge, because the lead's
+overmould and its own stiffness need room to turn: the further out the run, the
+wider the radius it can take.
+
+TWO IS WHAT FITS, and the bolt line is the reason - see `clip_s0`. Each collar
+costs 23.8 mm of vertical run once its ramp is counted, and the bolt head has
+to stay reachable, which leaves room for one collar below it and none above.
+
+Each collar is a ring in (X, t) extruded along s, so it rises with the upright
+and inherits the same 10 degree lean, which is an overhang the part already has
+everywhere. A collar wrapping the lead any other way up would need a bridge
+over the bore and a roof over the mouth.
+
+THE MOUTHS ALTERNATE, and that is what retains the lead rather than a snap fit.
+Adjacent collars open opposite ways, so the lead cannot leave without moving
+two directions at once. Each mouth is also narrower than the lead, which a soft
+PVC jacket squeezes through easily - the lip does not have to spring, which is
+what makes a 2 mm PETG section acceptable here. Widening `clip_mouth` past
+`clip_bore` turns them into plain channels and leaves the alternation doing all
+the work, which is the fallback if the mouths prove tight in practice.
+
 NOTHING HERE IS SIZED BY STRESS. The bearing face carries about 2.1 N, each
 bolt about 2.1 N of tension and 2.7 N of shear, and the upright's root sees
 roughly 0.36 MPa against PETG's ~50 MPa yield. Sections are set by print
@@ -67,7 +91,7 @@ from pathlib import Path
 
 import cadquery as cq
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 # ============================================================
 # PARAMETERS - all mm / degrees.
@@ -134,6 +158,31 @@ bear_s1 = 87.0
 # --- Fasteners
 hole_d = 2.9           # M2.5 clearance, print-tolerant
 
+# --- Cable clips, up one bolt column. `clip_x_sign` picks the column: -1 is
+# --- the right hand side seen from BEHIND the panel, which is the side the
+# --- Pi's power lead comes down. X is measured with +X to the right of a
+# --- viewer in FRONT of the screen, so the two are opposite signs.
+CABLE_D = 4.0          # measured across the lead's jacket
+clip_wall = 2.0
+clip_bore = CABLE_D + 0.6    # a running fit; the collar routes, it does not grip
+clip_mouth = CABLE_D - 0.4   # the gap the lead is pushed through - see the header
+clip_h = 8.0           # collar height, up the plate
+clip_ramp = 50.0       # underside slope, MEASURED IN THE DESK FRAME
+clip_x_sign = -1.0
+clip_top_clear = 10.0  # top collar held this far below the upright's top, so the
+                       # overmould has room to turn into it
+# Collar bottoms, up the plate. TWO, NOT THREE, AND THE BOLT LINE IS WHY. The
+# ramp reaches 15.8 mm below a collar, so each one occupies 23.8 mm of run. The
+# bolt sits at s=41 and its head and driver have to stay reachable, which leaves
+# 33.8 mm of usable run below it - exactly one collar - and 9.0 mm above it
+# under the top collar, which is not enough for anything. A third collar can
+# only be had by moving the top one down off its 10 mm.
+#
+# The upper figure is `clip_top_clear`; the lower is a free choice, set to clear
+# the root fillet, with its own ramp landing on the foot.
+clip_s0 = (20.0, bear_s1 - clip_top_clear - clip_h)
+clip_mouth_sign = (-1.0, 1.0)   # alternating, which is what retains the lead
+
 # --- Lightening. The columns carry the bolts, the rib splits the windows so
 # --- neither the bearing rail nor the foot spans the full width unsupported.
 # --- Material is taken out by WIDENING these windows rather than by thinning
@@ -157,6 +206,14 @@ foot_rail_w = 10.0     # foot side rails, measured in from each edge
 _A = math.radians(tilt)
 _BACK_T = BOSS_PROUD + up_t          # the back face, a single flat plane
 _SWEEP = 40.0                        # half-length used to sweep panel features
+
+_CLIP_R = clip_bore / 2.0 + clip_wall                  # collar outer radius
+_CLIP_X = clip_x_sign * (stand_w / 2.0 - _CLIP_R)      # outer wall flush with the edge
+_CLIP_T = _BACK_T + clip_wall + clip_bore / 2.0        # bore centre, out from the plate
+_CLIP_ROOT_T = _BACK_T - 0.5         # collars start inside the wall, so the union
+                                     # is an overlap rather than a tangent line
+_CLIP_DROP = 16.0                    # extruded this far below each collar; the ramp
+                                     # cut takes back whatever it does not need
 
 
 def panel_to_desk(s, t):
@@ -211,6 +268,75 @@ def profile():
         (foot_depth, foot_t),
         (foot_depth, 0.0),
     ]
+
+
+def clip_solid(s0, mouth_sign):
+    """One cable collar, positioned in the desk frame.
+
+    Drawn in (X, t) and extruded along s, then carried onto the panel by a
+    single rotation about X. The extrusion axis is the panel's own up
+    direction, so the collar leans back with the upright and adds no overhang
+    the part did not already have.
+
+    The outer boundary is a disc merged with a rectangle reaching back into the
+    plate. The disc alone would meet the flat back face along one tangent line,
+    which is a knife edge rather than an attachment; the rectangle gives the
+    collar a base the full 2 * `_CLIP_R` across.
+
+    Everything is extruded from `_CLIP_DROP` below `s0`, and `ramp_cutter`
+    then removes whatever falls under the ramp. Over-extruding is free: the cut
+    plane passes through the wall at exactly `s0`, so any surplus goes with it.
+    """
+    h = clip_h + _CLIP_DROP
+    disc = cq.Workplane("XY").moveTo(_CLIP_X, _CLIP_T).circle(_CLIP_R).extrude(h)
+    base = (cq.Workplane("XY")
+            .moveTo(_CLIP_X, (_CLIP_ROOT_T + _CLIP_T) / 2.0)
+            .rect(2.0 * _CLIP_R, _CLIP_T - _CLIP_ROOT_T)
+            .extrude(h))
+    bore = (cq.Workplane("XY")
+            .moveTo(_CLIP_X, _CLIP_T).circle(clip_bore / 2.0).extrude(h))
+    # The mouth runs from the bore centre out through the wall, so it is open
+    # whatever the wall thickness happens to be.
+    reach = _CLIP_R + 1.0
+    mouth = (cq.Workplane("XY")
+             .moveTo(_CLIP_X + mouth_sign * reach / 2.0, _CLIP_T)
+             .rect(reach, clip_mouth)
+             .extrude(h))
+
+    solid = disc.union(base).cut(bore).cut(mouth).translate((0, 0, s0 - _CLIP_DROP))
+    # Local (x, y, z) is (X, t, s); this rotation is the only place that is
+    # turned into desk coordinates.
+    return solid.rotate((0, 0, 0), (1, 0, 0), -tilt).translate((0, 0, clear_z))
+
+
+def ramp_cutter(s0):
+    """Everything below one collar's 45-degree-or-steeper underside.
+
+    A collar protruding ~9 mm from a near-vertical wall presents a downward
+    face that is almost horizontal, which is the one thing this part is meant
+    never to need support for. The ramp rises going backward, so the collar
+    grows out of the wall rather than starting in mid air.
+
+    ANCHORED AT THE COLLAR'S OUTER BOTTOM CORNER, not where it meets the back
+    face. Anchoring at the wall looks like the natural choice and is wrong: the
+    plane then climbs the collar's whole projection before it reaches the outer
+    edge, which is further than a collar this tall can climb, and the cut takes
+    the outer four fifths of every collar with it. From the outer corner the
+    plane can only fall going forward, and the bottom face falls with it - the
+    panel's own tilt sees to that - so the full section survives by
+    construction and the taper lands entirely below `s0`.
+
+    `clip_ramp` IS MEASURED IN THE DESK FRAME, not in (X, s). The gables have
+    to correct for the panel's tilt because they are sketched in the panel's
+    own axes; this plane is built in the frame the printer works in, so the
+    angle it is given is the angle that prints.
+    """
+    y0, z0 = panel_to_desk(s0, _CLIP_T + _CLIP_R)
+    big = 400.0
+    below = (cq.Workplane("XY")
+             .box(big, big, big, centered=(True, True, False))
+             .translate((0, 0, -big)))
+    return below.rotate((0, 0, 0), (1, 0, 0), clip_ramp).translate((0, y0, z0))
 
 
 def window_profile(x0, x1):
@@ -274,6 +400,11 @@ def build():
     )
     part = part.cut(holes)
 
+    # Cable collars last, so neither the root fillet nor any window has to be
+    # computed against them.
+    for s0, mouth_sign in zip(clip_s0, clip_mouth_sign):
+        part = part.union(clip_solid(s0, mouth_sign).cut(ramp_cutter(s0)))
+
     return part
 
 
@@ -292,6 +423,12 @@ if __name__ == "__main__":
                        ("Pi lower edge", PI_S0, 0.0)):
         y, z = panel_to_desk(s, t)
         print(f"  {name:<16} s={s:>5.1f}  ->  Y {y:>6.2f}  Z {z:>6.2f}")
+    print(f"  clips at X {_CLIP_X:.1f}, bore {clip_bore} at t={_CLIP_T:.1f}, "
+          f"mouth {clip_mouth}")
+    for s0, mouth_sign in zip(clip_s0, clip_mouth_sign):
+        y, z = panel_to_desk(s0, _CLIP_T)
+        print(f"    s {s0:>5.1f}..{s0 + clip_h:<5.1f} opens "
+              f"{'-X' if mouth_sign < 0 else '+X'}  ->  Y {y:>6.2f}  Z {z:>6.2f}")
 
     # Written beside this file rather than into the working directory, so
     # building from the repo root does not leave a stray STL there.

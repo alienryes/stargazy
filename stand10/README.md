@@ -11,11 +11,12 @@ Only a way to stand the panel on a desk is missing.
 **Highlights**
 
 - One part, two M2.5 screws, no other fasteners.
-- About 44 g of PETG, roughly 2¼ hours, no supports and no brim.
+- About 45 g of PETG, roughly 2¼ hours, no supports and no brim.
 - The panel hangs clear of the desk, so nothing shows below the bezel.
 - Bolts to the lower bracket pair only, clear of the DSI ribbon.
+- Two moulded-in collars carry the power lead down the back to the desk.
 
-![Six views of the stand: an L in section, 140 mm across, with an upright leaning back 10 degrees carrying two gabled windows and a screw hole in each outer column, and a foot reaching 65 mm backward with two rectangular windows.](stand10_preview.png)
+![Six views of the stand: an L in section, 140 mm across, with an upright leaning back 10 degrees carrying two gabled windows and a screw hole in each outer column, and a foot reaching 65 mm backward with two rectangular windows. Two cable collars stand proud of the upright's back face at one outer edge, each a split ring on a tapered plinth, one near the top and one near the foot.](stand10_preview.png)
 
 ## ⚠️ Panel orientation
 
@@ -42,7 +43,8 @@ The image and touch mapping are turned to match by `build10/display.py`
 |---|---|
 | Panel | Raspberry Pi Touch Display 2, 10.1", Pi already mounted |
 | Screws | **2 × M2.5 × 12 mm**, pan or socket head |
-| Filament | PETG, about 44 g |
+| Power lead | 4 mm across the jacket — see [Cable routing](#-cable-routing) |
+| Filament | PETG, about 45 g |
 | Print bed | 140 × 65 mm minimum, 88 mm height |
 
 M2.5 × 12 is confirmed on hardware. The bosses are threaded 8 mm deep and the
@@ -62,6 +64,12 @@ No supports and no brim are needed. The upright leans 10°, the window gables
 are pitched past 45°, and the foot puts about 4,600 mm² on the bed. The only
 downward-facing surfaces are the two screw bores, which span 2.9 mm and bridge.
 
+The cable collars keep that true. Each is a ring extruded along the panel's own
+up direction, so it leans back with the upright rather than presenting a new
+overhang, and each sits on a plinth sloped at 50° that carries its projection
+back to the wall. `check_stand10.py` measures the result: the downward-facing
+area is the same 22.4 mm² with the collars as without them.
+
 ## 🔩 Assembly
 
 1. Rest the panel face-down on something soft, turned 180° from its delivered
@@ -72,9 +80,39 @@ downward-facing surfaces are the two screw bores, which span 2.9 mm and bridge.
 3. Run an M2.5 × 12 through each hole into the boss. Firm, not tight — there is
    no washer face, and PETG dishes if over-torqued.
 4. Stand the assembly up.
+5. Press the power lead into the two collars — see below.
 
 The panel ends up hanging about 2 mm clear of the desk. Its weight is carried
 by the two screws in shear.
+
+## 🔌 Cable routing
+
+Without help the power lead leaves the Pi at the top of the panel and hangs out
+to the side and behind. Two collars on the back of the upright take it down to
+the desk instead.
+
+Bring the lead down the same side of the panel as the Pi's power socket, then
+press it into the upper collar and the lower one in turn. Each mouth is 3.6 mm
+against a 4 mm lead, so the jacket has to squeeze slightly going in; that is
+what stops it falling out again.
+
+**The two mouths deliberately face opposite ways.** The lead cannot leave
+without moving in two directions at once, so retention does not depend on a
+lip springing open and shut — which matters, because PETG at this section does
+not flex much. If the mouths prove too tight in practice, raising `clip_mouth`
+above `clip_bore` turns them into plain open channels and the opposed
+directions still hold the lead in place.
+
+The collars sit as far outboard as they fit on the bolt column, because the
+lead's overmould and its own stiffness need room to turn: the further out the
+run, the wider the radius it can take. The upper collar stops 10 mm short of
+the top of the upright for the same reason.
+
+> [!NOTE]
+> There are two collars rather than three because of the bolt line. Counting
+> its plinth, each collar occupies about 24 mm of vertical run, and the bolt
+> head has to stay reachable — which leaves room for one collar below it and
+> none between it and the upper collar.
 
 ## 📐 Key dimensions
 
@@ -103,6 +141,14 @@ way up — see [Panel orientation](#️-panel-orientation).
 and hangs below it. The upright stops at 87 mm to clear it; a taller value in
 `stand10.py` will press on the loop.
 
+**The lead will not go into the collars.** The mouths are 0.4 mm narrower than
+a 4 mm lead by design. A thicker lead needs `CABLE_D` set to its own diameter
+and the part reprinted; a lead that will not squeeze needs `clip_mouth` raised
+above `clip_bore`, which leaves the opposed mouths doing the retaining.
+
+**The collars are on the wrong side.** They are on one bolt column only. Flip
+`clip_x_sign` in `stand10.py` and reprint.
+
 **Taps land diagonally opposite the finger.** Both the software mapping and the
 overlay's `invx,invy` are inverting the touchscreen. Remove the overlay
 parameters.
@@ -124,6 +170,11 @@ python stand10.py && python check_stand10.py
 | `stand_w` | 140.0 | Width across; stays hidden behind the 167 mm panel |
 | `bear_s1` | 87.0 | Top of the upright; limited by the DSI ribbon |
 | `hole_d` | 2.9 | M2.5 clearance |
+| `CABLE_D` | 4.0 | Power lead across the jacket; sets the bore and the mouth |
+| `clip_mouth` | 3.6 | Gap the lead is pushed through; raise past `clip_bore` for open channels |
+| `clip_x_sign` | −1.0 | Which bolt column carries the collars; −1 is the right hand side seen from behind |
+| `clip_top_clear` | 10.0 | Upper collar's distance below the top of the upright |
+| `clip_ramp` | 50.0 | Plinth slope under each collar, in the printer's frame |
 
 ## 📄 Licence and credits
 
