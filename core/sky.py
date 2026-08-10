@@ -40,6 +40,26 @@ TRAIL_SEG, TRAIL_SEGMENTS = 11.0, 14
 # frame's travel rather than a dot - see draw_meteor for why.
 HEAD_R = 2
 
+# How sharply a star's glare falls off from its core, as an exponent on the
+# radius. 1.0 is linear; higher concentrates the light into the centre and
+# leaves a fainter halo.
+HALO_FALLOFF = 1.8
+
+# The core is drawn this much brighter than the star's own value, and clipped.
+#
+# KEEP IT SMALL. At 1.9 everything brighter than magnitude 2.19 clipped to the
+# same white, which is most of what makes a constellation - the pattern stars
+# run about 1.8 to 3.3 - so the sky lost its shape and read as random again.
+# 1.25 clips only magnitude 0.2 and brighter: Vega, Arcturus, Sirius. Those are
+# genuinely brilliant and losing the distinction between them is correct.
+# A real bright star does not present the eye with a grey dot - it saturates,
+# which is why photographs of them blow out at the centre. Without this the
+# brightest object on the panel topped out around RGB (203, 205, 217), a light
+# grey, and read as flat however large it was drawn. The clip means magnitude
+# stops being carried by the core past a point and is carried by the halo
+# instead, which is what glare does.
+CORE_BOOST = 1.25
+
 # Cloud drift, stated as an ANGLE and converted to pixels by each build.
 #
 # It used to be `6.0 + wind * 1.2` pixels a second, two invented numbers with no
@@ -123,7 +143,7 @@ class Sky:
     rendered frame can be compared byte for byte against an earlier one.
     """
 
-    def __init__(self, w, h, stars=200, seed=7, twinkle=0.05, twinkle_max=0.20, *, fov):
+    def __init__(self, w, h, stars=200, seed=7, twinkle=0.018, twinkle_max=0.12, *, fov):
         self.w, self.h = w, h
         # Keyword-only and required, with no default. The cloud drift arrives as
         # an angle and has to be converted here, and the two builds have
@@ -136,17 +156,28 @@ class Sky:
         # the ceiling near the horizon; each star's own value is `twinkle`
         # times its scintillation factor, clamped.
         #
-        # Amplitude reads most usefully in magnitudes: the swing is a ratio of
-        # (0.55 + a) to (0.55 - a), so 0.05 is 0.20 mag, 0.12 is 0.48 and 0.20
-        # is 0.83. The field shipped at a flat 0.45, which is 1.33 mag - four
-        # to ten times what real scintillation does - and read as the whole sky
-        # breathing rather than twinkling.
+        # Amplitude reads most usefully in magnitudes. The factor runs from
+        # 1 - 2a up to 1, so the depth is 2.5 log10(1 / (1 - 2a)): 0.018 is
+        # 0.04 mag and 0.12 is 0.30. The field shipped at a flat 0.45 about a
+        # centre of 0.55, which is 1.33 mag - four to ten times what real
+        # scintillation does - and read as the whole sky breathing.
+        #
+        # NEARLY NOTHING OVERHEAD, A LITTLE NEAR THE HORIZON. A star at the
+        # zenith is genuinely steady, and the cycle here runs 5 to 31 seconds
+        # against real scintillation's tens of hertz, which 12 fps cannot draw
+        # and never will. At 0.20 mag on every star that slow swing read as
+        # breathing rather than twinkling - and it got worse, not better, when
+        # the field was cut from 1200 dim stars to 200 bright ones, because the
+        # pulse became legible on individual objects instead of lost in a
+        # crowd. The zenith figure is now imperceptible and the horizon cap is
+        # 0.30 mag, the top of what real scintillation does at mid altitude,
+        # reached below about 18 degrees.
         #
         # The floor also has to keep stars out of draw_stars' cull at 0.05. The
-        # faintest star's base is 0.560 and the lowest gain the display
-        # produces is 0.40 in twilight, so the trough is 0.560 x (0.55 - a) x
-        # 0.40, which stays above the cull for any amplitude under 0.327. The
-        # ceiling here is well inside that.
+        # faintest star drawn has a base of 0.25 under the sparse profile and
+        # the lowest gain the display produces is 0.40 in twilight, so the
+        # trough is 0.25 x (1 - 2a) x 0.40, which stays above the cull for any
+        # amplitude under 0.25. The ceiling here is well inside that.
         self.twinkle = twinkle
         self.twinkle_max = twinkle_max
         random.seed(seed)
@@ -281,7 +312,16 @@ class Sky:
             # steady overhead, shimmering low down. A single figure for the
             # whole field overstates the zenith and understates the horizon.
             amp = min(self.twinkle_max, self.twinkle * scint)
-            val = base * (0.55 + amp * math.sin(t * speed + phase)) * gain
+            # The twinkle PEAKS at 1.0 rather than oscillating about 0.55.
+            # That 0.55 was written as the centre of the swing, but it was also
+            # a permanent 45% cut on every star: the brightest object in the sky
+            # rendered at RGB (114, 115, 122) - mid grey - which is why stars
+            # read as flat and dim rather than as points of light. Dropping the
+            # amplitude made it worse by removing the top of the swing as well.
+            # Now a star reaches its full magnitude-derived brightness at the
+            # top of the cycle and dips below it, which is also what a real one
+            # does: scintillation takes light away, it does not add any.
+            val = base * (1.0 - amp + amp * math.sin(t * speed + phase)) * gain
             x = (x0 + drift[size]) % w
             if alpha is not None:
                 # Occluded by the cloud actually in front of THIS star, rather
@@ -296,17 +336,32 @@ class Sky:
             if val <= 0.05:
                 continue
             light = tuple(int(ch * val) for ch in STAR_COLOUR)
-            c = _lit(frame, x, y, light)
-            if size == 1:
-                draw.point((x, y), fill=c)
-            else:
-                r = size - 1
-                draw.ellipse([x - r, y - r, x + r, y + r], fill=c)
-                if size >= 3 and val > 0.7:  # faint glint on the brightest stars
-                    half = tuple(v // 2 for v in light)
-                    g = _lit(frame, x, y, half)
-                    draw.line([(x - 4, y), (x + 4, y)], fill=g, width=1)
-                    draw.line([(x, y - 4), (x, y + 4)], fill=g, width=1)
+            # A CORE WITH A HALO, NOT A DISC. Every star used to be one filled
+            # ellipse in a single colour - a size-6 star was 97 pixels at
+            # exactly the same value, which reads as a smudge rather than a
+            # light. Magnitude is carried by how far the glare reaches, which is
+            # what glare actually does, while the centre stays a sharp point.
+            #
+            # The background is sampled ONCE, at the centre, and every ring is
+            # computed from it. Sampling per ring would read back the ring just
+            # drawn and compound the addition.
+            bg = frame.getpixel((int(x), y)) if frame is not None else (0, 0, 0)
+            for rr in range(size - 1, 0, -1):
+                k = (1.0 - rr / size) ** HALO_FALLOFF
+                ring = (min(255, bg[0] + int(light[0] * k)),
+                        min(255, bg[1] + int(light[1] * k)),
+                        min(255, bg[2] + int(light[2] * k)))
+                draw.ellipse([x - rr, y - rr, x + rr, y + rr], fill=ring)
+            c = (min(255, bg[0] + int(light[0] * CORE_BOOST)),
+                 min(255, bg[1] + int(light[1] * CORE_BOOST)),
+                 min(255, bg[2] + int(light[2] * CORE_BOOST)))
+            draw.point((x, y), fill=c)
+            # NO GLINT CROSS. A nine-pixel cross drawn through a seven-pixel
+            # star is a plus sign, not a star, and it was the strongest thing
+            # on the panel once the discs were tightened. A saturated core says
+            # "this one is brilliant" without drawing a diffraction spike the
+            # naked eye does not see.
+
 
     def set_radiants(self, radiants, px_per_degree):
         """Where tonight's showers radiate from, in canvas coordinates.
