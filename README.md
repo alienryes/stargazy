@@ -300,6 +300,15 @@ python3 display.py --compare  # fetch from both weather sources and diff them
 
 `--demo` is handy for checking the vivid end of the range without waiting for a clear night.
 
+`--save` renders the draw path again, so it shows what the code *would* produce. To capture what the panel is **actually showing** — the page the rotation is on, the control strip, the live night filter — read the framebuffer instead:
+
+```bash
+python3 tools/grab_panel.py --rotate 270 --out panel.png   # 5-inch
+python3 tools/grab_panel.py --rotate 180 --out panel.png   # 10.1-inch
+```
+
+The rotation differs because the framebuffer holds the image in the panel's orientation rather than a readable one, and neither value can be detected from the framebuffer itself. Geometry and colour depth are read from the device.
+
 ---
 
 ## 🧰 Case
@@ -365,6 +374,11 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
     install-units.sh            Installs the units - interactive sudo, by design
 build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - in progress
 screenshots/            README images, regenerated with display.py --save
+tools/                  Development checks and utilities
+  grab_panel.py           Capture what the panel is actually showing, off /dev/fb0
+  check_fb_paths.py       Prove the framebuffer fast paths emit the shipped bytes
+  check_ranking.py        Deep-sky ordering, incl. UpTonight's 0.0 magnitude
+  check_paging.py         Deep-sky card paging arithmetic, both card counts
 harden-pi.sh            Optional: key-only SSH + automatic security updates
 case/
   README.md               Print settings, hardware, assembly
