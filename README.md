@@ -42,7 +42,7 @@ Two pages rotate over the same continuous animated sky. Both shots are real fram
 
 **Page 2 — tonight's targets**
 
-![The targets page: a dusk-to-dawn timeline with the astronomical dark window highlighted and a moon-up strip above it; an altitude-versus-bearing plot of the Moon and planets, with a line beneath it naming the bodies still below the horizon and the times they rise; and four deep-sky cards, each with a real sky photograph, object type, constellation, peak altitude and time.](screenshots/targets.png)
+![The 5-inch targets page: a dusk-to-dawn timeline with the astronomical dark window highlighted; an altitude-versus-bearing plot of the planets, with a line beneath it naming the bodies still below the horizon and the times they rise; and four deep-sky cards headed with the range on show out of a much longer list, each card carrying a real sky photograph, object type, constellation, peak altitude and a bar for the share of the dark hours the object stays up.](screenshots/targets.png)
 
 The page-2 timeline only appears once UpTonight has run, and the page leaves the rotation entirely if it has produced nothing, so an empty page is never shown.
 
@@ -68,7 +68,7 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 **Page 2 — targets.** One altitude-versus-bearing plot carries the planets *and* the deep-sky objects on a full 0–90° axis. The 5" build keeps the two apart because it has far less vertical room: UpTonight selects deep-sky targets for high altitude, while the planets stay near the ecliptic and so occupy a lower band, and a short axis holding both compresses whichever band is lower. How far apart those bands sit depends on latitude — from the reference site at 51°N the objects peak around 70–85° and the planets stay below about 35°, but nearer the equator the ecliptic rides much higher and the two overlap. Every position on the plot is for the single instant named above it.
 
-![The 10.1-inch targets page: a dusk-to-dawn timeline, then an altitude-versus-bearing plot showing six deep-sky objects between 30 and 68 degrees and Neptune just above the horizon, each labelled with its bearing, then a line naming the bodies still below the horizon with the times they rise, above six deep-sky cards with real sky photographs.](screenshots/10in-targets.png)
+![The 10.1-inch targets page: a dusk-to-dawn timeline; an altitude-versus-bearing plot carrying the planets alongside the same deep-sky objects as the cards below, each labelled with its bearing; a line naming the bodies still below the horizon with the times they rise; and six deep-sky cards headed with the range on show out of a much longer list, each with a real sky photograph, object type, constellation, peak altitude and where it stands at the plotted instant.](screenshots/10in-targets.png)
 
 **Page 3 — meteors.** Which showers are actually running, from a table of orbital constants indexed by solar longitude, with the rate an observer would really count once radiant altitude, cloud and moonlight are accounted for.
 
