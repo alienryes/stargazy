@@ -95,7 +95,9 @@ Star and cloud brightness always keep a visible floor, so the sky stays alive ev
 
 ### The starfield is the real sky
 
-The stars behind the dashboard are not decoration. They are plotted from the Yale Bright Star Catalogue down to magnitude 6.5 — about 8,400 stars — at their true altitude and azimuth for the configured site and the current moment, recomputed every minute. Constellations are therefore recognisable, and they move because the Earth turns rather than because a drift constant says so. The catalogue ships in the repository, so this needs no network.
+The stars behind the dashboard are not decoration. They are plotted from the Yale Bright Star Catalogue at their true altitude and azimuth for the configured site and the current moment, recomputed every minute, and they move because the Earth turns rather than because a drift constant says so.
+
+**Only down to `limiting_magnitude`, default 5.0 — not the catalogue's 6.5.** The catalogue's faint end is stars nobody at the panel could see: measured over the 5" field of view it put 1,204 stars on screen, of which 983 were fainter than magnitude 5, and those carried 56% of the drawn area. They buried the sixteen stars that actually make a pattern, and a real sky came out looking random. Raise it for a genuinely dark site. The catalogue ships in the repository, so this needs no network.
 
 **A panel cannot know which way it is facing, so the direction it looks is configuration rather than something inferred:**
 
@@ -109,7 +111,7 @@ field_of_view = 70      # degrees, vertical (build10 defaults to 90)
 
 The default view faces **due south at 45° up**, which is where objects transit and therefore the most useful direction at northern latitudes. Point it wherever the window actually faces, or wherever the view is best. The horizontal field is derived from the panel's aspect ratio so the scale stays even in both directions — which means the landscape 5" build sees considerably more sky than the portrait 10.1-inch one at the same vertical setting.
 
-Brightness and star size are mapped for legibility at a distance rather than photometrically: the ordering is faithful, so Sirius still dominates, but a magnitude 6.5 star is drawn at a visible floor rather than at its true relative brightness. Set `real_stars = false` for the earlier randomised starfield.
+Brightness and star size are mapped for legibility at a distance rather than photometrically: the ordering is faithful, so Sirius still dominates, but the range is compressed — a sky spanning eight magnitudes is drawn across about 1.5, with size carrying the rest. Each panel has its own size table, because the 10.1" shows a narrower window of sky magnified over 2.5× the pixels. Set `real_stars = false` for the earlier randomised starfield.
 
 ### The meteors follow tonight's real showers
 
@@ -442,7 +444,7 @@ This project is a thin dashboard over other people's hard work.
 - **[AstroWeather](https://github.com/mawinkler/astroweather) and [pyastroweatherio](https://github.com/mawinkler/pyastroweatherio)** by Markus Winkler (MIT). The seeing, transparency, calm and deep-sky figures are its model, not a reimplementation of it — the display calls the same library the Home Assistant integration wraps.
 - **[UpTonight](https://github.com/mawinkler/uptonight)**, also by Markus Winkler, computes the target lists on the Pi.
 - **Weather data** from [MET Norway](https://www.met.no/) and [Open-Meteo](https://open-meteo.com/), via the above.
-- **The star catalogue** behind the real sky in both builds is the **Yale Bright Star Catalogue** (Hoffleit & Warren, 5th revised edition), obtained from **VizieR at CDS, Strasbourg Observatory, France** (catalogue V/50) and trimmed to magnitude 6.5. It ships in the repository as `core/data/stars.tsv`, so the display needs no network to draw the sky.
+- **The star catalogue** behind the real sky in both builds is the **Yale Bright Star Catalogue** (Hoffleit & Warren, 5th revised edition), obtained from **VizieR at CDS, Strasbourg Observatory, France** (catalogue V/50) and trimmed to magnitude 6.5 — of which the display draws down to `limiting_magnitude`. It ships in the repository as `core/data/stars.tsv`, so the display needs no network to draw the sky.
 - **Sky imagery** from the [`hips2fits` service](https://alasky.cds.unistra.fr/hips-image-services/hips2fits) at **CDS, Strasbourg Observatory, France**, rendering the **DSS2 colour** HiPS survey. The Digitized Sky Survey was produced at the Space Telescope Science Institute under U.S. Government grant NAG W-2166, from photographic data of the Oschin Schmidt Telescope on Palomar Mountain and the UK Schmidt Telescope.
 - **Lunar imagery** from **[Dial-a-Moon](https://svs.gsfc.nasa.gov/4442)**, by **Ernie Wright** at **NASA's Scientific Visualization Studio**, rendered from Lunar Reconnaissance Orbiter data. SVS content is public domain. Each frame shows the Moon's real phase, libration and terminator for that hour — the display is compositing an actual render, not drawing an approximation.
 - **Aurora forecasts** from the **[NOAA Space Weather Prediction Center](https://www.swpc.noaa.gov/)**: the **OVATION** auroral precipitation model, which gives the probability of aurora above each point of a global grid, and the **planetary K-index** — both the one-minute series and the three-day outlook. SWPC products are U.S. Government works and in the public domain, so this credit is courtesy rather than obligation. The meteorological aurora model is theirs; what this display adds is the horizon geometry that turns it into an answer for one site. The `[aurora]` page needs no key and no registration.

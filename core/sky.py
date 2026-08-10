@@ -269,7 +269,8 @@ class Sky:
             self._cloud = (self._cloud[-1:] + (cached,))[-2:]
         return cached[1], cached[2], cached[3]
 
-    def draw_stars(self, draw, t, params, alpha=None, alpha_w=0, off=0):
+    def draw_stars(self, draw, t, params, alpha=None, alpha_w=0, off=0,
+                   frame=None):
         w, gain = self.w, params["gain"]
         if self.star_drift:
             drift = {s: (t * params["drift"] * d) % w for s, d in STAR_DEPTH.items()}
@@ -294,14 +295,16 @@ class Sky:
                 val *= 1.0 - alpha[y * alpha_w + int(x + off) % alpha_w] / 255.0
             if val <= 0.05:
                 continue
-            c = tuple(int(ch * val) for ch in STAR_COLOUR)
+            light = tuple(int(ch * val) for ch in STAR_COLOUR)
+            c = _lit(frame, x, y, light)
             if size == 1:
                 draw.point((x, y), fill=c)
             else:
                 r = size - 1
                 draw.ellipse([x - r, y - r, x + r, y + r], fill=c)
                 if size >= 3 and val > 0.7:  # faint glint on the brightest stars
-                    g = tuple(int(ch * val * 0.5) for ch in STAR_COLOUR)
+                    half = tuple(v // 2 for v in light)
+                    g = _lit(frame, x, y, half)
                     draw.line([(x - 4, y), (x + 4, y)], fill=g, width=1)
                     draw.line([(x, y - 4), (x, y + 4)], fill=g, width=1)
 
@@ -417,10 +420,33 @@ class Sky:
         off = int(-scroll * self.px_per_degree) % self.field_w
         frame = strip.crop((off, 0, off + self.w, self.h))
         d = ImageDraw.Draw(frame)
-        self.draw_stars(d, t, params, alpha, alpha_w, off)
+        self.draw_stars(d, t, params, alpha, alpha_w, off, frame)
         for m in meteors:
-            draw_meteor(d, m, alpha, alpha_w, off)
+            draw_meteor(d, m, alpha, alpha_w, off, frame)
         return frame
+
+
+def _lit(frame, x, y, light):
+    """`light` added to whatever is already at (x, y), clamped.
+
+    STARS AND METEORS ADD LIGHT; THEY DO NOT REPLACE THE SKY. Drawing them as a
+    flat colour meant anything dimmer than its background was painted ON as a
+    DARK speck - the sky showing through a hole where a star should be. It was
+    not a corner case: measured over this field, a poor night under 90% cloud
+    drew 222 stars darker than the sky against 5 brighter, and twilight drew
+    1977 against none. The cloud rewrite made it worse by putting a much
+    lighter background behind the stars far more of the time.
+    """
+    if frame is None:
+        return light
+    w, h = frame.size
+    xi, yi = int(x), int(y)
+    if not (0 <= xi < w and 0 <= yi < h):
+        return light
+    bg = frame.getpixel((xi, yi))
+    return (min(255, bg[0] + light[0]),
+            min(255, bg[1] + light[1]),
+            min(255, bg[2] + light[2]))
 
 
 def _clear_at(alpha, w, off, x, y):
@@ -444,7 +470,7 @@ def _clear_at(alpha, w, off, x, y):
     return 1.0 - alpha[yi * w + int(x + off) % w] / 255.0
 
 
-def draw_meteor(draw, m, alpha=None, alpha_w=0, off=0):
+def draw_meteor(draw, m, alpha=None, alpha_w=0, off=0, frame=None):
     frac = m["life"] / m["max"]
     fade = math.sin(math.pi * min(1.0, frac))
     mag = math.hypot(m["vx"], m["vy"])
@@ -460,7 +486,8 @@ def draw_meteor(draw, m, alpha=None, alpha_w=0, off=0):
         # leaving the cloud where it is.
         if b <= 0.02:
             continue
-        c = (int(255 * b), int(255 * b), int(235 * b))
+        c = _lit(frame, (x1 + x2) / 2.0, (y1 + y2) / 2.0,
+                 (int(255 * b), int(255 * b), int(235 * b)))
         draw.line([(x1, y1), (x2, y2)], fill=c, width=2)
     # The head covers the ground crossed since the previous frame rather than
     # marking a point. A meteor steps 4.5-8.5 px between frames against a head
@@ -481,7 +508,8 @@ def draw_meteor(draw, m, alpha=None, alpha_w=0, off=0):
     if hf <= 0.02:
         return
     hb = int(255 * hf)
-    head = (hb, hb, int(235 * hf))
+    head = _lit(frame, (px + m["x"]) / 2.0, (py + m["y"]) / 2.0,
+                (hb, hb, int(235 * hf)))
     draw.line([(px, py), (m["x"], m["y"])], fill=head, width=HEAD_R * 2 + 1)
     for cx, cy in ((m["x"], m["y"]), (px, py)):
         draw.ellipse([cx - HEAD_R, cy - HEAD_R, cx + HEAD_R, cy + HEAD_R],
