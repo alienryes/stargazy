@@ -13,7 +13,7 @@ import math
 import random
 
 import numpy as np
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
 
 from core.palette import STAR_COLOUR
 from core.starfield import TWINKLE_SPEED, scintillation
@@ -28,6 +28,12 @@ STAR_DEPTH = {1: 0.25, 2: 0.6, 3: 1.3}
 # cover; they drift across the sky and dim the stars they pass over.
 MAX_CLOUDS = 7
 CLOUD_COLOUR = (48, 53, 72)   # muted blue-grey, lighter than the navy sky
+# Opacity at the densest point of a sprite. Cloud thick enough to report is
+# thick enough to hide stars, so the core is nearly opaque and the softness
+# lives at the edges, where thin cloud belongs. Stated as a fraction because
+# the previous blind multiplier left the peak at 36-45% - measured - and no
+# number of half-transparent sprites reads as overcast.
+CLOUD_PEAK_ALPHA = 0.92
 
 # A meteor's streak is the trail seen side-on, so it shortens towards nothing as
 # the path points at the observer. Within this distance of the radiant the
@@ -295,25 +301,56 @@ class Sky:
         canvas, so every panel now gets the same proportion of sky covered.
 
         The blur radii are already relative to the sprite, so they follow.
+
+        THE BLOBS ARE THEIR OWN SILHOUETTE. An earlier version multiplied the
+        mask by a blurred RECTANGLE, to feather the alpha to zero before the
+        tile border. That did stop the edge being HARD, which is what its
+        comment claimed, but it did not stop it being STRAIGHT: the blobs
+        reached past the rectangle, so wherever they did, the visible outline
+        was the envelope, and clouds came out flat-sided. Measured on the 10"
+        sprites, 12-49% of each one's rows ended within 2 px of its widest
+        point, against about 13% for a circle.
+
+        The envelope is gone. The blobs are kept far enough inside that the
+        blur falls to zero within the tile on its own, so the outline is the
+        union of overlapping ellipses.
+
+        THAT IS NOT ENOUGH ON ITS OWN, and the first attempt at this proved it:
+        removing the envelope left the silhouette just as flat, because 5-8
+        lobes that large, packed into a band 40% of the tile wide, meet in long
+        smooth arcs that read as straight once blurred. A lumpy outline needs
+        MORE and SMALLER lobes spread WIDER, each comfortably larger than the
+        blur so its bump survives it.
         """
         w = random.randint(int(self.w * 0.28), int(self.w * 0.42))
         h = random.randint(int(self.h * 0.21), int(self.h * 0.33))
         mask = Image.new("L", (w, h), 0)
         md = ImageDraw.Draw(mask)
-        for _ in range(random.randint(5, 8)):
-            cx = random.uniform(w * 0.30, w * 0.70)   # keep blobs off the tile edges
-            cy = random.uniform(h * 0.38, h * 0.62)
-            rw = random.uniform(w * 0.10, w * 0.22)
-            rh = random.uniform(h * 0.14, h * 0.28)
+        # The count changes the number of draws taken from the shared stream, so
+        # cloud and meteor spawn positions differ from before. The fallback
+        # starfield does not: it is drawn in __init__, before any sprite exists.
+        for _ in range(random.randint(9, 14)):
+            # Radii bounded so blob span plus blur stays inside the tile: there
+            # is no envelope to rescue an overshoot, and a blob reaching the
+            # border would put back the hard edge this is avoiding.
+            cx = random.uniform(w * 0.30, w * 0.70)
+            cy = random.uniform(h * 0.36, h * 0.64)
+            rw = random.uniform(w * 0.11, w * 0.16)
+            rh = random.uniform(h * 0.13, h * 0.20)
             md.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=random.randint(120, 200))
-        mask = mask.filter(ImageFilter.GaussianBlur(w * 0.06))
-        # Feather the alpha to zero at the tile border so the sprite never shows a
-        # hard rectangular edge where it overlaps the sky.
-        env = Image.new("L", (w, h), 0)
-        ImageDraw.Draw(env).rectangle([w * 0.14, h * 0.16, w * 0.86, h * 0.84], fill=255)
-        env = env.filter(ImageFilter.GaussianBlur(min(w, h) * 0.13))
-        mask = ImageChops.multiply(mask, env)
-        mask = mask.point(lambda p: int(p * 0.6))   # stars faintly show through
+        # Softer than the lobes are wide, so the bumps survive it. Scaled by the
+        # SHORTER side: the 5" tiles are about 2.3:1, so a radius taken from the
+        # width alone would be as large as their lobes are tall and would smooth
+        # the outline straight back out on that build.
+        mask = mask.filter(ImageFilter.GaussianBlur(min(w, h) * 0.05))
+        # Scaled to a STATED peak rather than by a blind fraction. Overlapping
+        # ellipses overwrite rather than accumulate, and the blur then takes the
+        # maximum down further, so what a multiplier leaves at the core is not
+        # knowable by reading it - it measured 36-45% where 60% was intended.
+        peak = mask.getextrema()[1]
+        if peak:
+            k = CLOUD_PEAK_ALPHA * 255.0 / peak
+            mask = mask.point(lambda p: min(255, int(p * k)))
         sprite = Image.new("RGBA", (w, h), CLOUD_COLOUR + (0,))
         sprite.putalpha(mask)
         return sprite
