@@ -64,12 +64,12 @@ from core.positions import alt_az, next_rise, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
 from core.starfield import project, project_point, px_per_degree
-from core.targets import load_cutouts, peak, read_targets, ut_dt
+from core.targets import load_cutouts, peak, rank_objects, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 
-VERSION = "0.14.0"
+VERSION = "0.15.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -743,7 +743,7 @@ def render_targets(states, targets, images, lat=None, lon=None):
             alt, az = alt_az(obs, ra, dec)
             marks.append((az, alt, str(c.get("target name", "?")), OBJECT, 7.0))
 
-    ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
+    ranked = rank_objects(objects)
     for o in ranked[:P2_CARDS]:
         ra, dec = o.get("right ascension"), o.get("declination")
         if ra is None or dec is None:

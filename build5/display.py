@@ -54,7 +54,7 @@ from core.positions import alt_az, next_rise, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
 from core.starfield import project, project_point, px_per_degree
-from core.targets import load_cutouts, peak, read_targets, ut_dt
+from core.targets import load_cutouts, peak, rank_objects, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
@@ -65,7 +65,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.17.0"
+FIRMWARE_VERSION = "3.18.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -768,7 +768,7 @@ def render_targets(states, targets, images, lat=None):
     _draw_panorama(draw, marks, when_label, f_sm, f_xs)
     _draw_below_horizon(draw, marks, bodies, obs, f_xs)
 
-    ranked = sorted(objects, key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))
+    ranked = rank_objects(objects)
     _draw_cards(img, draw, ranked, images, lat, f_med, f_sm, f_xs)
 
     # No "+N more": it dangled an object the page never shows, and the column

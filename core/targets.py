@@ -65,12 +65,41 @@ def ut_dt(s):
         return None
 
 
+def _mag_rank(o):
+    """Catalogued magnitude, or 99 for an object that has none.
+
+    UpTonight writes 0.0 rather than null when a target has no catalogued
+    magnitude, so a plain float conversion reads it as magnitude zero - brighter
+    than anything real - and sorts it to the front. The 99 fallback that used to
+    sit in the sort key was always meant to send unknowns to the back; it simply
+    never fired, because the field is present.
+
+    Measured on the 9 Aug report: 25 of 40 objects carry 0.0, all of them LBN,
+    vdB and Sh2 catalogue nebulae, which are extended and have no integrated
+    magnitude. They filled the first 24 places and pushed M 31 to 25th, M 81 to
+    28th and M 13 to last.
+    """
+    mag = _f(o.get("mag"))
+    return mag if mag > 0 else 99.0
+
+
+def rank_objects(objects):
+    """UpTonight's deep-sky objects, best first: most of the night up, then
+    brightest.
+
+    Shared because three callers ranked independently and one of them is
+    `load_cutouts`, which decides which imagery to FETCH. Had the orders drifted
+    apart, the cards would have quietly fallen back to drawn glyphs for want of
+    the right images, which looks like a network fault rather than a sort bug.
+    """
+    return sorted(objects or [], key=lambda o: (-_f(o.get("foto")), _mag_rank(o)))
+
+
 def load_cutouts(targets, limit, px=200):
     """{object id: image} for the objects the page will show. NETWORK on a cache
     miss, so this runs on the data thread, not the render loop."""
     images = {}
-    for o in sorted(targets.get("objects") or [],
-                    key=lambda o: (-_f(o.get("foto")), _f(o.get("mag"), 99)))[:limit]:
+    for o in rank_objects(targets.get("objects"))[:limit]:
         oid = str(o.get("id", ""))
         pic = cutout(oid, _f(o.get("size"), 10.0), px)
         if pic is not None:
