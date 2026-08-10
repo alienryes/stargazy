@@ -55,6 +55,7 @@ from core.sky import Sky
 from core.sky import sky_params as core_sky_params
 from core.starfield import (
     SIZE_BANDS_SPARSE,
+    SPARSE_BRIGHT,
     SPARSE_FLOOR,
     SPARSE_RATIO,
     project,
@@ -72,7 +73,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.30.0"
+FIRMWARE_VERSION = "3.34.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -852,7 +853,8 @@ def refresh_stars():
     obs = observer(LAT or 0.0, LON or 0.0, when=utc)
     stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV,
                     limit=LIMITING_MAG, bands=SIZE_BANDS_SPARSE,
-                    ratio=SPARSE_RATIO, floor=SPARSE_FLOOR)
+                    ratio=SPARSE_RATIO, floor=SPARSE_FLOOR,
+                    bright=SPARSE_BRIGHT)
     sky.set_stars(stars)
     refresh_radiants(obs, utc)
     return len(stars)

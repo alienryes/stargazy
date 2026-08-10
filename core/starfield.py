@@ -49,7 +49,7 @@ SIZE_BANDS_DENSE = ((1.5, 3), (4.0, 2), (None, 1))
 # here is a sky that loses its drawn area and reads as empty rather than dark,
 # so the survivors are enlarged to keep the panel's presence. Measured on the
 # composited frame: 233 stars against 1237, and 2051 lit pixels against 1503.
-SIZE_BANDS_SPARSE = ((1.5, 5), (2.5, 4), (3.5, 3), (None, 2))
+SIZE_BANDS_SPARSE = ((1.0, 5), (2.0, 4), (3.0, 3), (4.0, 2), (None, 1))
 
 # The same idea on the 10.1" panel, which needs its own numbers rather than
 # these. It shows a NARROWER window of sky (56 x 90 degrees against 124 x 70)
@@ -61,7 +61,7 @@ SIZE_BANDS_SPARSE = ((1.5, 5), (2.5, 4), (3.5, 3), (None, 2))
 # measured, 1060 of 1060 - so drawn area tracked star count and not magnitude,
 # and the ordering that makes a sky recognisable was absent altogether. With a
 # catch-all of 3 that floor no longer binds on anything.
-SIZE_BANDS_SPARSE_10 = ((1.5, 6), (2.5, 5), (3.5, 4), (None, 3))
+SIZE_BANDS_SPARSE_10 = ((1.0, 6), (2.0, 5), (3.0, 4), (4.0, 3), (None, 2))
 
 # Brightness ratio per magnitude, and the floor, for each profile.
 #
@@ -74,6 +74,20 @@ SIZE_BANDS_SPARSE_10 = ((1.5, 6), (2.5, 5), (3.5, 4), (None, 3))
 # differed only in width. 0.81 with a 0.25 floor spans 1.48 magnitudes.
 DENSE_RATIO, DENSE_FLOOR = 0.93, 0.55
 SPARSE_RATIO, SPARSE_FLOOR = 0.81, 0.25
+
+# The magnitude that renders at FULL brightness.
+#
+# MAG_BRIGHT is Sirius, and anchoring there wastes the top of the scale on a
+# star that is not in the sky. Sirius sits at declination -16 and is a winter
+# object from 51 N; on an August evening the brightest thing in view is around
+# magnitude 0, which rendered at 72% and came out mid grey. Every star actually
+# on the panel was crowded into the bottom half of the range, which is what made
+# them look flat and dim rather than like points of light.
+#
+# Anchoring at 0 spends the range on what is really there. Sirius and Vega both
+# clamp to full when Sirius IS up, which loses one distinction at the very top -
+# both are brilliant, and that is the correct thing to lose.
+SPARSE_BRIGHT = 0.0
 
 _CATALOGUE = None
 
@@ -93,7 +107,7 @@ def catalogue():
 
 
 def _appearance(mag, min_size=1, bands=SIZE_BANDS_DENSE,
-                ratio=DENSE_RATIO, floor=DENSE_FLOOR):
+                ratio=DENSE_RATIO, floor=DENSE_FLOOR, bright=MAG_BRIGHT):
     """(base brightness, drawn size) for a magnitude.
 
     `min_size` raises the floor for a panel whose pixels are physically coarser
@@ -122,7 +136,7 @@ def _appearance(mag, min_size=1, bands=SIZE_BANDS_DENSE,
     # counting lit pixels in a fixed strip of sky gave 117 against the old
     # field's 257, i.e. a sky half as present. This ratio and floor put the mean
     # back around 0.65 while keeping the ordering - Sirius still dominates.
-    base = max(floor, min(1.0, ratio ** (mag - MAG_BRIGHT)))
+    base = max(floor, min(1.0, ratio ** (mag - bright)))
     # Size, not brightness, is what carries the magnitude ordering: the drawn
     # brightness range above spans 1.78:1, which is 0.63 magnitudes for a sky
     # that spans eight. It is not only a rendering convenience - a brighter star
@@ -242,7 +256,7 @@ def project_point(az, alt, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=
 
 def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
             min_size=1, limit=MAG_FAINT, bands=SIZE_BANDS_DENSE,
-            ratio=DENSE_RATIO, floor=DENSE_FLOOR):
+            ratio=DENSE_RATIO, floor=DENSE_FLOOR, bright=MAG_BRIGHT):
     """Stars currently above the horizon and inside the view, in Sky's format.
 
     Returns (x, y, base, twinkle phase, twinkle speed, size, scintillation)
@@ -271,7 +285,7 @@ def project(obs, w, h, az_centre=180.0, alt_centre=45.0, fov_vertical=90.0,
                                      az_centre, alt_centre, fov_vertical)
         if not inside:
             continue
-        base, size = _appearance(mag, min_size, bands, ratio, floor)
+        base, size = _appearance(mag, min_size, bands, ratio, floor, bright)
         rng = random.Random(i)
         stars.append((int(x), int(y), base,
                       rng.uniform(0.0, 2 * math.pi),

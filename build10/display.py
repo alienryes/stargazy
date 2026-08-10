@@ -65,6 +65,7 @@ from core.sky import Sky
 from core.sky import sky_params as core_sky_params
 from core.starfield import (
     SIZE_BANDS_SPARSE_10,
+    SPARSE_BRIGHT,
     SPARSE_FLOOR,
     SPARSE_RATIO,
     project,
@@ -76,7 +77,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.26.0"
+VERSION = "0.30.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -195,7 +196,7 @@ LIMITING_MAG = 5.0
 #
 # Both are well under 0.327, the amplitude at which the trough of the faintest
 # star meets draw_stars' cull at the lowest gain the display produces.
-TWINKLE_AMP, TWINKLE_MAX = 0.05, 0.20
+TWINKLE_AMP, TWINKLE_MAX = 0.018, 0.12
 
 # How often the real positions are recomputed. Nothing interpolates between
 # refreshes - the whole field is swapped at once - so this interval IS the size
@@ -986,7 +987,8 @@ def refresh_stars():
     obs = observer(LAT or 0.0, LON or 0.0, when=utc)
     stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV, STAR_MIN_SIZE,
                     limit=LIMITING_MAG, bands=SIZE_BANDS_SPARSE_10,
-                    ratio=SPARSE_RATIO, floor=SPARSE_FLOOR)
+                    ratio=SPARSE_RATIO, floor=SPARSE_FLOOR,
+                    bright=SPARSE_BRIGHT)
     sky.set_stars(stars)
     refresh_radiants(obs, utc)
     return len(stars)
