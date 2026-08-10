@@ -11,7 +11,7 @@ Rendered with Pillow and written straight to the Linux framebuffer (`/dev/fb0`) 
 | Panel | Touch Display 2, **5"** | Touch Display 2, **10.1"** |
 | Board | Pi 4 | **Pi 5 or CM** — four-lane DSI, a Pi 4 cannot drive it |
 | Canvas | 1280×720 landscape, rotated to the panel | 1200×1920 portrait, no rotation |
-| Pages | Conditions, targets | Conditions, targets, **meteors** |
+| Pages | Conditions, targets | Conditions, targets, **meteor showers** |
 | Status | **Proven in service** | **In service** |
 
 Everything that is not layout — both weather sources, the target reports, the imagery, the animated sky, night mode, touch, the framebuffer — lives in [`core/`](core/) and is shared. The rest of this README describes the 5" build unless it says otherwise; substitute `build10/` for `build5/` in the commands to install the other one.
@@ -403,7 +403,8 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
     fbcon-detach.service        Frees /dev/fb0 from the text console
     install-units.sh            Installs the units - interactive sudo, by design
 build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - portrait,
-                        adds the meteors and aurora pages
+                        adds a meteor shower PAGE and an aurora page. Both
+                        builds fly real meteors in the sky itself
 screenshots/            README images, regenerated with display.py --save
 tools/                  Development checks and utilities
   grab_panel.py           Capture what the panel is actually showing, off /dev/fb0
