@@ -51,6 +51,18 @@ SIZE_BANDS_DENSE = ((1.5, 3), (4.0, 2), (None, 1))
 # composited frame: 233 stars against 1237, and 2051 lit pixels against 1503.
 SIZE_BANDS_SPARSE = ((1.5, 5), (2.5, 4), (3.5, 3), (None, 2))
 
+# The same idea on the 10.1" panel, which needs its own numbers rather than
+# these. It shows a NARROWER window of sky (56 x 90 degrees against 124 x 70)
+# magnified over 2.5x the pixels, so the same honest limiting magnitude puts
+# roughly a fifth as many stars per megapixel on it. Everything is therefore a
+# size larger, and the catch-all is 3 rather than 2.
+#
+# It also has a defect these fix. Its min_size=2 floor put EVERY star at 3x3 -
+# measured, 1060 of 1060 - so drawn area tracked star count and not magnitude,
+# and the ordering that makes a sky recognisable was absent altogether. With a
+# catch-all of 3 that floor no longer binds on anything.
+SIZE_BANDS_SPARSE_10 = ((1.5, 6), (2.5, 5), (3.5, 4), (None, 3))
+
 # Brightness ratio per magnitude, and the floor, for each profile.
 #
 # THE FLAT DEFAULT EXISTS TO PROTECT STARS THE SPARSE PROFILE NO LONGER DRAWS.

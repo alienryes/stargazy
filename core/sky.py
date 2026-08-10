@@ -26,7 +26,7 @@ from core.values import _f, _i
 # Sizes must cover every band any build's SIZE_BANDS can produce: draw_stars
 # indexes this by size, so a band table introducing a size absent here fails on
 # the panel rather than in a test.
-STAR_DEPTH = {1: 0.25, 2: 0.6, 3: 1.3, 4: 1.8, 5: 2.2}
+STAR_DEPTH = {1: 0.25, 2: 0.6, 3: 1.3, 4: 1.8, 5: 2.2, 6: 2.6}
 
 # A meteor's streak is the trail seen side-on, so it shortens towards nothing as
 # the path points at the observer. Within this distance of the radiant the

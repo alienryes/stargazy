@@ -63,13 +63,20 @@ from core.panel import PIL_ROTATION, Framebuffer, Strip
 from core.positions import alt_az, next_rise, observer, plot_instant
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
-from core.starfield import project, project_point, px_per_degree
+from core.starfield import (
+    SIZE_BANDS_SPARSE_10,
+    SPARSE_FLOOR,
+    SPARSE_RATIO,
+    project,
+    project_point,
+    px_per_degree,
+)
 from core.targets import load_cutouts, peak, rank_objects, read_targets, ut_dt
 from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.24.0"
+VERSION = "0.25.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -161,7 +168,20 @@ CAMERA_AZ, CAMERA_ALT, CAMERA_FOV = 180.0, 45.0, 90.0
 # pixel is 0.113mm here against 0.088mm on the 5", so the floor is raised
 # instead. Size already stands in for brightness in this renderer - a brighter
 # star reads as larger through glare - so this stays within that convention.
+#
+# SUPERSEDED IN PRACTICE, and left in place as the floor it always was. It is
+# what made drawn area track star COUNT rather than magnitude on this panel -
+# measured, all 1060 stars in view came out at 3x3 - so the ordering that makes
+# a sky recognisable was absent entirely. SIZE_BANDS_SPARSE_10 has a catch-all
+# of 3, so this no longer binds on anything; it still guards a build that raises
+# its limiting magnitude far enough to reach the 1-pixel band.
 STAR_MIN_SIZE = 2
+
+# Faintest star drawn, matching the 5" build. The same site cannot have two
+# different skies, so this is deliberately not tuned per panel even though this
+# one shows a narrower window magnified over more pixels and so holds fewer
+# stars. What compensates is the size table, not a fainter cut.
+LIMITING_MAG = 5.0
 
 # Twinkle amplitude at the ZENITH, and the ceiling near the horizon. Each star
 # takes the first scaled by the airmass its light crosses and clamped to the
@@ -964,7 +984,9 @@ def refresh_stars():
         return
     utc = datetime.now(timezone.utc).replace(tzinfo=None)
     obs = observer(LAT or 0.0, LON or 0.0, when=utc)
-    stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV, STAR_MIN_SIZE)
+    stars = project(obs, W, H, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV, STAR_MIN_SIZE,
+                    limit=LIMITING_MAG, bands=SIZE_BANDS_SPARSE_10,
+                    ratio=SPARSE_RATIO, floor=SPARSE_FLOOR)
     sky.set_stars(stars)
     refresh_radiants(obs, utc)
     return len(stars)
@@ -1352,7 +1374,7 @@ def main():
     if night not in NIGHT_CYCLE:
         raise ValueError(f'display.night_mode is "{night}"; expected "off", "dim" or "red"')
     moon_ring = bool(disp.get("moon_ring", False))
-    global METEOR_COMPRESSION, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV
+    global LIMITING_MAG, METEOR_COMPRESSION, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV
     global AURORA_ENABLED, AURORA_THRESHOLD, AURORA_EMISSION_KM
     METEOR_COMPRESSION = float(disp.get("meteor_compression", METEOR_COMPRESSION))
     aur = config.get("aurora", {})
@@ -1364,6 +1386,7 @@ def main():
     CAMERA_AZ  = float(skycfg.get("camera_azimuth", CAMERA_AZ))
     CAMERA_ALT = float(skycfg.get("camera_altitude", CAMERA_ALT))
     CAMERA_FOV = float(skycfg.get("field_of_view", CAMERA_FOV))
+    LIMITING_MAG = float(skycfg.get("limiting_magnitude", LIMITING_MAG))
     # sky was constructed at import with the default field of view, and the
     # cloud drift converts degrees to pixels through its angular scale. A
     # configured field of view has to reach it or the clouds keep the default's
