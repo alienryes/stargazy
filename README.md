@@ -317,7 +317,7 @@ A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](ca
 
 **This is for the 5" build only.** The 10.1" panel mounts and cools its Pi perfectly well with the board left open — see the note under Requirements.
 
-For the 10.1" panel there is a **stand** instead, in [`stand10/`](stand10/README.md): one printed part and two M2.5 screws, holding the panel at a 10° lean with the Pi left open on its back. It is **GPL-3.0, not CC BY** — nothing in it derives from RonnyS's case, since the 10.1" panel decouples its enclosure brackets from the Pi's own mounting pattern and none of the 5" design carries over. Printed and in use. Note that the panel mounts 180° from the way it arrives, which is the only orientation the stand fits — see [`stand10/README.md`](stand10/README.md).
+For the 10.1" panel there is a **stand** instead, in [`stand10/`](stand10/README.md): one printed part and two M2.5 screws, holding the panel at a 10° lean with the Pi left open on its back, with two moulded-in collars carrying the power lead down to the desk. It is **GPL-3.0, not CC BY** — nothing in it derives from RonnyS's case, since the 10.1" panel decouples its enclosure brackets from the Pi's own mounting pattern and none of the 5" design carries over. Printed and in use. Note that the panel mounts 180° from the way it arrives, which is the only orientation the stand fits — see [`stand10/README.md`](stand10/README.md).
 
 The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke stand (CadQuery frame + riser + WS2812B LED bezel ring). After moving to the self-lit Touch Display 2 that design was retired and archived, with its full history, to a separate private repository.
 
@@ -372,7 +372,8 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
     touch2-stargazing.service   Always-on animated display daemon
     fbcon-detach.service        Frees /dev/fb0 from the text console
     install-units.sh            Installs the units - interactive sudo, by design
-build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - in progress
+build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - portrait,
+                        adds the meteors and aurora pages
 screenshots/            README images, regenerated with display.py --save
 tools/                  Development checks and utilities
   grab_panel.py           Capture what the panel is actually showing, off /dev/fb0
@@ -387,6 +388,10 @@ case/
   case_bottom.py          Pi clamshell base (bay, walls, port sill, lid spigots)
   case_top.py             Ventilated lid (ports, fan grille + mounting)
   stand.py                Bolt-on desk stand — print 2
+stand10/                Desk stand for the 10.1" panel — one part, no case needed
+  README.md               Print settings, panel orientation, assembly
+  stand10.py              The stand, incl. the power-lead collars
+  check_stand10.py        Fit, clearance and overhang checks on the exported STL
 ```
 
 ---
