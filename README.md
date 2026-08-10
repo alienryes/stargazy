@@ -352,6 +352,31 @@ systemctl status touch2-stargazing
 
 The daemon uses one Pi 4 core continuously. **`fps` is a ceiling, not a promise**, and the default of 12 is what the panel actually holds. Measured end to end: **69 ms a frame with the night filter off and 82 ms in red**, about 70% of it the RGB565 framebuffer write. Raising `fps` buys roughly 14 fps in daylight and no more than 12 after dark — faster in the mode nobody is watching, and pinning the core in the mode they are. Lowering it further reduces CPU.
 
+### Optional: a 32-bit framebuffer on the Pi 4
+
+On a Pi 4 the DSI panel comes up at **16bpp** (RGB565), because that is what the vc4 KMS framebuffer emulation provides. On a Pi 5 the DSI panel is driven by a different driver and already presents 32bpp. Nothing needs configuring for either — the depth is read from the device at startup and the pixel packing follows it.
+
+16bpp can be overridden. Adding this to `/boot/firmware/cmdline.txt` — on the single existing line, space-separated — and rebooting gives 32bpp:
+
+```
+video=DSI-1:720x1280-32@60
+```
+
+**The connector name differs by board.** It is `DSI-1` on a Pi 4 and `DSI-2` on a Pi 5; `ls /sys/class/drm` gives the right one. The resolution and refresh are required, as the bit-depth suffix alone is ignored. Confirm the result with `cat /sys/class/graphics/fb0/bits_per_pixel`.
+
+**What it buys.** Red night mode packs luma into the five red bits at 16bpp — **32 levels for the whole image**. At 32bpp it is 256. The twilight gradient and the cloud sheet are both smooth ramps drawn almost entirely in one channel after dark, so that is where banding shows if it shows anywhere.
+
+**What it costs.** Measured on a Pi 4, packing one frame:
+
+| night mode | 16bpp | 32bpp |
+|---|---|---|
+| off | 29.3 ms | **12.2 ms** |
+| red | **36.6 ms** | 44.4 ms |
+
+Faster in daylight and slower after dark, which is the wrong way round for a display that runs red from dusk to dawn. The frame still fits inside the 12 fps budget either way, with less margin. Framebuffer memory and write bandwidth double.
+
+Worth it for colour on a panel that is looked at closely; not worth it for speed.
+
 ---
 
 ## 📁 File structure

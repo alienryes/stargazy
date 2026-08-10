@@ -61,6 +61,11 @@ class Framebuffer:
     Display 2 on a Pi 4 presents 16bpp RGB565, while the 10.1" on a Pi 5
     presents 32bpp XRGB8888 - byte order B,G,R,X in memory.
 
+    Neither is fixed by the hardware: the 5" panel's 16bpp is the vc4 KMS
+    framebuffer emulation's choice, and a `video=` line in cmdline.txt overrides
+    it to 32 - see the README. That is one more reason to read the depth rather
+    than infer it from which panel is attached.
+
     An earlier 16bpp reading from the Pi 5 was taken with no panel attached, so
     it measured a phantom HDMI framebuffer rather than the display. Hardcoding
     that would have failed loudly rather than subtly: a 565 pack emits half the
