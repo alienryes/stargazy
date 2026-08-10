@@ -65,7 +65,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.19.0"
+FIRMWARE_VERSION = "3.20.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1006,7 +1006,7 @@ def main():
     CAMERA_FOV = float(skycfg.get("field_of_view", CAMERA_FOV))
     disp   = config.get("display", {})
     mode   = disp.get("mode", "animated")
-    fps    = float(disp.get("fps", 20))
+    fps    = float(disp.get("fps", 12))
     refresh_min = float(disp.get("data_refresh_min", 15))
     page_seconds = float(disp.get("page_seconds", 20))
     night = disp.get("night_mode", "off")

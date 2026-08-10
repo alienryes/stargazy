@@ -1,14 +1,14 @@
 """Prove the framebuffer fast paths emit exactly the shipped bytes.
 
-`Framebuffer.to_bytes` short-circuits two cases at 32bpp - "off" through PIL's
-raw BGRX writer, "red" through a fused luma pack - because the general path
-cost 98 ms a frame on the 10.1" panel against an 83 ms budget. A faster path
-that changes a pixel is not a faster path, so both are checked here against a
-frozen copy of the original implementation.
+`Framebuffer.to_bytes` short-circuits "off" and "red" at both depths, because
+the general path cost 98 ms a frame on the 10.1" panel against an 83 ms budget,
+and 118 ms on the 5" against 50. A faster path that changes a pixel is not a
+faster path, so all four are checked here against a frozen copy of the original
+implementation.
 
-Both depths are covered. The 5" build is 16bpp and takes none of the
-shortcuts, but it shares this file, so "unchanged" has to be demonstrated
-there rather than argued.
+Both depths are covered, and "dim" is covered at both as a control: it takes no
+shortcut, so it must come back identical for a reason that has nothing to do
+with the code under test.
 
     python tools/check_fb_paths.py
 """

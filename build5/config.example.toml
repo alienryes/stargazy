@@ -55,10 +55,16 @@ out_dir = "/home/operations/uptonight/out"
 # "animated" = live data-reactive night sky behind the dashboard (default);
 # "static"   = redraw only when the data changes (no animation).
 mode = "animated"
-# A CEILING, not a target. A frame costs about 73 ms on a Pi 4, three quarters
-# of it the RGB565 framebuffer write, so the loop settles near 14 fps whatever
-# is set here. Lowering this below 14 does reduce CPU; raising it does nothing.
-fps = 20
+# A CEILING, not a target, and 12 is what a Pi 4 actually holds in BOTH night
+# modes. Measured end to end on the panel: 69 ms a frame with the night filter
+# off and 82 ms in red, about 70% of it the RGB565 framebuffer write. Red is
+# the binding case and it is the one that matters, being the mode the panel
+# runs in from dusk to dawn.
+#
+# Raising this gives roughly 14 fps in daylight and no more than 12 after dark,
+# so the display runs faster in the mode nobody is watching and pins the core
+# in the mode they are. Lowering it further reduces CPU.
+fps = 12
 data_refresh_min = 15
 # Seconds each page is shown before rotating. The targets page only joins the
 # rotation when UpTonight has produced a report, so before the first run the

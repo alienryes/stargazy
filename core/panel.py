@@ -77,6 +77,42 @@ class Framebuffer:
         # framebuffer, so the fallback only has to be harmless, not correct.
         self.bpp = bpp or _fb_attr(dev, "bits_per_pixel") or 16
 
+    @staticmethod
+    def _pack565(rgb):
+        """RGB565 little-endian from an HxWx3 uint8 array.
+
+        One uint16 accumulator rather than an HxWx3 uint16 intermediate. The
+        general path widens all three channels first - 2.7 million values on the
+        5" panel - and then reads them straight back out to pack, and the pack
+        is 71% of that build's frame.
+
+        r>>3 lands in bits 11-15, g>>2 in 5-10, b>>3 in 0-4, which is what the
+        two accumulating shifts below build up.
+        """
+        out = (rgb[:, :, 0] >> 3).astype(np.uint16)
+        out <<= 6
+        out |= rgb[:, :, 1] >> 2
+        out <<= 5
+        out |= rgb[:, :, 2] >> 3
+        return out.astype("<u2", copy=False).tobytes()
+
+    @staticmethod
+    def _pack565_luma(lum):
+        """RGB565 from a single luma plane, for the red night mode.
+
+        DERIVED from the general path, not invented: night_filter writes lum,
+        lum>>4 and lum>>5 into R, G and B, and the 565 pack then takes r>>3,
+        g>>2 and b>>3 - so the fields are lum>>3, lum>>6 and lum>>8. Luma is
+        8-bit, so the blue field is always zero and is not computed at all.
+
+        This never builds the HxWx3 output array that the general path fills
+        and then immediately re-reads, which is where the cost was.
+        """
+        out = (lum >> 3).astype(np.uint16)
+        out <<= 11
+        out |= (lum >> 6).astype(np.uint16) << 5
+        return out.astype("<u2", copy=False).tobytes()
+
     def to_bytes(self, img, night="off", dim=45):
         # rotate is None for a build drawn in the panel's native portrait, which
         # is a straight write with no transpose at all.
@@ -84,10 +120,10 @@ class Framebuffer:
         if rot.size != (self.fb_w, self.fb_h):
             rot = rot.resize((self.fb_w, self.fb_h))
         # XRGB8888 on a little-endian machine, so the bytes go down in the order
-        # B, G, R, unused - not R, G, B. Two shortcuts avoid building an HxWx3
-        # intermediate that is then read straight back out again; both were
-        # checked byte for byte against the general path below, and the checks
-        # live in tools/check_fb_paths.py.
+        # B, G, R, unused - not R, G, B. Four shortcuts, two per depth, avoid
+        # building an HxWx3 intermediate that is then read straight back out
+        # again; all four were checked byte for byte against the general path
+        # below, and the checks live in tools/check_fb_paths.py.
         #
         # The two night modes are not the same cost. On the 10.1" panel the
         # general path took 98 ms a frame in red against an 83 ms budget at
@@ -106,6 +142,21 @@ class Framebuffer:
                 out[:, :, 2] = lum
                 out[:, :, 3] = 0
                 return out.tobytes()
+
+        if self.bpp == 16:
+            # The same two cases at 16bpp, and they matter more here: this build
+            # has no headroom. Measured end to end on the panel, the frame was
+            # 76.9 ms in off and 118.1 ms in red - 13.0 and 8.5 fps against a
+            # configured 20 - with to_bytes 71% of it in both modes.
+            #
+            # PIL cannot help at this depth the way it does at 32: there is no
+            # 565 packer, and both `BGR;16` and `RGB;16` raise "No packer found".
+            # So the saving comes from not building intermediates rather than
+            # from handing the loop to C.
+            if night == "off":
+                return self._pack565(np.asarray(rot))
+            if night == "red":
+                return self._pack565_luma(night_red_luma(np.asarray(rot, dtype=np.uint16)))
 
         arr = np.asarray(rot, dtype=np.uint16)
         # Filtered here rather than in the compositor: this array already
