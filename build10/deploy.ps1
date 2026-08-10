@@ -56,6 +56,11 @@ foreach ($f in Get-ChildItem "$CORE\data\*") {
     Copy-ToPi $f.FullName "$REMOTE_DIR/core/data/$($f.Name)"
 }
 
+# grab_panel.py reads /dev/fb0, so it is only useful ON the Pi. The other tools
+# are development checks and stay in the repo.
+Copy-ToPi (Join-Path (Split-Path $PSScriptRoot -Parent) "tools\grab_panel.py") `
+          "$REMOTE_DIR/grab_panel.py"
+
 Copy-ToPi "$BUILD\requirements.txt" "$REMOTE_DIR/requirements.txt"
 Copy-ToPi "$BUILD\render_uptonight_config.py" "$REMOTE_DIR/render_uptonight_config.py"
 Copy-ToPi "$BUILD\uptonight\config.yaml.template" "$REMOTE_DIR/uptonight-config.yaml.template"

@@ -302,12 +302,15 @@ python3 display.py --compare  # fetch from both weather sources and diff them
 
 `--save` renders the draw path again, so it shows what the code *would* produce. To capture what the panel is **actually showing** — the page the rotation is on, the control strip, the live night filter — read the framebuffer instead:
 
+It reads `/dev/fb0`, so it runs **on the Pi**, where `deploy.ps1` puts it beside `display.py`:
+
 ```bash
-python3 tools/grab_panel.py --rotate 270 --out panel.png   # 5-inch
-python3 tools/grab_panel.py --rotate 180 --out panel.png   # 10.1-inch
+cd ~/touch2-stargazing
+.venv/bin/python grab_panel.py --rotate 270 --out panel.png   # 5-inch
+.venv/bin/python grab_panel.py --rotate 180 --out panel.png   # 10.1-inch
 ```
 
-The rotation differs because the framebuffer holds the image in the panel's orientation rather than a readable one, and neither value can be detected from the framebuffer itself. Geometry and colour depth are read from the device.
+The rotation differs because the framebuffer holds the image in the panel's orientation rather than a readable one, and neither value can be detected from the framebuffer itself. Geometry and colour depth are read from the device. Reading `/dev/fb0` needs membership of the `video` group, which `setup.sh` arranges.
 
 ---
 
