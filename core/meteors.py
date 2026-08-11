@@ -82,6 +82,25 @@ SHOWERS = [
 # wrong, so the page carries this as its floor.
 SPORADIC_ZHR = 8
 
+# Below this a shower is not worth naming, and the page stops listing it.
+#
+# WHY A FRACTION OF THE FLOOR RATHER THAN A NUMBER OF DAYS. The activity windows
+# in SHOWERS are per-shower and vary twentyfold - the Lyrids leave 2.1 days past
+# maximum, the Southern Taurids 40.9 - so a fixed span would just be that table
+# rewritten. The floor above is already this page's own statement of what an
+# ordinary night gives, which makes it the natural thing to be measured against.
+#
+# The case that set the value: on 2026-08-11 the page named the Southern
+# δ-Aquariids at about 1/hr, twelve days past their peak, four lines above a
+# sporadic background of 6/hr. A named row implies the shower is what to watch
+# for, and at a sixth of the unnamed background it was not.
+#
+# Compared in ZHR, not in the observed rate, so the decision does not move with
+# latitude or with the radiant's altitude on the night. This is a DISPLAY
+# judgement and belongs to the page: active() keeps reporting these showers,
+# because they are still falling and the animated sky is still entitled to them.
+NAMED_SHOWER_FLOOR = 0.25 * SPORADIC_ZHR
+
 
 def solar_longitude(when):
     """The Earth's angular position in its orbit, in degrees."""

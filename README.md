@@ -72,7 +72,9 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 **Page 3 — meteors.** Which showers are actually running, from a table of orbital constants indexed by solar longitude, with the rate an observer would really count once radiant altitude, cloud and moonlight are accounted for.
 
-![The 10.1-inch meteor page: solar longitude 139 degrees, with the Perseids one day before peak at about 55 an hour and the Southern Delta Aquariids 12 days past peak at about one, each showing radiant altitude and bearing against its zenithal hourly rate at peak, then a Coming Up list of the next nine shower peaks with the days to each, and a footer giving the sporadic background and the next peak. A meteor is falling in the sky behind the text.](screenshots/10in-meteors.png)
+A shower is named while it still adds a quarter of the sporadic background — the same background the page prints at the foot. Past that it drops off, even though its activity window has not closed, because a named row implies something to watch for and a shower at a fraction of the unnamed rate is not that. The windows vary twentyfold in how long they run past maximum, so the cut is made against the rate rather than as a number of days. When nothing clears the floor the page leaves the rotation entirely.
+
+![The 10.1-inch meteor page: a header giving the instant the rates are computed for and the current solar longitude, then a row per running shower with its days before or past peak, the radiant's altitude and bearing, a bar and a figure for the rate an observer would count, and its zenithal hourly rate at maximum. Below them a Coming Up list of forthcoming shower peaks with the days to each, and a footer giving the sporadic background rate and the next peak. A meteor is falling in the sky behind the text.](screenshots/10in-meteors.png)
 
 ---
 

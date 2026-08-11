@@ -30,6 +30,7 @@ from core.daemon import Paged, flatten, install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
 from core.meteors import (
+    NAMED_SHOWER_FLOOR,
     SPORADIC_ZHR,
     active,
     next_shower,
@@ -77,7 +78,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.33.0"
+VERSION = "0.34.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -852,7 +853,11 @@ def render_meteors(states, lat, lon):
     """
     when, when_label = plot_instant(night_window(states))
     utc = when.astimezone(timezone.utc).replace(tzinfo=None)
-    showers = active(utc)
+    # Faded showers are dropped here rather than in active(), which the animated
+    # sky and its radiants also read: they are still falling, and only the claim
+    # that they are worth watching for expires. See NAMED_SHOWER_FLOOR.
+    showers = [s for s in active(utc)
+               if s["zhr"] * s["strength"] >= NAMED_SHOWER_FLOOR]
     if not showers:
         return None
 
