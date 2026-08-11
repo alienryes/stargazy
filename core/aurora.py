@@ -33,7 +33,7 @@ KP_FORECAST_URL = (
 
 # Identifying a hobby display rather than pretending to be a browser. SWPC ask
 # for a real agent and the endpoints are free; being a good citizen is the rent.
-HEADERS = {"User-Agent": "touch2-stargazing-display (github.com/alienryes)"}
+HEADERS = {"User-Agent": "stargazy (github.com/alienryes)"}
 
 EARTH_R_KM = 6371.0
 

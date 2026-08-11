@@ -1,4 +1,4 @@
-# 🌌 touch2-stargazing-display
+# 🌌 Stargazy
 
 A stargazing conditions display for the [Raspberry Pi Touch Display 2](https://www.raspberrypi.com/documentation/accessories/touch-display-2.html). It fetches live [AstroWeather](https://github.com/mawinkler/astroweather) forecast data — on the Pi itself, or from Home Assistant if available — and renders an overnight forecast over a live, data-reactive animated night sky — no interaction required.
 
@@ -298,7 +298,7 @@ This copies the files, installs the Python dependencies, stages the systemd unit
 
 ## 🖥️ Running & preview
 
-The always-on `touch2-stargazing.service` runs `display.py` as a daemon. For manual runs and development:
+The always-on `stargazy.service` runs `display.py` as a daemon. For manual runs and development:
 
 ```bash
 python3 display.py            # daemon (mode from config; default animated)
@@ -315,7 +315,7 @@ python3 display.py --compare  # fetch from both weather sources and diff them
 It reads `/dev/fb0`, so it runs **on the Pi**, where `deploy.ps1` puts it beside `display.py`:
 
 ```bash
-cd ~/touch2-stargazing
+cd ~/stargazy
 .venv/bin/python grab_panel.py --rotate 270 --out panel.png   # 5-inch
 .venv/bin/python grab_panel.py --rotate 180 --out panel.png   # 10.1-inch
 ```
@@ -356,8 +356,8 @@ The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke s
 **Check logs / CPU:**
 
 ```bash
-journalctl -u touch2-stargazing -f
-systemctl status touch2-stargazing
+journalctl -u stargazy -f
+systemctl status stargazy
 ```
 
 **`fps` is a ceiling, not a promise**, and the default of 12 is what the panel holds in both night modes with room to spare. Measured end to end: **51 ms a frame with the night filter off and 43 ms in red**, roughly 60% of it the RGB565 pack either way. Raising `fps` buys about 19 fps by day and 23 after dark. Lowering it reduces CPU.
@@ -409,7 +409,7 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
   deploy.ps1              Windows → Pi deploy script
   setup.sh                One-time Pi setup (run with sudo)
   systemd/
-    touch2-stargazing.service   Always-on animated display daemon
+    stargazy.service   Always-on animated display daemon
     fbcon-detach.service        Frees /dev/fb0 from the text console
     install-units.sh            Installs the units - interactive sudo, by design
 build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - portrait,
@@ -439,7 +439,7 @@ stand10/                Desk stand for the 10.1" panel — one part, no case nee
 
 ## 💬 Feedback and contributions
 
-Bug reports, questions and build photos are all welcome via [Issues](https://github.com/alienryes/touch2-stargazing-display/issues).
+Bug reports, questions and build photos are all welcome via [Issues](https://github.com/alienryes/stargazy/issues).
 
 Two areas where reports are especially useful, because they cannot be verified here:
 

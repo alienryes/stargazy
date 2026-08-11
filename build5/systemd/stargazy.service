@@ -6,8 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=__USER__
-WorkingDirectory=/home/__USER__/touch2-stargazing
-ExecStart=/home/__USER__/touch2-stargazing/.venv/bin/python /home/__USER__/touch2-stargazing/display.py
+WorkingDirectory=/home/__USER__/stargazy
+ExecStart=/home/__USER__/stargazy/.venv/bin/python /home/__USER__/stargazy/display.py
 Restart=always
 RestartSec=5
 StandardOutput=journal

@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time setup for touch2-stargazing-display on a Raspberry Pi driving the
+# One-time setup for stargazy on a Raspberry Pi driving the
 # Touch Display 2 via the framebuffer (/dev/fb0). Run once as:
 #
 #   sudo bash setup.sh              # sets up for whoever invoked sudo
@@ -81,7 +81,7 @@ echo "==> Building the display's virtualenv..."
 # into the system Python alongside apt's python3-numpy risks shadowing the very
 # package the framebuffer path depends on. --system-site-packages keeps apt's
 # pillow/numpy/requests visible, so only the new libraries are downloaded.
-DISPLAY_DIR="/home/$USER/touch2-stargazing"
+DISPLAY_DIR="/home/$USER/stargazy"
 mkdir -p "$DISPLAY_DIR"
 chown "$USER:$USER" "$DISPLAY_DIR"
 if [ ! -d "$DISPLAY_DIR/.venv" ]; then
@@ -95,11 +95,11 @@ echo "==> Adding sudoers rules for $USER..."
 # /etc/systemd/system unattended, which meant anything that compromised this
 # account could install its own root service. Unit installs now go through
 # systemd/install-units.sh under interactive sudo instead.
-cat > /etc/sudoers.d/touch2-stargazing <<EOF
-$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart touch2-stargazing.service
+cat > /etc/sudoers.d/stargazy <<EOF
+$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart stargazy.service
 $USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start uptonight.service
 EOF
-chmod 440 /etc/sudoers.d/touch2-stargazing
+chmod 440 /etc/sudoers.d/stargazy
 
 # On a rerun the staged units from an earlier deploy are already present, and
 # we are already root - install them now so the rerun leaves everything current.

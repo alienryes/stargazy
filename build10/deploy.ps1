@@ -15,7 +15,7 @@ param(
 # be talkable-to by an impostor. After reflashing the Pi, clear the stale key
 # with: ssh-keygen -R <host>.
 $PI = "$User@$PiHost"
-$REMOTE_DIR = "/home/$User/touch2-stargazing"
+$REMOTE_DIR = "/home/$User/stargazy"
 $UT_DIR = "/home/$User/uptonight"
 
 # Paths are resolved against this script rather than the caller's location, so
@@ -35,7 +35,7 @@ function Copy-ToPi($local, $remote) {
     if ($LASTEXITCODE -ne 0) { throw "scp failed: $local -> $remote" }
 }
 
-Write-Host "==> Deploying touch2-stargazing-display to $PI"
+Write-Host "==> Deploying stargazy to $PI"
 
 # Create remote directory
 Invoke-Pi "mkdir -p $REMOTE_DIR"
@@ -91,7 +91,7 @@ Invoke-Pi "test -d $UT_DIR && python3 $REMOTE_DIR/render_uptonight_config.py $RE
 # compromised the deploy account.
 Write-Host "--> Staging systemd units..."
 Invoke-Pi "mkdir -p $REMOTE_DIR/systemd"
-foreach ($u in @("touch2-stargazing.service", "uptonight.service")) {
+foreach ($u in @("stargazy.service", "uptonight.service")) {
     $txt = (Get-Content "$BUILD\systemd\$u" -Raw) -replace "__USER__", $User
     $txt | ssh -4 -i $KeyFile -o StrictHostKeyChecking=accept-new $PI "cat > $REMOTE_DIR/systemd/$u"
     if ($LASTEXITCODE -ne 0) { throw "staging failed: $u" }
@@ -100,7 +100,7 @@ Copy-ToPi "$BUILD\systemd\fbcon-detach.service" "$REMOTE_DIR/systemd/fbcon-detac
 Copy-ToPi "$BUILD\systemd\uptonight.timer"      "$REMOTE_DIR/systemd/uptonight.timer"
 Copy-ToPi "$BUILD\systemd\install-units.sh"     "$REMOTE_DIR/systemd/install-units.sh"
 
-$check = 'for f in touch2-stargazing.service fbcon-detach.service uptonight.service uptonight.timer; do cmp -s ' + $REMOTE_DIR + '/systemd/$f /etc/systemd/system/$f || echo $f; done; true'
+$check = 'for f in stargazy.service fbcon-detach.service uptonight.service uptonight.timer; do cmp -s ' + $REMOTE_DIR + '/systemd/$f /etc/systemd/system/$f || echo $f; done; true'
 $changed = ssh -4 -i $KeyFile -o StrictHostKeyChecking=accept-new $PI $check
 
 if ($changed) {
@@ -113,7 +113,7 @@ if ($changed) {
     Write-Host "    The display keeps running on the old units until then."
 } else {
     Write-Host "--> Units unchanged; restarting display..."
-    Invoke-Pi "sudo -n systemctl restart touch2-stargazing.service"
+    Invoke-Pi "sudo -n systemctl restart stargazy.service"
 }
 
 # First-run convenience: kick a targets computation if there is no report yet,
@@ -125,5 +125,5 @@ Invoke-Pi "test -f $UT_DIR/out/uptonight-report.json || ! test -f /etc/systemd/s
 
 Write-Host ""
 Write-Host "==> Done."
-Write-Host "    Always-on animated display service running. Logs: journalctl -u touch2-stargazing -f"
+Write-Host "    Always-on animated display service running. Logs: journalctl -u stargazy -f"
 Write-Host "    Targets recomputed daily at midday.        Logs: journalctl -u uptonight -f"

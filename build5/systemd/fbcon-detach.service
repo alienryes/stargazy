@@ -2,7 +2,7 @@
 Description=Detach the framebuffer console so the display app owns /dev/fb0
 DefaultDependencies=no
 After=local-fs.target
-Before=touch2-stargazing.service
+Before=stargazy.service
 
 [Service]
 Type=oneshot

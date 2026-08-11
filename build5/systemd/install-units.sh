@@ -11,10 +11,10 @@
 # this; only a changed unit file does.
 set -e
 cd "$(dirname "$0")"
-install -m 644 touch2-stargazing.service fbcon-detach.service \
+install -m 644 stargazy.service fbcon-detach.service \
                uptonight.service uptonight.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable fbcon-detach.service touch2-stargazing.service uptonight.timer
+systemctl enable fbcon-detach.service stargazy.service uptonight.timer
 systemctl start fbcon-detach.service uptonight.timer
-systemctl restart touch2-stargazing.service
+systemctl restart stargazy.service
 echo "Units installed and services (re)started."
