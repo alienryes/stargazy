@@ -36,7 +36,7 @@ Two pages rotate over the same continuous animated sky. Both shots are real fram
 
 **Page 1 — tonight's conditions**
 
-![The conditions page: a large GOOD verdict in pale blue-white, four labelled condition bars with percentages, and a photographic waning crescent Moon captioned Waning Crescent in Gemini. Each bar is filled to its value inside a hollow outline, so Seeing at about half sits visibly short of the other three, which are nearly full. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind.](screenshots/conditions.png)
+![The conditions page: a large GOOD verdict in pale blue-white, four labelled condition bars with percentages, and a photographic waning crescent Moon captioned Waning Crescent in Cancer. Each bar is filled to its value inside a hollow outline, so Seeing at just over half sits visibly short of the other three, which are nearly full. A footer gives tomorrow's forecast, lifted index, temperature, dew point, humidity and wind. A meteor is crossing the sky behind the dashboard.](screenshots/conditions.png)
 
 > **Dusk / Dawn** is used in that footer, not sunrise/sunset: AstroWeather's sun rise/set entities report **civil twilight** bounds (sun 6° below the horizon), ~40 min off the geometric sun crossing. True darkness is tracked separately (`astronomical_night_duration`) and drives the "NO DARK SKY" state.
 
@@ -60,11 +60,11 @@ If something here is coloured it is a thing that is actually up there — the Mo
 
 ### The 10.1-inch build
 
-Portrait, 2.5× the pixels at slightly lower density, so the space goes on content rather than on scale. These are real frames rendered from live data, but **on a development Pi, not yet on the panel itself**:
+Portrait, 2.5× the pixels at slightly lower density, so the space goes on content rather than on scale. These are real frames captured from the panel's own framebuffer, in service:
 
 **Page 1 — conditions.** The Moon takes the middle band at 600px across; the source frame is 730px, so this is close to native rather than an enlargement. Under it are the numbers that come with the frame and used to be discarded — age, distance, apparent diameter, and libration as the direction the near side is tipped.
 
-![The 10.1-inch conditions page in portrait: a large EXCELLENT verdict, a 600-pixel photograph of a waning crescent Moon captioned Waning Crescent in Taurus with its age, distance, diameter and libration, four condition bars, and a footer of forecast, dusk and dawn times and weather.](screenshots/10in-conditions.png)
+![The 10.1-inch conditions page in portrait: a large GOOD verdict, a 600-pixel photograph of a waning crescent Moon captioned Waning Crescent in Cancer with its age, distance, diameter and libration, four condition bars, and a footer of forecast, dusk and dawn times and weather.](screenshots/10in-conditions.png)
 
 **Page 2 — targets.** One altitude-versus-bearing plot carries the planets *and* the deep-sky objects on a full 0–90° axis. The 5" build keeps the two apart because it has far less vertical room: UpTonight selects deep-sky targets for high altitude, while the planets stay near the ecliptic and so occupy a lower band, and a short axis holding both compresses whichever band is lower. How far apart those bands sit depends on latitude — from the reference site at 51°N the objects peak around 70–85° and the planets stay below about 35°, but nearer the equator the ecliptic rides much higher and the two overlap. Every position on the plot is for the single instant named above it.
 
@@ -72,7 +72,7 @@ Portrait, 2.5× the pixels at slightly lower density, so the space goes on conte
 
 **Page 3 — meteors.** Which showers are actually running, from a table of orbital constants indexed by solar longitude, with the rate an observer would really count once radiant altitude, cloud and moonlight are accounted for.
 
-![The 10.1-inch meteor page: solar longitude 136 degrees, with the Perseids 4 days before peak at about eight per hour and the Southern Delta Aquariids 9 days past peak, each showing radiant altitude and bearing against its zenithal hourly rate at peak, then a Coming Up list of the next nine shower peaks with the days to each, and a footer giving the sporadic background and the next peak.](screenshots/10in-meteors.png)
+![The 10.1-inch meteor page: solar longitude 139 degrees, with the Perseids one day before peak at about 55 an hour and the Southern Delta Aquariids 12 days past peak at about one, each showing radiant altitude and bearing against its zenithal hourly rate at peak, then a Coming Up list of the next nine shower peaks with the days to each, and a footer giving the sporadic background and the next peak. A meteor is falling in the sky behind the text.](screenshots/10in-meteors.png)
 
 ---
 
