@@ -1,3 +1,10 @@
+# Every setting below that has a code default is shown COMMENTED OUT, holding
+# that default. Uncommenting one pins it: the value then survives upgrades, and
+# a later change to the default no longer reaches this machine. Leave a setting
+# commented unless there is a reason to depart from it.
+#
+# Only [location] has to be filled in, plus [ha] when weather.source says so.
+
 # Where the weather comes from.
 #
 #   "direct"        - fetch it here, via pyastroweatherio (the same library the
@@ -16,16 +23,16 @@ source = "direct"
 # defaults and match what the HA integration uses; they should be left alone
 # without a specific reason. NB the three weakenings are FRACTIONS (the integration's
 # settings screen shows the same numbers as percentages).
-cloudcover_weight = 3
-cloudcover_high_weakening = 0.4
-cloudcover_medium_weakening = 0.7
-cloudcover_low_weakening = 1.0
-fog_weight = 3
-seeing_weight = 2
-transparency_weight = 1
-calm_weight = 2
+# cloudcover_weight = 3
+# cloudcover_high_weakening = 0.4
+# cloudcover_medium_weakening = 0.7
+# cloudcover_low_weakening = 1.0
+# fog_weight = 3
+# seeing_weight = 2
+# transparency_weight = 1
+# calm_weight = 2
 # Approximates lifted index, seeing, transparency and ground fog.
-experimental_features = true
+# experimental_features = true
 # Open-Meteo model. best_match is the blend, and picks the highest-resolution
 # model covering the site; it is the right choice almost everywhere. A single
 # model can be named instead where one is known to suit the site better:
@@ -33,7 +40,7 @@ experimental_features = true
 # The choice moves the cloud figures substantially, and the coarse global models
 # are the ones to be careful with - ecmwf_ifs025 is a 25 km grid and reported 60%
 # high cloud over a visibly clear sky at the reference site.
-forecast_model = "best_match"
+# forecast_model = "best_match"
 
 # Only needed when weather.source = "homeassistant".
 [ha]
@@ -59,7 +66,7 @@ out_dir = "/home/operations/uptonight/out"
 [display]
 # "animated" = live data-reactive night sky behind the dashboard (default);
 # "static"   = redraw only when the data changes (no animation).
-mode = "animated"
+# mode = "animated"
 # A CEILING, not a target, and 12 is what a Pi 4 actually holds in BOTH night
 # modes. Measured end to end on the panel: 69 ms a frame with the night filter
 # off and 82 ms in red, about 70% of it the RGB565 framebuffer write. Red is
@@ -69,12 +76,12 @@ mode = "animated"
 # Raising this gives roughly 14 fps in daylight and no more than 12 after dark,
 # so the display runs faster in the mode nobody is watching and pins the core
 # in the mode they are. Lowering it further reduces CPU.
-fps = 12
-data_refresh_min = 15
+# fps = 12
+# data_refresh_min = 15
 # Seconds each page is shown before rotating. The targets page only joins the
 # rotation when UpTonight has produced a report, so before the first run the
 # display simply stays on the conditions page.
-page_seconds = 20
+# page_seconds = 20
 
 # Night mode, applied between real dusk and dawn - not on a clock schedule,
 # because the point is to stop the panel wrecking dark adaptation and that
@@ -85,14 +92,14 @@ page_seconds = 20
 #   "red"  - monochrome red. Long wavelengths leave scotopic vision alone,
 #            which is why observers use red torches. Nothing is lost by it:
 #            no reading on this display is carried by colour alone.
-night_mode = "off"
-night_dim = 45
+# night_mode = "off"
+# night_dim = 45
 
 # Draw a thin ivory circle around the moon image, marking the full disc rather
 # than only the lit part. Off by default - the photograph reads better without
 # it - but worth enabling if the card looks too empty near new moon, when
 # almost nothing of the Moon is lit and there is very little left to see.
-moon_ring = false
+# moon_ring = false
 
 # Meteors in the animated sky are drawn at the rate an observer would actually
 # count tonight - shower activity from the solar-longitude table, cut by radiant
@@ -103,7 +110,7 @@ moon_ring = false
 # animated sky look broken: the panel runs meteors as though watching for this
 # many minutes per minute. Set it to 1 for real time. It scales what is there and
 # cannot manufacture what is not, so a quiet night stays quiet at any setting.
-meteor_compression = 20
+# meteor_compression = 20
 
 # The starfield behind the dashboard.
 #
@@ -122,11 +129,15 @@ meteor_compression = 20
 # of the seeded random field it replaces. 90 gives about 1,419 and 240%, at the
 # cost of more stretch near the zenith. Set real_stars = false for the old
 # seeded field.
+# limiting_magnitude sets how faint the catalogue is read down to. Raising it
+# puts more stars in view at a cost per frame; 6.5 is the naked-eye limit under
+# a dark sky and roughly triples the count.
 [sky]
-real_stars = true
-camera_azimuth = 180
-camera_altitude = 45
-field_of_view = 70
+# real_stars = true
+# camera_azimuth = 180
+# camera_altitude = 45
+# field_of_view = 70
+# limiting_magnitude = 5.0
 
 # Touch controls. Tap the panel once and a control strip appears along the
 # bottom for strip_seconds; tap a button to use it, or leave it and it goes
@@ -143,5 +154,5 @@ field_of_view = 70
 # arranges by putting the account in the "video" group. Touch needs "input",
 # from the same place. Requires display.mode = "animated".
 [touch]
-enabled = true
-strip_seconds = 6
+# enabled = true
+# strip_seconds = 6

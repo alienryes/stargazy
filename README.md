@@ -255,12 +255,14 @@ elevation = 47
 timezone = "Europe/London"
 
 [display]
-mode = "animated"     # or "static" (redraw only when the data changes)
-fps = 20
-data_refresh_min = 15
+# mode = "animated"     # or "static" (redraw only when the data changes)
+# fps = 12
+# data_refresh_min = 15
 ```
 
-The `[display]` section is optional; the values above are the defaults.
+**Every setting with a code default ships commented out, holding that default.** Uncommenting one pins it: the value then survives upgrades, and a later change to the default stops reaching that machine. The file is therefore a list of what can be changed rather than a set of choices already made, and a working install can consist of `[location]` alone.
+
+That distinction is not cosmetic. The Open-Meteo model was pinned in code to a coarse global grid until 2026-08-11, when it reported 60% high cloud over a photographed clear sky; had the panels also pinned `forecast_model` in their own config, correcting the default would have deployed and silently done nothing.
 
 **Night mode** (`night_mode = "off" | "dim" | "red"`) applies between real dusk and dawn rather than on a clock schedule, because the point is to stop the panel ruining dark adaptation and that starts when the dark sky does. `"dim"` keeps the colours at `night_dim`% brightness; `"red"` goes monochrome red because long wavelengths leave low-light vision alone. Nothing is lost by going red — no reading is carried by colour alone, so the verdict word, the numbers and the bar lengths all still say what they said. It applies to the finished frame, so it covers the animated sky and the sky photographs too.
 
