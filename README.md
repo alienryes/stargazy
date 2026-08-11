@@ -358,7 +358,9 @@ journalctl -u touch2-stargazing -f
 systemctl status touch2-stargazing
 ```
 
-The daemon uses one Pi 4 core continuously. **`fps` is a ceiling, not a promise**, and the default of 12 is what the panel actually holds. Measured end to end: **69 ms a frame with the night filter off and 82 ms in red**, about 70% of it the RGB565 framebuffer write. Raising `fps` buys roughly 14 fps in daylight and no more than 12 after dark — faster in the mode nobody is watching, and pinning the core in the mode they are. Lowering it further reduces CPU.
+**`fps` is a ceiling, not a promise**, and the default of 12 is what the panel holds in both night modes with room to spare. Measured end to end: **51 ms a frame with the night filter off and 43 ms in red**, roughly 60% of it the RGB565 pack either way. Raising `fps` buys about 19 fps by day and 23 after dark. Lowering it reduces CPU.
+
+Daylight is the binding case, which reverses how this build spent most of its life. Red used to be the expensive mode — 118 ms a frame at one point, and still 57 ms after the framebuffer fast paths landed — because the night transform was the one step with no C implementation behind it. It now computes its luma through PIL's matrix convert rather than in numpy, which is worth about 14 ms a frame on the 5" and 20 ms on the 10".
 
 ### Optional: a 32-bit framebuffer on the Pi 4
 

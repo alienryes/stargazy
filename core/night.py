@@ -15,20 +15,39 @@ from core.values import _dt
 NIGHT_CYCLE = ("off", "dim", "red")
 
 
-def red_luma(arr):
-    """Luma as uint8, for the red night mode.
+# Rec.709: 54/183/19 over 256 is 0.211/0.715/0.074. (This was described as
+# Rec.601 for a while, which would be 0.299/0.587/0.114 - a different
+# transform, and the numbers were always the 709 ones.)
+RED_LUMA_MATRIX = (54 / 256, 183 / 256, 19 / 256, 0)
 
-    Rec.709 coefficients: 54/183/19 over 256 is 0.211/0.715/0.074. (This was
-    described as Rec.601 for a while, which would be 0.299/0.587/0.114 - a
-    different transform, and the numbers were always the 709 ones.)
 
-    Split out so the coefficients live in ONE place: night_filter stacks this
-    back into an HxWx3 array for the general path, while the 32bpp framebuffer
-    packs it straight into its output buffer and never builds that array at
-    all. Both must agree by construction, not by being kept in step.
+def red_luma_img(img):
+    """Luma as a uint8 HxW array, from a PIL image, for the red night mode.
+
+    PIL applies the matrix in its own C loop. The equivalent numpy is three
+    multiplies over an HxWx3 array widened to uint16 first, and that widening
+    alone is 2.7 million values on the 5" panel; measured against this, the
+    numpy version was 13.6 ms a frame slower there and 19.6 ms on the 10".
+    Red is the mode the display runs in from dusk to dawn, so it is the one
+    worth the C loop.
+
+    PIL rounds where the integer expression floored, so luma can land one level
+    off what this returned before 2026-08-11. That is a step of 1 in 255 on a
+    monochrome frame.
     """
-    return ((arr[:, :, 0] * 54 + arr[:, :, 1] * 183
-             + arr[:, :, 2] * 19) >> 8).astype(np.uint8)
+    return np.asarray(img.convert("L", RED_LUMA_MATRIX))
+
+
+def red_luma(arr):
+    """The same luma for callers holding an array rather than an image.
+
+    ONE implementation, deliberately: night_filter stacks the result back into
+    an HxWx3 array for --save, while the framebuffer packs it straight into its
+    output buffer and never builds that array at all. Both must agree by
+    construction, not by being kept in step - so this routes through the image
+    path rather than reimplementing the coefficients.
+    """
+    return red_luma_img(Image.fromarray(arr.astype(np.uint8), "RGB"))
 
 
 def night_filter(arr, mode, dim):

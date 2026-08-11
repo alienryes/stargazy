@@ -17,15 +17,19 @@ from core.night import (
     inside_window,
     night_filter,
     night_mode_now,
-)
-from core.night import (
-    red_luma as night_red_luma,
+    red_luma_img,
 )
 from core.palette import BG, STEEL, WHITE
 
 log = logging.getLogger(__name__)
 
 FB_DEV = "/dev/fb0"
+
+# RGB565 for every possible luma value, for the red night mode's 16bpp pack.
+# See Framebuffer._pack565_luma for where the fields come from.
+_LUMA_LEVELS = np.arange(256, dtype=np.uint16)
+_LUT565_LUMA = ((((_LUMA_LEVELS >> 3) << 11)
+                 | ((_LUMA_LEVELS >> 6) << 5)).astype("<u2"))
 
 # Degrees to PIL's constants, so a build can carry ONE rotation figure and hand
 # it to both the framebuffer and the touch reader. They have to agree: the
@@ -105,18 +109,19 @@ class Framebuffer:
     def _pack565_luma(lum):
         """RGB565 from a single luma plane, for the red night mode.
 
-        DERIVED from the general path, not invented: night_filter writes lum,
-        lum>>4 and lum>>5 into R, G and B, and the 565 pack then takes r>>3,
-        g>>2 and b>>3 - so the fields are lum>>3, lum>>6 and lum>>8. Luma is
-        8-bit, so the blue field is always zero and is not computed at all.
+        A 256-entry lookup, because luma is 8-bit and the output is one uint16
+        per pixel: the whole transform fits in a table and the pack becomes a
+        single gather. DERIVED from the general path, not invented, and the
+        table is built from the same expression it replaces - night_filter
+        writes lum, lum>>4 and lum>>5 into R, G and B, and the 565 pack takes
+        r>>3, g>>2 and b>>3, so the fields are lum>>3, lum>>6 and lum>>8. Luma
+        is 8-bit, so the blue field is always zero.
 
-        This never builds the HxWx3 output array that the general path fills
-        and then immediately re-reads, which is where the cost was.
+        The table does NOT pay off at 32bpp, where it gathers four bytes per
+        pixel instead of two: measured on the 10" panel it was 57.7 ms against
+        29.1 for the three broadcast writes that path uses instead.
         """
-        out = (lum >> 3).astype(np.uint16)
-        out <<= 11
-        out |= (lum >> 6).astype(np.uint16) << 5
-        return out.astype("<u2", copy=False).tobytes()
+        return _LUT565_LUMA[lum].tobytes()
 
     def to_bytes(self, img, night="off", dim=45):
         # rotate is None for a build drawn in the panel's native portrait, which
@@ -140,7 +145,7 @@ class Framebuffer:
                 src = rot if rot.mode == "RGB" else rot.convert("RGB")
                 return src.tobytes("raw", "BGRX")
             if night == "red":
-                lum = night_red_luma(np.asarray(rot, dtype=np.uint16))
+                lum = red_luma_img(rot)
                 out = np.empty((self.fb_h, self.fb_w, 4), np.uint8)
                 out[:, :, 0] = lum >> 5
                 out[:, :, 1] = lum >> 4
@@ -149,19 +154,21 @@ class Framebuffer:
                 return out.tobytes()
 
         if self.bpp == 16:
-            # The same two cases at 16bpp, and they matter more here: this build
-            # has no headroom. Measured end to end on the panel, the frame was
-            # 76.9 ms in off and 118.1 ms in red - 13.0 and 8.5 fps against a
-            # configured 20 - with to_bytes 71% of it in both modes.
+            # The same two cases at 16bpp, and they mattered more here: before
+            # these paths existed the frame was 76.9 ms in off and 118.1 ms in
+            # red, 13.0 and 8.5 fps against a configured 20, with to_bytes 71%
+            # of it in both modes. It is now 51 and 43.
             #
-            # PIL cannot help at this depth the way it does at 32: there is no
-            # 565 packer, and both `BGR;16` and `RGB;16` raise "No packer found".
-            # So the saving comes from not building intermediates rather than
-            # from handing the loop to C.
+            # PIL cannot help with the PACK at this depth the way it does at 32:
+            # there is no 565 packer, and both `BGR;16` and `RGB;16` raise "No
+            # packer found". So the saving here comes from not building
+            # intermediates rather than from handing the loop to C. The red
+            # path's LUMA is a different matter and does go to C - see
+            # red_luma_img, which is where most of that mode's cost was.
             if night == "off":
                 return self._pack565(np.asarray(rot))
             if night == "red":
-                return self._pack565_luma(night_red_luma(np.asarray(rot, dtype=np.uint16)))
+                return self._pack565_luma(red_luma_img(rot))
 
         arr = np.asarray(rot, dtype=np.uint16)
         # Filtered here rather than in the compositor: this array already

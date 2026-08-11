@@ -67,15 +67,16 @@ out_dir = "/home/operations/uptonight/out"
 # "animated" = live data-reactive night sky behind the dashboard (default);
 # "static"   = redraw only when the data changes (no animation).
 # mode = "animated"
-# A CEILING, not a target, and 12 is what a Pi 4 actually holds in BOTH night
-# modes. Measured end to end on the panel: 69 ms a frame with the night filter
-# off and 82 ms in red, about 70% of it the RGB565 framebuffer write. Red is
-# the binding case and it is the one that matters, being the mode the panel
-# runs in from dusk to dawn.
+# A CEILING, not a target, and 12 is what a Pi 4 holds in BOTH night modes with
+# room to spare. Measured end to end on the panel: 51 ms a frame with the night
+# filter off and 43 ms in red, roughly 60% of it the RGB565 pack in either case.
 #
-# Raising this gives roughly 14 fps in daylight and no more than 12 after dark,
-# so the display runs faster in the mode nobody is watching and pins the core
-# in the mode they are. Lowering it further reduces CPU.
+# Daylight is now the binding case, which is the reverse of how this build spent
+# most of its life: the red path used to cost 118 ms a frame and was the slowest
+# mode on the panel, which is the one it runs in from dusk to dawn.
+#
+# Raising this gives about 19 fps by day and 23 after dark. Lowering it reduces
+# CPU; the daemon uses well under one core at 12.
 # fps = 12
 # data_refresh_min = 15
 # Seconds each page is shown before rotating. The targets page only joins the
