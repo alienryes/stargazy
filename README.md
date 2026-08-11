@@ -409,7 +409,7 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
   deploy.ps1              Windows → Pi deploy script
   setup.sh                One-time Pi setup (run with sudo)
   systemd/
-    stargazy.service   Always-on animated display daemon
+    stargazy.service            Always-on animated display daemon
     fbcon-detach.service        Frees /dev/fb0 from the text console
     install-units.sh            Installs the units - interactive sudo, by design
 build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - portrait,
