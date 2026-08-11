@@ -77,7 +77,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.30.0"
+VERSION = "0.31.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -254,6 +254,18 @@ def _fonts():
 
 def _centre(draw, text, y, fill, f):
     draw.text(((W - int(draw.textlength(text, font=f))) // 2, y), text, fill=fill, font=f)
+
+
+def _days(n):
+    """A rounded day count with the plural that matches it.
+
+    The count is rounded first and the plural follows the ROUNDED value, so a
+    peak 1.4 days away reads "1 day" and not "1 days". Every day figure on this
+    page went through `:.0f`, which meant the singular case was wrong on
+    precisely the day the page matters most - the day before a shower peak.
+    """
+    n = round(n)
+    return f"{n} day" if n == 1 else f"{n} days"
 
 
 def _right(draw, text, y, fill, f):
@@ -879,8 +891,8 @@ def render_meteors(states, lat, lon):
         days_to = (s["peak_lambda"] - lam) % 360.0 / 0.9856
         days_since = s["delta_lambda"] / 0.9856
         peak_note = ("peaking now" if s["delta_lambda"] < 0.5
-                     else f"{days_to:.0f} days before peak" if days_to < 180
-                     else f"{days_since:.0f} days past peak")
+                     else f"{_days(days_to)} before peak" if days_to < 180
+                     else f"{_days(days_since)} past peak")
         _right(draw, peak_note, y + 14, MUTED, f["sm"])
 
         if up:
@@ -943,7 +955,7 @@ def render_meteors(states, lat, lon):
             uy += MET_UP_HEAD
             for name, days, zhr in soon:
                 draw.text((MARGIN, uy), name, font=f["med"], fill=MUTED)
-                _right(draw, f"in {days:.0f} days   ·   ZHR {zhr:.0f}",
+                _right(draw, f"in {_days(days)}   ·   ZHR {zhr:.0f}",
                        uy + 8, DIM, f["sm"])
                 uy += MET_UP_ROW
 
@@ -956,7 +968,7 @@ def render_meteors(states, lat, lon):
     nxt = next_shower(utc)
     if nxt:
         draw.text((MARGIN, sy + 56),
-                  f"Next peak: {nxt[0]} in {nxt[1]:.0f} days",
+                  f"Next peak: {nxt[0]} in {_days(nxt[1])}",
                   font=f["sm"], fill=MUTED)
 
     draw.text((MARGIN, H - 44),
