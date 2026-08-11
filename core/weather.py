@@ -131,7 +131,18 @@ TUNING_DEFAULTS = {
     "transparency_weight": 1,
     "calm_weight": 2,
     "experimental_features": True,
-    "forecast_model": "ecmwf_ifs025",
+    # Open-Meteo's own blend, which picks the highest-resolution model covering
+    # the site. pyastroweatherio passes no model at all by default and gets the
+    # same thing; the string is used here so a config file can override it.
+    #
+    # WHY NOT ecmwf_ifs025, which this was pinned to until 2026-08-11. That is a
+    # 25 km global grid, and on a cloudless afternoon it reported 51% cover and
+    # 60% high cloud at the reference site while best_match, ukmo_seamless and
+    # the sky itself all read zero. Over the UK the blend resolves to models an
+    # order of magnitude finer, and cloud is exactly the field where that tells.
+    # A single global model can be pinned here where one is known to suit the
+    # site better than the blend.
+    "forecast_model": "best_match",
 }
 
 

@@ -26,9 +26,14 @@ transparency_weight = 1
 calm_weight = 2
 # Approximates lifted index, seeing, transparency and ground fog.
 experimental_features = true
-# Open-Meteo model: icon_seamless (DWD), metno_seamless, gfs_seamless,
-# ecmwf_ifs025. Leaving this unset changes the numbers substantially.
-forecast_model = "ecmwf_ifs025"
+# Open-Meteo model. best_match is the blend, and picks the highest-resolution
+# model covering the site; it is the right choice almost everywhere. A single
+# model can be named instead where one is known to suit the site better:
+# icon_seamless (DWD), ukmo_seamless, metno_seamless, gfs_seamless, ecmwf_ifs025.
+# The choice moves the cloud figures substantially, and the coarse global models
+# are the ones to be careful with - ecmwf_ifs025 is a 25 km grid and reported 60%
+# high cloud over a visibly clear sky at the reference site.
+forecast_model = "best_match"
 
 # Only needed when weather.source = "homeassistant".
 [ha]
