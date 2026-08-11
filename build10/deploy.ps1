@@ -76,7 +76,11 @@ if (Test-Path "$BUILD\config.toml") {
 
 # Install Python dependencies
 Write-Host "--> Installing Python dependencies..."
-Invoke-Pi "$REMOTE_DIR/.venv/bin/pip install -q -r $REMOTE_DIR/requirements.txt --prefer-binary"
+# `python -m pip`, not `.venv/bin/pip`: the console script carries an absolute
+# shebang naming the path the venv was created at, so it breaks the moment the
+# install directory is renamed or moved. The interpreter itself is a symlink to
+# the system python and relocates cleanly, so going through it does not.
+Invoke-Pi "$REMOTE_DIR/.venv/bin/python -m pip install -q -r $REMOTE_DIR/requirements.txt --prefer-binary"
 
 # Render UpTonight's config from [location] in config.toml, so the site is only
 # ever configured in one place. Skipped if setup.sh has not installed it yet.
