@@ -19,7 +19,7 @@ import random
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -63,6 +63,7 @@ from core.palette import (
 )
 from core.panel import PIL_ROTATION, Framebuffer, Strip
 from core.positions import alt_az, next_rise, observer, plot_instant
+from core.satellites import elements_age, passes
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
 from core.starfield import (
@@ -79,7 +80,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.39.0"
+VERSION = "0.40.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1342,6 +1343,186 @@ def render_aurora(states, lat, lon):
     return img
 
 
+# ── Page 5: satellite passes ──────────────────────────────────────────────
+# How far ahead a pass may be and still earn the page. A pass is a scheduled
+# event rather than a condition, so unlike aurora this page does NOT require the
+# sky to be dark right now - the whole point is to say when to go out, which is
+# information worth having at nine in the evening for an event at five in the
+# morning. Beyond a day it stops being actionable and becomes a timetable.
+SAT_HORIZON_HOURS = 24
+SAT_ENABLED = True
+# How far the listing below the plot reaches. Longer than the gate on purpose:
+# whether the page EXISTS is a question about acting tonight, while the list is
+# a schedule, and passes come in runs over several days rather than singly. One
+# walk answers both - the page appears when the soonest pass is imminent, and
+# once it is there it shows the run it belongs to.
+#
+# ⚠ AND IT STOPS AT A WEEK FOR A REASON. Pass times come from orbital elements
+# that age, and the station manoeuvres; quoting a minute a fortnight out would
+# state a precision the elements do not carry. A week is already the edge of it.
+SAT_SCHEDULE_HOURS = 168
+SAT_ROWS = 8
+SAT_Y0, SAT_ROW_H = 900, 80
+# The sky line follows the listing, but may not be pushed past this: a full list
+# would otherwise walk it into the footer.
+SAT_SKY_MAX_Y = 1660
+
+
+def _draw_pass_track(draw, track, colour):
+    """The pass's own path across the bearing-by-altitude plot.
+
+    ⚠ NORTH IS AT BOTH ENDS OF THE AXIS, so a pass crossing north is two
+    polylines rather than one. Joining those samples directly would draw a line
+    straight back across the whole plot - the same wrap that the aurora band had
+    to be split for. The break is detected on the azimuth step rather than on the
+    bearing's sign, because a pass can cross north in either direction.
+    """
+    if len(track) < 2:
+        return
+    run = []
+    for az, alt in track:
+        x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
+        y = PAN_BASE - (min(alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
+        if run and abs(az - run[-1][0]) > 180.0:
+            if len(run) > 1:
+                draw.line([p[1] for p in run], fill=colour, width=5, joint="curve")
+            run = []
+        run.append((az, (x, y)))
+    if len(run) > 1:
+        draw.line([p[1] for p in run], fill=colour, width=5, joint="curve")
+
+    # The culmination, marked but NOT labelled. _draw_panorama's labels avoid
+    # each other and know nothing about this track, so a name placed here landed
+    # squarely across the descending limb. The heading above the plot already
+    # names the object and states the bearing, so a label here would be
+    # duplication that damages the one thing the plot is for.
+    peak_az, peak_alt = max(track, key=lambda p: p[1])
+    px = PAN_X0 + (peak_az / 360.0) * (PAN_X1 - PAN_X0)
+    py = PAN_BASE - (min(peak_alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
+    draw.ellipse([px - 9, py - 9, px + 9, py + 9], fill=WHITE)
+
+
+def _until(when, now):
+    """"in 6h 33m" for a future time, or "now" once it has started."""
+    secs = (when - now).total_seconds()
+    if secs <= 0:
+        return "now"
+    h, m = int(secs // 3600), int((secs % 3600) // 60)
+    return f"in {h}h {m:02d}m" if h else f"in {m} min"
+
+
+def render_satellites(states, lat, lon):
+    """Page 5: the next bright satellite pass, when there is one worth going out for.
+
+    Returns None unless a pass clears every gate in core.satellites within the
+    next day. That module decides visibility; this one decides only whether the
+    result is worth a page, which is the same division the meteor page uses.
+
+    ⇒ THE PATH IS THE POINT, and it is why this is a page rather than a line of
+    text. A pass is the one man-made thing the display can plot honestly - the
+    object really is at those bearings and those altitudes at those minutes - and
+    the panorama is already a bearing-by-altitude instrument, so the track needs
+    no axes of its own.
+    """
+    if not SAT_ENABLED:
+        return None
+    # ONE walk for both answers: the soonest pass decides whether there is a
+    # page, the rest become the schedule under the plot.
+    found = passes(lat or 0.0, lon or 0.0, hours=SAT_SCHEDULE_HOURS, with_track=True)
+    if not found:
+        return None
+
+    nxt = found[0]
+    now = datetime.now().astimezone()
+    if nxt["culminate"] - now > timedelta(hours=SAT_HORIZON_HOURS):
+        return None
+    img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    f = _fonts()
+
+    draw.text((MARGIN, 30), "SATELLITES", font=font("IBMPlexSans-Bold.ttf", 60),
+              fill=WHITE)
+    draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM, width=2)
+
+    # The weekday only when the pass is not today. A bare time reads as tonight,
+    # and at 22:30 a pass at 04:56 is not.
+    day = "" if nxt["culminate"].date() == now.date() else f"{nxt['culminate']:%a} "
+    draw.text((MARGIN, 160),
+              f"{nxt['name']}  ·  {day}{nxt['culminate']:%H:%M}  ·  "
+              f"{_until(nxt['culminate'], now)}",
+              font=f["sm"], fill=WHITE)
+    draw.text((MARGIN, 210),
+              f"Rises {compass(nxt['rise_bearing'])}, highest {nxt['max_altitude']:.0f}° "
+              f"in the {compass(nxt['culminate_bearing'])} at "
+              f"{int(round(nxt['culminate_bearing'])) % 360}°, "
+              f"sets {compass(nxt['set_bearing'])}",
+              font=f["xs"], fill=MUTED)
+    draw.text((MARGIN, 258),
+              f"{nxt['duration_min']:.0f} minutes in view  ·  {nxt['range_km']:.0f} km away "
+              f"at its highest",
+              font=f["xs"], fill=MUTED)
+
+    # Track first, then the axes over it, matching the aurora page: the path is
+    # the background its numbers annotate. No marks are passed - the track draws
+    # its own culmination dot, and see _draw_pass_track for why it is unlabelled.
+    _draw_pass_track(draw, nxt.get("track") or [], NOMINAL)
+    _draw_panorama(draw, [], "pass", f["sm"], f["xs"])
+
+    # The FIRST pass is the heading above, so the list starts after it. Printed
+    # in full it duplicated the headline on every render - the same fault the
+    # meteor page's footer had, where "Next peak" repeated the first row of its
+    # own list. The heading is suppressed with the list rather than left
+    # standing over nothing.
+    later = found[1:SAT_ROWS + 1]
+    if later:
+        y = SAT_Y0
+        # "Over the next week", not "later this week": the listing runs a week
+        # forward from now, so on a Wednesday it reaches the following Wednesday
+        # and "this week" is simply untrue of the last rows.
+        draw.text((MARGIN, y), "Over the next week", font=f["med"], fill=WHITE)
+        y += 70
+        for p in later:
+            # The DATE as well as the weekday. A week's listing can contain the
+            # same weekday as today - it did on the first render, where two rows
+            # read "Wed" on a Wednesday and looked like they meant tonight.
+            draw.text((MARGIN, y), f"{p['culminate']:%a %d  %H:%M}", font=f["sm"],
+                      fill=WHITE)
+            draw.text((MARGIN + 280, y), p["name"], font=f["sm"], fill=MUTED)
+            draw.text((MARGIN + 500, y),
+                      f"{p['max_altitude']:.0f}° up  ·  {compass(p['rise_bearing'])} to "
+                      f"{compass(p['set_bearing'])}",
+                      font=f["sm"], fill=MUTED)
+            y += SAT_ROW_H
+    else:
+        y = SAT_Y0
+
+    # What the local sky is doing about it, as the aurora page does: a pass the
+    # observer cannot see because it is overcast is worth saying rather than
+    # leaving them to go outside and find out. Pinned rather than following the
+    # list, so a short list cannot walk this line into the footer.
+    cloud = obscuration_of(states)
+    sky = ("Your sky is clear." if cloud <= 20
+           else f"Your sky is {cloud}% obscured." if cloud < 80
+           else f"Your sky is {cloud}% obscured - almost certainly not visible from here.")
+    draw.text((MARGIN, min(y + 40, SAT_SKY_MAX_Y)), sky, font=f["sm"], fill=MUTED)
+
+    # ⇒ NO BRIGHTNESS IS CLAIMED ANYWHERE ON THIS PAGE. Apparent magnitude
+    # depends on which face the station has turned towards the observer, and
+    # nothing keyless reports its attitude, so the page gives the geometry it
+    # actually knows and leaves brightness alone.
+    draw.text((MARGIN, H - 156),
+              "Sunlit satellite in a dark sky. Times are predicted from orbital "
+              "elements.",
+              font=f["xs"], fill=DIM)
+    draw.text((MARGIN, H - 100),
+              f"Elements: CelesTrak, {elements_age()}",
+              font=f["xs"], fill=DIM)
+    draw.text((MARGIN, H - 44),
+              "Positions computed for this site; brightness is not predicted.",
+              font=f["xs"], fill=DIM)
+    return img
+
+
 def target_pages(states, targets, lat):
     """Every screenful of page 2, as a Paged run, or empty if there is nothing.
 
@@ -1385,6 +1566,13 @@ def build_pages(states, targets, lat, moon_ring=False):
     page4 = render_aurora(states, lat, LON)
     if page4 is not None:
         pages.append(page4)
+    # Same mechanism again: present only when a bright satellite crosses a dark
+    # sky within the day. Unlike the pages above it this one is not gated on the
+    # sky being dark NOW, because a pass is an appointment rather than a
+    # condition - and it is the only page here whose subject is man-made.
+    page5 = render_satellites(states, lat, LON)
+    if page5 is not None:
+        pages.append(page5)
     return pages
 
 
@@ -1440,7 +1628,11 @@ def main():
     moon_ring = bool(disp.get("moon_ring", False))
     global LIMITING_MAG, METEOR_COMPRESSION, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV
     global AURORA_ENABLED, AURORA_THRESHOLD, AURORA_EMISSION_KM
+    global SAT_ENABLED, SAT_HORIZON_HOURS
     METEOR_COMPRESSION = float(disp.get("meteor_compression", METEOR_COMPRESSION))
+    sat = config.get("satellites", {})
+    SAT_ENABLED = bool(sat.get("enabled", SAT_ENABLED))
+    SAT_HORIZON_HOURS = float(sat.get("horizon_hours", SAT_HORIZON_HOURS))
     aur = config.get("aurora", {})
     AURORA_ENABLED = bool(aur.get("enabled", AURORA_ENABLED))
     AURORA_THRESHOLD = float(aur.get("threshold_percent", AURORA_THRESHOLD))

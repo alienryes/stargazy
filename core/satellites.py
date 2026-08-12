@@ -94,6 +94,12 @@ DEFAULT_HOURS = 48
 # the loop against a body that never sets rather than against a real sky.
 MAX_STEPS = 400
 
+# Samples along a pass when a caller asks for the path. A pass lasts about ten
+# minutes, so this is roughly one point every fifteen seconds - far finer than a
+# panel can resolve, and cheap enough beside a render loop that there is no
+# reason to be sparing.
+TRACK_SAMPLES = 48
+
 
 def _cache_age():
     """How old the cached element set is, or None when there is not one."""
@@ -165,6 +171,17 @@ def fetch_elements(timeout=20):
         return cached_or_empty()
 
 
+def _local(when):
+    """An ephem date as a timezone-AWARE local datetime.
+
+    ephem.localtime returns a naive one, and everything a caller will compare
+    these against - the clock on a page, timestamps out of Home Assistant - is
+    aware. Mixing the two raises rather than quietly misreporting, but it raises
+    inside the page render, which is a poor place to find out.
+    """
+    return ephem.localtime(when).astimezone()
+
+
 def _sun_alt(obs):
     sun = ephem.Sun()
     sun.compute(obs)
@@ -208,8 +225,29 @@ def _pass_after(obs, sat, when):
         obs.date = saved
 
 
+def _track(obs, sat, rise_t, set_t, samples=TRACK_SAMPLES):
+    """[(bearing, altitude)] along the pass, in degrees.
+
+    COMPUTED at each sample rather than interpolated between rise, culmination
+    and set. A satellite's path across a bearing-by-altitude plot is a curve,
+    and three points joined by straight lines would be a drawing of an
+    assumption rather than of the orbit.
+
+    Altitudes are clamped at zero: the endpoints land a fraction below the
+    horizon by rounding, and a caller plotting against an altitude axis has
+    nowhere to put a negative.
+    """
+    out = []
+    for i in range(samples + 1):
+        when = ephem.Date(rise_t + (set_t - rise_t) * i / samples)
+        alt, az, _, _, _ = _at(obs, sat, when)
+        out.append((az % 360.0, max(0.0, alt)))
+    return out
+
+
 def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
-           min_alt=MIN_CULMINATION_ALT, max_sun_alt=MAX_SUN_ALT, now=None):
+           min_alt=MIN_CULMINATION_ALT, max_sun_alt=MAX_SUN_ALT, now=None,
+           with_track=False):
     """Visible passes of every satellite in SATELLITES, soonest first.
 
     A pass is reported only when all three gates hold at its culmination: it
@@ -256,25 +294,50 @@ def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
             alt = math.degrees(p["max_alt"])
             if alt < min_alt:
                 continue
-            _, _, sun_alt, eclipsed, range_km = _at(obs, sat, p["max_t"])
+            _, culm_az, sun_alt, eclipsed, range_km = _at(obs, sat, p["max_t"])
             if sun_alt > max_sun_alt or eclipsed:
                 continue
 
-            out.append({
+            entry = {
                 "name": name,
-                "rise": ephem.localtime(p["rise_t"]),
-                "culminate": ephem.localtime(p["max_t"]),
-                "set": ephem.localtime(p["set_t"]),
+                "rise": _local(p["rise_t"]),
+                "culminate": _local(p["max_t"]),
+                "set": _local(p["set_t"]),
                 "rise_bearing": math.degrees(p["rise_az"]) % 360.0,
                 "set_bearing": math.degrees(p["set_az"]) % 360.0,
+                # Where to actually look. Not the mean of the rise and set
+                # bearings: the track is a curve, and on a high pass the two
+                # ends can be most of the compass apart while the culmination
+                # sits nowhere between them.
+                "culminate_bearing": culm_az % 360.0,
                 "max_altitude": alt,
                 "range_km": range_km,
                 "sun_altitude": sun_alt,
                 "duration_min": (p["set_t"] - p["rise_t"]) * 24.0 * 60.0,
-            })
+            }
+            if with_track:
+                entry["track"] = _track(obs, sat, p["rise_t"], p["set_t"])
+            out.append(entry)
 
     out.sort(key=lambda p: p["culminate"])
     return out
+
+
+def elements_age():
+    """How old the cached element set is, as a short phrase for a footer.
+
+    A pass time is only as current as the elements behind it, and a page that
+    quotes a minute should be able to say how stale the arithmetic is.
+    """
+    age = _cache_age()
+    if age is None:
+        return "not cached"
+    hours = age.total_seconds() / 3600.0
+    if hours < 1.0:
+        return f"{int(age.total_seconds() // 60)} min old"
+    if hours < 48.0:
+        return f"{int(hours)} h old"
+    return f"{age.days} days old"
 
 
 def next_visible(lat, lon, elevation=0.0, hours=DEFAULT_HOURS, **kw):

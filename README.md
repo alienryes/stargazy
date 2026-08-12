@@ -413,8 +413,9 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
     fbcon-detach.service        Frees /dev/fb0 from the text console
     install-units.sh            Installs the units - interactive sudo, by design
 build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - portrait,
-                        adds a meteor shower PAGE and an aurora page. Both
-                        builds fly real meteors in the sky itself
+                        adds a meteor shower PAGE, an aurora page and a
+                        satellite pass page. Both builds fly real meteors in
+                        the sky itself
 screenshots/            README images, regenerated with display.py --save
 tools/                  Development checks and utilities
   grab_panel.py           Capture what the panel is actually showing, off /dev/fb0

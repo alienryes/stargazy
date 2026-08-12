@@ -178,3 +178,23 @@ out_dir = "/home/operations/uptonight/out"
 # enabled = true
 # threshold_percent = 10
 # emission_km = 250
+
+# ── Satellite passes ──────────────────────────────────────────────────────
+# A page appears when the ISS or Tiangong crosses a dark sky here, and is
+# absent otherwise. Passes come in runs of a few days at similar local times
+# and then nothing for a week or two, so expect the page to come and go.
+#
+# Unlike the aurora page this one does NOT wait for the sky to be dark, because
+# a pass is an appointment rather than a condition: the time to show it is
+# while there is still a chance of acting on it.
+#
+# horizon_hours is how far ahead a pass may be and still earn the page. Beyond
+# about a day it stops being something to act on and becomes a timetable.
+#
+# No brightness is predicted anywhere on the page. Apparent magnitude depends
+# on which face the station has turned towards the observer and nothing keyless
+# reports its attitude, so the page states the geometry it can compute and
+# leaves brightness alone.
+[satellites]
+# enabled = true
+# horizon_hours = 24
