@@ -79,7 +79,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.37.0"
+VERSION = "0.37.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -947,9 +947,17 @@ def render_meteors(states, lat, lon):
         # term is doing the cutting - naming a single cause would be right on a
         # clear night and wrong under cloud, which is the same class of error as
         # the peaking label it sits next to.
+        #
+        # KEEP THIS STRING SHORT. It is right-aligned and the rate figure is
+        # drawn from a fixed x, so every character eats leftward into it. The
+        # widest the page can print is the rate at the zenith, which leaves
+        # 288px here in Plex at this size; "ZHR 150 at peak - 67% of it tonight"
+        # wanted 492 and overlapped the rate on the panel. Measure any
+        # replacement ON the Pi: core.fonts resolves two Linux paths and
+        # otherwise silently returns Pillow's default bitmap face, which is
+        # narrow enough to report a comfortable fit for a string that collides.
         kept = rate / s["zhr"] if s["zhr"] else 0.0
-        _right(draw, f"ZHR {s['zhr']} at peak · {kept:.0%} of it tonight",
-               by + 8, DIM, f["xs"])
+        _right(draw, f"{kept:.0%} of ZHR {s['zhr']}", by + 8, DIM, f["xs"])
         y += MET_GAP
 
     # Anchored to the bottom rather than flowing after the last shower: the
