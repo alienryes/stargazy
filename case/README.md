@@ -157,14 +157,12 @@ python case_bottom.py pi5 && python case_top.py pi5
 
 ### Read this before choosing a Pi 5
 
-**Built and fitted, with one revision since.** Both Pi 5 parts have been
-printed and confirmed to fit the board. That build found a single fault — the
-USB3 aperture was cut 1.32 mm taller than the USB2 one beside it, from an error
-in the reference mesh rather than in these scripts — which is corrected in the
-current `case_top`. The corrected window has not itself been fitted yet, so a
-fresh print gets geometry that is right on the measurements but one test fit
-behind the rest of the case. Everything else about the Pi 5 pair is validated on
-hardware. Feedback welcome.
+**Built and fitted.** Both Pi 5 parts have been printed at the current revision
+and confirmed to fit the board. An earlier build found one fault — the USB3
+aperture was cut 1.32 mm taller than the USB2 one beside it, from an error in
+the reference mesh rather than in these scripts — and the corrected lid has
+since been printed and fitted in turn. Nothing about the Pi 5 pair is
+outstanding. Feedback welcome.
 
 The Pi 4 case is assembled and in daily service, and is the more travelled of
 the two.

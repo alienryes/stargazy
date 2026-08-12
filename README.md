@@ -441,9 +441,8 @@ stand10/                Desk stand for the 10.1" panel — one part, no case nee
 
 Bug reports, questions and build photos are all welcome via [Issues](https://github.com/alienryes/stargazy/issues).
 
-Two areas where reports are especially useful, because they cannot be verified here:
+One area where reports are especially useful, because it cannot be verified here:
 
-- **The Pi 5 case lid's corrected USB3 window has not been test-fitted.** The Pi 5 pair is otherwise built and fitted; one aperture was cut too tall by a fault in the reference board mesh, and the correction is in the current `case_top` but has not itself been on a board — see [`case/README.md`](case/README.md).
 - **Other latitudes.** The reference build sits at 51°N. The targets page caps its altitude axis at 70° because nothing near the ecliptic rises higher from there; much further south that will clip real objects, and `PAN_ALT_MAX` in `display.py` is the value to raise.
 
 ---
