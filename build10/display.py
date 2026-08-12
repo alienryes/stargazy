@@ -80,7 +80,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.40.0"
+VERSION = "0.40.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1368,7 +1368,21 @@ SAT_Y0, SAT_ROW_H = 900, 80
 SAT_SKY_MAX_Y = 1660
 
 
-def _draw_pass_track(draw, track, colour):
+# ⚠ PIL DOES NOT ANTIALIAS LINES OR ELLIPSES. A thin diagonal drawn straight
+# onto the page came out visibly stepped on the panel, and thickening it only
+# made the steps bigger. The track is therefore drawn at this multiple and
+# reduced with LANCZOS, which is the same trick _draw_aurora_field uses in
+# reverse - that one builds small and scales up, this one builds big and scales
+# down. Width 3 against axes drawn at 2: present without shouting.
+TRACK_SS = 3
+TRACK_WIDTH = 3
+TRACK_DOT_R = 7
+# Room for the dot and the line's half-width at the plot's edges, where a pass
+# rises and sets exactly on the baseline.
+TRACK_PAD = 12
+
+
+def _draw_pass_track(img, track, colour):
     """The pass's own path across the bearing-by-altitude plot.
 
     ⚠ NORTH IS AT BOTH ENDS OF THE AXIS, so a pass crossing north is two
@@ -1379,27 +1393,41 @@ def _draw_pass_track(draw, track, colour):
     """
     if len(track) < 2:
         return
+    box_w = PAN_X1 - PAN_X0 + 2 * TRACK_PAD
+    box_h = PAN_BASE - PAN_TOP + 2 * TRACK_PAD
+    layer = Image.new("RGBA", (box_w * TRACK_SS, box_h * TRACK_SS), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+
+    def point(az, alt):
+        """Plot coordinates on the supersampled layer, relative to its corner."""
+        x = TRACK_PAD + (az / 360.0) * (PAN_X1 - PAN_X0)
+        y = TRACK_PAD + (PAN_BASE - PAN_TOP) * (
+            1.0 - min(alt, PAN_ALT_MAX) / PAN_ALT_MAX)
+        return (x * TRACK_SS, y * TRACK_SS)
+
     run = []
     for az, alt in track:
-        x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
-        y = PAN_BASE - (min(alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
         if run and abs(az - run[-1][0]) > 180.0:
             if len(run) > 1:
-                draw.line([p[1] for p in run], fill=colour, width=5, joint="curve")
+                ld.line([p[1] for p in run], fill=colour,
+                        width=TRACK_WIDTH * TRACK_SS, joint="curve")
             run = []
-        run.append((az, (x, y)))
+        run.append((az, point(az, alt)))
     if len(run) > 1:
-        draw.line([p[1] for p in run], fill=colour, width=5, joint="curve")
+        ld.line([p[1] for p in run], fill=colour,
+                width=TRACK_WIDTH * TRACK_SS, joint="curve")
 
     # The culmination, marked but NOT labelled. _draw_panorama's labels avoid
     # each other and know nothing about this track, so a name placed here landed
     # squarely across the descending limb. The heading above the plot already
     # names the object and states the bearing, so a label here would be
     # duplication that damages the one thing the plot is for.
-    peak_az, peak_alt = max(track, key=lambda p: p[1])
-    px = PAN_X0 + (peak_az / 360.0) * (PAN_X1 - PAN_X0)
-    py = PAN_BASE - (min(peak_alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
-    draw.ellipse([px - 9, py - 9, px + 9, py + 9], fill=WHITE)
+    px, py = point(*max(track, key=lambda p: p[1]))
+    r = TRACK_DOT_R * TRACK_SS
+    ld.ellipse([px - r, py - r, px + r, py + r], fill=WHITE)
+
+    img.alpha_composite(layer.resize((box_w, box_h), Image.LANCZOS),
+                        (PAN_X0 - TRACK_PAD, PAN_TOP - TRACK_PAD))
 
 
 def _until(when, now):
@@ -1465,7 +1493,7 @@ def render_satellites(states, lat, lon):
     # Track first, then the axes over it, matching the aurora page: the path is
     # the background its numbers annotate. No marks are passed - the track draws
     # its own culmination dot, and see _draw_pass_track for why it is unlabelled.
-    _draw_pass_track(draw, nxt.get("track") or [], NOMINAL)
+    _draw_pass_track(img, nxt.get("track") or [], NOMINAL)
     _draw_panorama(draw, [], "pass", f["sm"], f["xs"])
 
     # The FIRST pass is the heading above, so the list starts after it. Printed
