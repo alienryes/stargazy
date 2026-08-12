@@ -78,13 +78,9 @@ Print in **PETG**. An enclosed Pi 4 can creep toward PLA's glass transition
 (~60 °C); PETG's is ~80 °C. It also takes heat-set inserts better and gives the
 the stands stronger layer adhesion.
 
-| File | Qty | Size (mm) | ~Mass | Orientation |
-|---|---|---|---|---|
-| `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | 58 g | back plate **down** |
-| `case_bottom_pi4.stl` *or* `_pi5` | 1 | 126 × 76 × 13.5 | 23 g | plate **flat**, wall up |
-| `case_top_pi4.stl` *or* `_pi5` | 1 | 95 × 71 × 19.9 | 36 g | outer face **down** (as exported) |
-| `stand_20_usb.stl` | 1 | 105.4 × 42.3 × 14.0 | 11 g | **flat** on the profile |
-| `stand_20_dsi.stl` | 1 | 105.4 × 42.3 × 14.0 | 11 g | **flat** on the profile |
+The file list, quantities, print orientations and slicer settings are in
+[`BOM.md`](BOM.md), along with the fasteners and cables. This section covers
+the choices behind them.
 
 `shell.stl` and the stands are the same for both boards — only `case_bottom`
 and `case_top` are cut per model, and they must be a matching pair.
@@ -123,9 +119,6 @@ the Ø5.4 counterbore, which would leave the strap as a 1 mm web at both screws.
 At every angle the foot stops **inside** the case's own silhouette (3.5 mm in at
 15°, 21 mm at 30°), so the stand never sticks out behind the case; the depths
 above are set by the leaning case, not by the foot.
-
-Settings: 0.2 mm layer, 3 walls, 20 % infill, **no supports** — every part is
-oriented so nothing overhangs beyond 45°.
 
 The tolerances assume PETG. For PLA, drop `fit_clear` in `shell.py` from 0.5 to
 0.4 mm.
@@ -195,21 +188,10 @@ grille holes still vent.
 
 ## Hardware
 
-| Item | Qty | Notes |
-|---|---|---|
-| M2.5 × 6+6 male-female standoff | 4 | extenders; relay the Pi mount plane past the case |
-| M2.5 × 20 male-female standoff | 4 | clamp the Pi **and** take the lid screws |
-| M2.5 × 6 screw | 4 | lid into the 20 mm standoffs |
-| M2.5 × 16 screw | 4 | case screws: stand → case-bottom → shell → display |
-| 40 × 40 × 10 mm 5 V fan | 1 | **optional** |
-| M3 self-tapping screw | 4 | fan, from outside through the lid — optional |
-| USB-C power lead | 1 | the **official Raspberry Pi PSU fits** — the stands lift the case 22 mm specifically so it does. See below; a right-angle lead needs about half that |
-| Display Adapter Cable for Pi 5 (22-way → 15-way) | 1 | **Pi 5 only.** Replaces the panel's own cable. Must say `DISPLAY` — camera cables look the same and do not work |
-
-**No heat-set inserts and no soldering iron** — everything threads into a
-standoff. Screw lengths are calculated from the stack-up; confirm the
-M2.5 × 16 against the panel in hand, since the thread depth of the display's
-own screw bosses is not published.
+The fasteners, cables and the optional fan are listed in [`BOM.md`](BOM.md).
+Screw lengths are calculated from the stack-up rather than measured, so confirm
+the M2.5 × 16 against the panel in hand — the thread depth of the display's own
+screw bosses is not published.
 
 The stands add only **1.0 mm** to the case-screw stack — the strap is 3 mm
 thick but 2 mm of that is counterbore, so the head drops most of the way in.
