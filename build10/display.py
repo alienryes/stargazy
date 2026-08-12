@@ -80,7 +80,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.40.1"
+VERSION = "0.40.2"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1368,18 +1368,48 @@ SAT_Y0, SAT_ROW_H = 900, 80
 SAT_SKY_MAX_Y = 1660
 
 
-# ⚠ PIL DOES NOT ANTIALIAS LINES OR ELLIPSES. A thin diagonal drawn straight
-# onto the page came out visibly stepped on the panel, and thickening it only
-# made the steps bigger. The track is therefore drawn at this multiple and
-# reduced with LANCZOS, which is the same trick _draw_aurora_field uses in
-# reverse - that one builds small and scales up, this one builds big and scales
-# down. Width 3 against axes drawn at 2: present without shouting.
-TRACK_SS = 3
+# ⚠ PIL ANTIALIASES NEITHER LINES NOR ELLIPSES, so the track is drawn large and
+# reduced. Two things about how, both established by measuring rather than by
+# looking, after two wrong attempts:
+#
+# 1. REDUCE AN "L" MASK, NOT RGBA. Resizing RGBA interpolates the colour
+#    channels independently of alpha, so the RGB of the fully transparent pixels
+#    - black - bleeds into every edge pixel. On this page the sky behind the arc
+#    is nearly black, so that was measured to be INVISIBLE here: zero pixels
+#    darker than the local background in any version. It is kept because it is
+#    the correct form and would show plainly over the lunar photo or a DSS2
+#    cutout. _draw_aurora_field resizes hue and alpha separately for this reason.
+#
+# 2. THE FACTOR SETS THE NUMBER OF GRADATIONS, AND IT IS A SQUARE. An exact area
+#    average yields only ss*ss + 1 coverage levels. At 4 that is 17, which
+#    measured COARSER than the LANCZOS attempt it replaced (96) - the right
+#    method producing a banded result. 8 gives 67, past what the panel resolves.
+#    114 ms per draw on the Pi 5, on the data thread, once per refresh.
+#
+# BOX is the exact area average at an integer factor. LANCZOS was NOT rejected
+# for ringing - that was claimed and disproved; it is simply the wrong tool for
+# reducing a coverage mask by a whole number.
+TRACK_SS = 8
 TRACK_WIDTH = 3
 TRACK_DOT_R = 7
 # Room for the dot and the line's half-width at the plot's edges, where a pass
 # rises and sets exactly on the baseline.
 TRACK_PAD = 12
+
+
+def _composite_aa(img, origin, size, colour, paint):
+    """Draw at TRACK_SS scale into a mask, reduce it, and composite in one colour.
+
+    `paint` receives a Draw over the oversized mask and the scale factor. One
+    colour per call because a single mask carries coverage and nothing else -
+    which is the whole point, since only alpha may be interpolated.
+    """
+    w, h = size
+    mask = Image.new("L", (w * TRACK_SS, h * TRACK_SS), 0)
+    paint(ImageDraw.Draw(mask), TRACK_SS)
+    layer = Image.new("RGBA", size, colour)
+    layer.putalpha(mask.resize(size, Image.BOX))
+    img.alpha_composite(layer, origin)
 
 
 def _draw_pass_track(img, track, colour):
@@ -1393,41 +1423,42 @@ def _draw_pass_track(img, track, colour):
     """
     if len(track) < 2:
         return
-    box_w = PAN_X1 - PAN_X0 + 2 * TRACK_PAD
-    box_h = PAN_BASE - PAN_TOP + 2 * TRACK_PAD
-    layer = Image.new("RGBA", (box_w * TRACK_SS, box_h * TRACK_SS), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(layer)
+    size = (PAN_X1 - PAN_X0 + 2 * TRACK_PAD, PAN_BASE - PAN_TOP + 2 * TRACK_PAD)
+    origin = (PAN_X0 - TRACK_PAD, PAN_TOP - TRACK_PAD)
 
-    def point(az, alt):
-        """Plot coordinates on the supersampled layer, relative to its corner."""
+    def point(az, alt, ss):
+        """Plot coordinates on the oversized mask, relative to its corner."""
         x = TRACK_PAD + (az / 360.0) * (PAN_X1 - PAN_X0)
         y = TRACK_PAD + (PAN_BASE - PAN_TOP) * (
             1.0 - min(alt, PAN_ALT_MAX) / PAN_ALT_MAX)
-        return (x * TRACK_SS, y * TRACK_SS)
+        return (x * ss, y * ss)
 
-    run = []
-    for az, alt in track:
-        if run and abs(az - run[-1][0]) > 180.0:
-            if len(run) > 1:
-                ld.line([p[1] for p in run], fill=colour,
-                        width=TRACK_WIDTH * TRACK_SS, joint="curve")
-            run = []
-        run.append((az, point(az, alt)))
-    if len(run) > 1:
-        ld.line([p[1] for p in run], fill=colour,
-                width=TRACK_WIDTH * TRACK_SS, joint="curve")
+    def paint_line(ld, ss):
+        run = []
+        for az, alt in track:
+            if run and abs(az - run[-1][0]) > 180.0:
+                if len(run) > 1:
+                    ld.line([p[1] for p in run], fill=255,
+                            width=TRACK_WIDTH * ss, joint="curve")
+                run = []
+            run.append((az, point(az, alt, ss)))
+        if len(run) > 1:
+            ld.line([p[1] for p in run], fill=255,
+                    width=TRACK_WIDTH * ss, joint="curve")
 
+    def paint_dot(ld, ss):
+        px, py = point(*max(track, key=lambda p: p[1]), ss)
+        r = TRACK_DOT_R * ss
+        ld.ellipse([px - r, py - r, px + r, py + r], fill=255)
+
+    _composite_aa(img, origin, size, colour, paint_line)
     # The culmination, marked but NOT labelled. _draw_panorama's labels avoid
     # each other and know nothing about this track, so a name placed here landed
     # squarely across the descending limb. The heading above the plot already
     # names the object and states the bearing, so a label here would be
-    # duplication that damages the one thing the plot is for.
-    px, py = point(*max(track, key=lambda p: p[1]))
-    r = TRACK_DOT_R * TRACK_SS
-    ld.ellipse([px - r, py - r, px + r, py + r], fill=WHITE)
-
-    img.alpha_composite(layer.resize((box_w, box_h), Image.LANCZOS),
-                        (PAN_X0 - TRACK_PAD, PAN_TOP - TRACK_PAD))
+    # duplication that damages the one thing the plot is for. Composited
+    # separately because it is a different colour from the line.
+    _composite_aa(img, origin, size, WHITE, paint_dot)
 
 
 def _until(when, now):
