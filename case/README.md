@@ -7,8 +7,8 @@ easel stand at a 20° lean, and an optional 40 mm fan.
 The two boards share an outline and a mounting pattern, so only the port
 openings differ. Print the files for the chosen board — see
 [Choosing the board variant](#choosing-the-board-variant), and read it before
-committing to a Pi 5: **the Pi 5 variant has not been built on hardware**, and
-its display ribbon routing is genuinely different.
+committing to a Pi 5: its display ribbon routing is genuinely different and
+needs a part the panel does not come with.
 
 ## Credits and licence
 
@@ -157,9 +157,17 @@ python case_bottom.py pi5 && python case_top.py pi5
 
 ### Read this before choosing a Pi 5
 
-**Not built on hardware.** The Pi 4 case is assembled and in service; the Pi 5
-variant is derived from the board model and checked in software only. Feedback
-welcome.
+**Built and fitted, with one revision since.** Both Pi 5 parts have been
+printed and confirmed to fit the board. That build found a single fault — the
+USB3 aperture was cut 1.32 mm taller than the USB2 one beside it, from an error
+in the reference mesh rather than in these scripts — which is corrected in the
+current `case_top`. The corrected window has not itself been fitted yet, so a
+fresh print gets geometry that is right on the measurements but one test fit
+behind the rest of the case. Everything else about the Pi 5 pair is validated on
+hardware. Feedback welcome.
+
+The Pi 4 case is assembled and in daily service, and is the more travelled of
+the two.
 
 **The display ribbon does not route the same way.** On the Pi 4 the DSI socket
 is on the short edge nearest the display's own FPC, so the ribbon rises through

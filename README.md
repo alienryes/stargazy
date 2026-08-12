@@ -326,7 +326,7 @@ The rotation differs because the framebuffer holds the image in the panel's orie
 
 ## 🧰 Case
 
-A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](case/README.md) — four parametric CadQuery parts (shell, Pi clamshell, twin bolt-on stands at a 20° lean, optional 40 mm fan). A Pi 5 variant of the two clamshell parts is also generated, though it has not been built on hardware and its display ribbon routes differently. It's a **CC BY remix of [RonnyS's Touch Display 2 case](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)**, which targets the 7" panel; this one is re-drawn for the 5". See [`case/README.md`](case/README.md) for print settings, hardware and assembly.
+A free 3D-printable case for the 5" Touch Display 2 + Pi 4 lives in [`case/`](case/README.md) — four parametric CadQuery parts (shell, Pi clamshell, twin bolt-on stands at a 20° lean, optional 40 mm fan). A Pi 5 variant of the two clamshell parts is also generated, built and fitted, though its display ribbon routes differently and needs an adapter cable. It's a **CC BY remix of [RonnyS's Touch Display 2 case](https://www.printables.com/model/1377047-raspberry-pi-touch-display-2-case)**, which targets the 7" panel; this one is re-drawn for the 5". See [`case/README.md`](case/README.md) for print settings, hardware and assembly.
 
 **This is for the 5" build only.** The 10.1" panel mounts and cools its Pi perfectly well with the board left open — see the note under Requirements.
 
@@ -443,7 +443,7 @@ Bug reports, questions and build photos are all welcome via [Issues](https://git
 
 Two areas where reports are especially useful, because they cannot be verified here:
 
-- **The Pi 5 case variant has never been built on hardware.** It is derived from the board model and checked in software only, and its display ribbon routes differently — see [`case/README.md`](case/README.md) before committing to a print.
+- **The Pi 5 case lid's corrected USB3 window has not been test-fitted.** The Pi 5 pair is otherwise built and fitted; one aperture was cut too tall by a fault in the reference board mesh, and the correction is in the current `case_top` but has not itself been on a board — see [`case/README.md`](case/README.md).
 - **Other latitudes.** The reference build sits at 51°N. The targets page caps its altitude axis at 70° because nothing near the ecliptic rises higher from there; much further south that will clip real objects, and `PAN_ALT_MAX` in `display.py` is the value to raise.
 
 ---
