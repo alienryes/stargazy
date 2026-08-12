@@ -79,7 +79,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.38.0"
+VERSION = "0.39.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -941,23 +941,24 @@ def render_meteors(states, lat, lon):
                   f"~{rate:.0f}/hr", font=f["med"],
                   fill=WHITE if rate >= 1 else DIM)
         # The two figures on this row differ by a factor nothing named, which
-        # read as a contradiction: 150 beside 100 with no stated link. The
-        # surviving fraction is quoted rather than the altitude that usually
-        # dominates it, because it is the ONE statement that stays true whichever
-        # term is doing the cutting - naming a single cause would be right on a
-        # clear night and wrong under cloud, which is the same class of error as
-        # the peaking label it sits next to.
+        # read as a contradiction: 150 beside 100 with no stated link. "overhead"
+        # is the link, because the radiant's altitude is what almost always
+        # accounts for the gap, and the line above this one has already printed
+        # it. Quoting the surviving fraction instead was tried and did not help:
+        # it stated the SIZE of the gap without naming its cause, which leaves
+        # the reader exactly where they started. The foot of the page carries the
+        # definition in full.
         #
         # KEEP THIS STRING SHORT. It is right-aligned and the rate figure is
         # drawn from a fixed x, so every character eats leftward into it. The
         # widest the page can print is the rate at the zenith, which leaves
         # 288px here in Plex at this size; "ZHR 150 at peak - 67% of it tonight"
-        # wanted 492 and overlapped the rate on the panel. Measure any
-        # replacement ON the Pi: core.fonts resolves two Linux paths and
-        # otherwise silently returns Pillow's default bitmap face, which is
-        # narrow enough to report a comfortable fit for a string that collides.
-        kept = rate / s["zhr"] if s["zhr"] else 0.0
-        _right(draw, f"{kept:.0%} of ZHR {s['zhr']}", by + 8, DIM, f["xs"])
+        # wanted 492 and overlapped the rate on the panel, and even
+        # "ZHR 150 at the zenith" misses at 293. Measure any replacement ON the
+        # Pi: core.fonts resolves two Linux paths and otherwise silently returns
+        # Pillow's default bitmap face, which is narrow enough to report a
+        # comfortable fit for a string that collides.
+        _right(draw, f"ZHR {s['zhr']} overhead", by + 8, DIM, f["xs"])
         y += MET_GAP
 
     # Anchored to the bottom rather than flowing after the last shower: the
@@ -1013,6 +1014,13 @@ def render_meteors(states, lat, lon):
                       f"Next peak: {nxt[0]} in {_days(nxt[1])}",
                       font=f["sm"], fill=MUTED)
 
+    # Both notes explain what is being read rather than reporting anything, so
+    # they sit together at the foot. ZHR is the page's one piece of jargon and
+    # the only figure on it that is not an observation: saying so once here
+    # carries every row, where the rows themselves have about two words of space.
+    draw.text((MARGIN, H - 88),
+              "ZHR assumes an overhead radiant and a perfect sky",
+              font=f["xs"], fill=DIM)
     draw.text((MARGIN, H - 44),
               "Shower elements are orbital constants, stored by solar longitude",
               font=f["xs"], fill=DIM)
