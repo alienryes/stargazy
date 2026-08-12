@@ -79,7 +79,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.37.1"
+VERSION = "0.38.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -981,9 +981,10 @@ def render_meteors(states, lat, lon):
     # rather than a compromise, since a distant peak is only worth printing when
     # there is nothing nearer to say.
     n_up = max(0, min(10, int((room - MET_UP_HEAD) // MET_UP_ROW)))
+    shown = {s["name"] for s in showers[:4]}
+    soon = ()
     if n_up:
-        soon = upcoming(utc, exclude={s["name"] for s in showers[:4]},
-                        within_days=365, limit=n_up)
+        soon = upcoming(utc, exclude=shown, within_days=365, limit=n_up)
         if soon:
             uy = used + MET_UP_PAD
             draw.text((MARGIN, uy), "COMING UP",
@@ -1001,11 +1002,16 @@ def render_meteors(states, lat, lon):
     spor = visible_rate(SPORADIC_ZHR, 1.0, 45.0, cloud, moon_illum)
     draw.text((MARGIN, sy), f"Sporadic background   ~{spor:.0f}/hr",
               font=f["sm"], fill=MUTED)
-    nxt = next_shower(utc)
-    if nxt:
-        draw.text((MARGIN, sy + 56),
-                  f"Next peak: {nxt[0]} in {_days(nxt[1])}",
-                  font=f["sm"], fill=MUTED)
+    # The fallback for a page with no room for COMING UP, not a second copy of
+    # it: when that list rendered, its first row IS the next peak, and printing
+    # the same shower again in a different format is the duplication upcoming()
+    # already excludes actives to avoid.
+    if not soon:
+        nxt = next_shower(utc, exclude=shown)
+        if nxt:
+            draw.text((MARGIN, sy + 56),
+                      f"Next peak: {nxt[0]} in {_days(nxt[1])}",
+                      font=f["sm"], fill=MUTED)
 
     draw.text((MARGIN, H - 44),
               "Shower elements are orbital constants, stored by solar longitude",

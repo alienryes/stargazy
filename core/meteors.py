@@ -203,15 +203,24 @@ def upcoming(when, exclude=(), within_days=200, limit=5):
     return sorted(out, key=lambda r: r[1])[:limit]
 
 
-def next_shower(when, within_days=120):
+def next_shower(when, exclude=(), within_days=120):
     """(name, days away) for the next shower peak, or None.
 
     Uses solar longitude for the search and converts to days only at the end,
     which is the only place a calendar belongs.
+
+    `exclude` carries the same meaning as in upcoming(), and for the same
+    reason: a shower can be running AND have its peak ahead of it, so without
+    it this reported "next peak: Perseids in 2 hours" directly beneath a
+    Perseid row reading "peaking now". Both statements were true and the pair
+    was a contradiction. upcoming() had the argument from the start; this
+    function was written alongside it and did not.
     """
     lam = solar_longitude(when)
     best = None
     for name, peak, *_ in SHOWERS:
+        if name in exclude:
+            continue
         ahead = (peak - lam) % 360.0
         if best is None or ahead < best[1]:
             best = (name, ahead)
