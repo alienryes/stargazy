@@ -21,21 +21,21 @@ the README before choosing it.
 PETG, 0.2 mm layer, 3 walls, 20 % infill, **no supports** — every part is
 oriented so nothing overhangs beyond 45°.
 
-| File | Qty | Size (mm) | Orientation | ~Mass |
-|---|---|---|---|---|
-| `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | back plate **down** | 58 g |
-| `case_bottom_pi4.stl` *or* `case_bottom_pi5.stl` | 1 | 126 × 76 × 13.5 | plate **flat**, wall up | 23 g |
-| `case_top_pi4.stl` *or* `case_top_pi5.stl` | 1 | 95 × 71 × 19.9 | outer face **down** (as exported) | **27.6 g** |
-| `stand_<angle>_usb.stl` | 1 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 11 g |
-| `stand_<angle>_dsi.stl` | 1 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 11 g |
+| File | Qty | Size (mm) | Orientation | Mass | Time |
+|---|---|---|---|---|---|
+| `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | back plate **down** | 49.1 g | 1 h 54 min |
+| `case_bottom_pi4.stl` *or* `case_bottom_pi5.stl` | 1 | 126 × 76 × 13.5 | plate **flat**, wall up | 17.5 g | 48 min |
+| `case_top_pi4.stl` *or* `case_top_pi5.stl` | 1 | 95 × 71 × 19.9 | outer face **down** (as exported) | 27.6 g | 1 h 23 min |
+| `stand_<angle>_usb.stl` | 1 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 6.5 g | 20 min |
+| `stand_<angle>_dsi.stl` | 1 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 6.5 g | 20 min |
 
-Only `case_top` has been sliced and weighed — **27.6 g in PETG, 1 h 23 min** at
-the settings above. The other three masses are estimates from model volume and
-run high: the same estimate for the lid was 36 g, about 30 % over. They are not
-corrected by that ratio, because the proportion of sparse infill depends on the
-part's size, so a figure taken from one part does not transfer to another.
+**Around 107 g of PETG and 4 h 45 min in total**, printing each part
+separately.
 
-Total filament is therefore around **130 g**, and likely less.
+Every figure above is from PrusaSlicer at the settings in this section, for an
+**unmodified Prusa Core One**. Both are machine- and profile-dependent — times
+especially, which will not transfer to a different printer. The masses were
+taken on the Pi 5 pair; the Pi 4 pair differs only in the port windows.
 
 The stands are handed: `_usb` goes on the USB/Ethernet side, `_dsi` on the
 ribbon side. They are mirror images and cannot substitute for one another.
