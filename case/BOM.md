@@ -26,11 +26,10 @@ oriented so nothing overhangs beyond 45°.
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | back plate **down** | 49.1 g | 1 h 54 min |
 | `case_bottom_pi4.stl` *or* `case_bottom_pi5.stl` | 1 | 126 × 76 × 13.5 | plate **flat**, wall up | 17.5 g | 48 min |
 | `case_top_pi4.stl` *or* `case_top_pi5.stl` | 1 | 95 × 71 × 19.9 | outer face **down** (as exported) | 27.6 g | 1 h 23 min |
-| `stand_<angle>_usb.stl` | 1 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 6.5 g | 20 min |
-| `stand_<angle>_dsi.stl` | 1 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 6.5 g | 20 min |
+| `stand_<angle>_usb.stl` + `stand_<angle>_dsi.stl` | 2 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 6.5 g each | 41 min for the pair |
 
-**Around 107 g of PETG and 4 h 45 min in total**, printing each part
-separately.
+**Around 107 g of PETG and 4 h 46 min in total**, printing the stands together
+and the other three parts separately.
 
 Every figure above is from PrusaSlicer at the settings in this section, for an
 **unmodified Prusa Core One**. Both are machine- and profile-dependent — times
