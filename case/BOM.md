@@ -25,12 +25,17 @@ oriented so nothing overhangs beyond 45°.
 |---|---|---|---|---|
 | `shell.stl` | 1 | 149.4 × 97.5 × 18.9 | back plate **down** | 58 g |
 | `case_bottom_pi4.stl` *or* `case_bottom_pi5.stl` | 1 | 126 × 76 × 13.5 | plate **flat**, wall up | 23 g |
-| `case_top_pi4.stl` *or* `case_top_pi5.stl` | 1 | 95 × 71 × 19.9 | outer face **down** (as exported) | 36 g |
+| `case_top_pi4.stl` *or* `case_top_pi5.stl` | 1 | 95 × 71 × 19.9 | outer face **down** (as exported) | **27.6 g** |
 | `stand_<angle>_usb.stl` | 1 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 11 g |
 | `stand_<angle>_dsi.stl` | 1 | 105.4 × 42.3 × 14.0 at 20° | **flat** on the profile | 11 g |
 
-Total filament approximately **139 g**. The masses are estimates from model
-volume and will vary with slicer settings.
+Only `case_top` has been sliced and weighed — **27.6 g in PETG, 1 h 23 min** at
+the settings above. The other three masses are estimates from model volume and
+run high: the same estimate for the lid was 36 g, about 30 % over. They are not
+corrected by that ratio, because the proportion of sparse infill depends on the
+part's size, so a figure taken from one part does not transfer to another.
+
+Total filament is therefore around **130 g**, and likely less.
 
 The stands are handed: `_usb` goes on the USB/Ethernet side, `_dsi` on the
 ribbon side. They are mirror images and cannot substitute for one another.
