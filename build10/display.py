@@ -79,7 +79,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.36.0"
+VERSION = "0.37.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -940,7 +940,16 @@ def render_meteors(states, lat, lon):
         draw.text((MARGIN + MET_BAR_W + 20, by - 4),
                   f"~{rate:.0f}/hr", font=f["med"],
                   fill=WHITE if rate >= 1 else DIM)
-        _right(draw, f"ZHR {s['zhr']} at peak", by + 8, DIM, f["xs"])
+        # The two figures on this row differ by a factor nothing named, which
+        # read as a contradiction: 150 beside 100 with no stated link. The
+        # surviving fraction is quoted rather than the altitude that usually
+        # dominates it, because it is the ONE statement that stays true whichever
+        # term is doing the cutting - naming a single cause would be right on a
+        # clear night and wrong under cloud, which is the same class of error as
+        # the peaking label it sits next to.
+        kept = rate / s["zhr"] if s["zhr"] else 0.0
+        _right(draw, f"ZHR {s['zhr']} at peak · {kept:.0%} of it tonight",
+               by + 8, DIM, f["xs"])
         y += MET_GAP
 
     # Anchored to the bottom rather than flowing after the last shower: the
