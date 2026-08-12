@@ -101,6 +101,24 @@ SPORADIC_ZHR = 8
 # because they are still falling and the animated sky is still entitled to them.
 NAMED_SHOWER_FLOOR = 0.25 * SPORADIC_ZHR
 
+# Above this fraction of its own peak rate, a shower is described as peaking.
+#
+# WHY A RATE AND NOT A NUMBER OF DAYS. The obvious test is "within half a degree
+# of maximum", and that was the original one. It is wrong because it measures
+# time while the label makes a claim about the rate printed beside it, and the
+# two are related by B, which spans a factor of 70 across this table. At half a
+# degree the Taurids still hold 97% of their peak and the Quadrantids 13%, so
+# one window announced a shower at its best and another at an eighth of it.
+#
+# Measured against strength the window derives itself: about 5.6 hours either
+# side for the Perseids, 0.6 for the Quadrantids, 43 for the Taurids. A shower
+# that genuinely sustains its rate for two days is peaking for two days.
+#
+# The case that set the value: on 2026-08-12, the Perseid peak, the page read
+# "peaking now" beside ~100/hr under a headline ZHR of 150, which looks like a
+# contradiction and was not - the shower was at 73% and climbing.
+PEAKING_STRENGTH = 0.9
+
 
 def solar_longitude(when):
     """The Earth's angular position in its orbit, in degrees."""

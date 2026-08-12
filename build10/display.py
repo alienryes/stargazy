@@ -31,6 +31,7 @@ from core.fonts import font
 from core.imagery import moon_image, paste_moon
 from core.meteors import (
     NAMED_SHOWER_FLOOR,
+    PEAKING_STRENGTH,
     SPORADIC_ZHR,
     active,
     next_shower,
@@ -78,7 +79,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.35.0"
+VERSION = "0.36.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -264,9 +265,18 @@ def _days(n):
     peak 1.4 days away reads "1 day" and not "1 days". Every day figure on this
     page went through `:.0f`, which meant the singular case was wrong on
     precisely the day the page matters most - the day before a shower peak.
+
+    Under half a day it switches to hours. Days alone were enough while nothing
+    could be reported closer to its peak than half a degree of solar longitude,
+    which is about twelve hours; measuring that window by rate instead admits
+    distances far shorter than a day for the sharply peaked showers, and the
+    rounding would otherwise render them as "0 days".
     """
-    n = round(n)
-    return f"{n} day" if n == 1 else f"{n} days"
+    n_days = round(n)
+    if n_days == 0:
+        hours = max(1, round(n * 24))
+        return f"{hours} hour" if hours == 1 else f"{hours} hours"
+    return f"{n_days} day" if n_days == 1 else f"{n_days} days"
 
 
 def _right(draw, text, y, fill, f):
@@ -888,14 +898,18 @@ def render_meteors(states, lat, lon):
 
         draw.text((MARGIN, y), s["name"], font=f["lg"], fill=WHITE if up else DIM)
         # The peak is the actionable number when a shower is still building.
-        # Both sides are quoted in days. Solar longitude is how the table is
-        # stored and searched, but it is not a unit anyone observes in, so it
-        # is converted here rather than leaking into one branch of the label:
-        # past the peak the next crossing is nearly a full orbit away, so the
-        # forward distance is useless and the elapsed distance is the answer.
+        # Both sides are quoted in elapsed time. Solar longitude is how the
+        # table is stored and searched, but it is not a unit anyone observes
+        # in, so it is converted here rather than leaking into one branch of
+        # the label: past the peak the next crossing is nearly a full orbit
+        # away, so the forward distance is useless and the elapsed distance is
+        # the answer.
+        #
+        # Whether the shower is AT its peak is a separate question, and asking
+        # it of the distance was the bug: see PEAKING_STRENGTH.
         days_to = (s["peak_lambda"] - lam) % 360.0 / 0.9856
         days_since = s["delta_lambda"] / 0.9856
-        peak_note = ("peaking now" if s["delta_lambda"] < 0.5
+        peak_note = ("peaking now" if s["strength"] >= PEAKING_STRENGTH
                      else f"{_days(days_to)} before peak" if days_to < 180
                      else f"{_days(days_since)} past peak")
         _right(draw, peak_note, y + 14, MUTED, f["sm"])
