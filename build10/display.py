@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.45.0"
+VERSION = "0.46.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1612,8 +1612,21 @@ SOL_ECLIPSE_BAND_HOURS = 24.0
 # at that pitch the disc's two caption lines ran into the footer block with no
 # gap between them - so the pitch pays for the row rather than the page losing
 # the separation that tells a reader where one block ends.
-SOL_Y0, SOL_ROW_H, SOL_VALUE_DY = 420, 120, 58
-SOL_BAND_ROWS_Y = 780
+SOL_ROW_H, SOL_VALUE_DY = 120, 58
+
+# ⇒ THE GRAPHIC GOES ABOVE THE DETAIL, WHICH IS WHAT EVERY OTHER PAGE DOES. The
+# Moon disc is centred at MOON_CY and its facts sit under it; the aurora field
+# and the satellite track are drawn over the top half with their text blocks
+# starting at 900. This page shipped inverted - four rows of text and then a
+# disc below them - and was the only one that read that way.
+#
+# The preferred centre is MOON_CY itself, so the Sun lands where the Moon lands
+# and the two cards agree at a glance. It moves DOWN only when the header block
+# above it needs the room, which is the eclipse state.
+SOL_DISC_CY = MOON_CY
+SOL_HEAD_BOTTOM = 340       # bottom of the verdict block, ordinary state
+SOL_BAND_BOTTOM = 740       # bottom of the eclipse band, including its rule
+SOL_ROWS_GAP = 70           # caption bottom -> first row label
 
 # ⇒ THE SAME RADIUS AS THE MOON CARD, AND THAT IS NOT A MATTER OF TASTE. The Sun
 # and the Moon subtend almost exactly the same half-degree from Earth - the
@@ -1629,7 +1642,7 @@ SOL_BAND_ROWS_Y = 780
 # SOL_SPOT_SCALE below is an exaggeration factor, not a measurement, and applies
 # only to the drawn fallback: at true scale a 120-millionths group is about
 # 3 px across here. The photograph needs none of it.
-SOL_DISC_R, SOL_DISC_BOTTOM = 300, 1400
+SOL_DISC_R = 300
 SOL_SPOT_MIN, SOL_SPOT_MAX, SOL_SPOT_SCALE = 9, 30, 6.0
 
 
@@ -1712,7 +1725,7 @@ def _draw_eclipse_band(draw, eclipse, now, f):
               "solar filter at every stage of a partial eclipse.",
               font=f["sm"], fill=WHITE)
     draw.line([(MARGIN, 700), (W - MARGIN, 700)], fill=DIM, width=2)
-    return SOL_BAND_ROWS_Y
+    return SOL_BAND_BOTTOM
 
 
 def _draw_activity_head(draw, data, f):
@@ -1734,7 +1747,7 @@ def _draw_activity_head(draw, data, f):
     else:
         draw.text((MARGIN, 290), "No flare measurement is available.",
                   font=f["sm"], fill=MUTED)
-    return SOL_Y0
+    return SOL_HEAD_BOTTOM
 
 
 def _solar_rows(data, compact):
@@ -1847,6 +1860,7 @@ def _draw_solar_photo(img, draw, photo, observed, y, f):
               f"SDO/HMI white light, {observed:%H:%M} UTC. Colour is SDO's own; "
               f"the dark marks are sunspots.",
               font=f["fn"], fill=DIM)
+    return y + r + 80
 
 
 def _draw_solar_disc(draw, groups, y, f, now=None):
@@ -1913,6 +1927,7 @@ def _draw_solar_disc(draw, groups, y, f, now=None):
     draw.text((MARGIN, y + r + 84),
               "Marks are enlarged to be visible; real spots are far smaller.",
               font=f["fn"], fill=DIM)
+    return y + r + 124
 
 
 def render_solar(states, lat, lon, now=None):
@@ -1958,6 +1973,21 @@ def render_solar(states, lat, lon, now=None):
     y = (_draw_eclipse_band(draw, eclipse, now, f) if imminent
          else _draw_activity_head(draw, data, f))
 
+    # ⇒ DISC FIRST, ROWS UNDER IT - the order every other page uses, and the one
+    # this page shipped inverted. The photograph is preferred and the drawing is
+    # the fallback, because the frame carries no position lag and the drawn
+    # marks do. Each returns the y below its own caption, so the rows are placed
+    # from what was actually drawn rather than from a constant that has to be
+    # kept in step with it.
+    groups = (data.get("regions") or {}).get("groups") or []
+    photo, observed = sun_image()
+    if photo is not None or groups:
+        cy = max(SOL_DISC_CY, y + SOL_DISC_R)
+        y = (_draw_solar_photo(img, draw, photo, observed, cy, f)
+             if photo is not None
+             else _draw_solar_disc(draw, groups, cy, f, now=now))
+        y += SOL_ROWS_GAP
+
     for label, value in _solar_rows(data, compact=imminent):
         draw.text((MARGIN, y), label, font=f["med"], fill=WHITE)
         draw.text((MARGIN, y + SOL_VALUE_DY), value, font=f["sm"], fill=MUTED)
@@ -1966,19 +1996,6 @@ def render_solar(states, lat, lon, now=None):
     if not data:
         draw.text((MARGIN, y), "Solar activity data is unavailable.",
                   font=f["sm"], fill=MUTED)
-    # The disc is centred in whatever is left below the rows rather than pinned,
-    # because the two states end their rows 250 px apart - a fixed centre either
-    # leaves a gap in one or puts the disc under the last row in the other.
-    # The photograph is preferred and the drawing is the fallback, not the other
-    # way round: the frame carries no position lag, and the drawn marks do.
-    groups = (data.get("regions") or {}).get("groups") or []
-    photo, observed = sun_image()
-    if photo is not None or groups:
-        cy = max(y + SOL_DISC_R + 40, (y + SOL_DISC_BOTTOM) // 2)
-        if photo is not None:
-            _draw_solar_photo(img, draw, photo, observed, cy, f)
-        else:
-            _draw_solar_disc(draw, groups, cy, f, now=now)
     # Credited only when the frame was actually used. Left unconditional, the
     # page would attribute a disc it had drawn itself to SDO, on precisely the
     # occasions SDO could not be reached.
