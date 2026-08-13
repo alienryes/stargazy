@@ -28,7 +28,7 @@ from core.aurora import FIELD_ALT_BINS, FIELD_AZ_BINS, compass
 from core.aurora import visible_now as aurora_now
 from core.daemon import Paged, flatten, install_signal_handlers, run_daemon
 from core.fonts import font
-from core.imagery import moon_image, paste_moon
+from core.imagery import moon_image, paste_moon, paste_sun, sun_image
 from core.meteors import (
     NAMED_SHOWER_FLOOR,
     PEAKING_STRENGTH,
@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.41.0"
+VERSION = "0.42.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1606,7 +1606,7 @@ SOL_BAND_ROWS_Y = 780
 
 # The disc, and the marks on it. SOL_SPOT_SCALE is an exaggeration factor, not a
 # measurement: at true scale a 120-millionths group is about 3 px across here.
-SOL_DISC_R, SOL_DISC_BOTTOM = 250, 1400
+SOL_DISC_R, SOL_DISC_BOTTOM = 290, 1400
 SOL_SPOT_MIN, SOL_SPOT_MAX, SOL_SPOT_SCALE = 9, 30, 6.0
 
 
@@ -1758,16 +1758,40 @@ def _solar_rows(data, compact):
     return rows
 
 
-def _draw_solar_disc(draw, groups, y, f, now=None):
-    """The Sun's disc with today's spot groups on it, at their real positions.
+def _draw_solar_photo(img, draw, photo, observed, y, f):
+    """The photographed disc, which is the preferred drawing and the honest one.
 
-    ⇒ THE POSITIONS ARE REAL AND THE MARK SIZES ARE NOT, which is the same
-    bargain the Moon card makes and it is stated on the page for the same
-    reason. A group of 120 millionths of the hemisphere is about 3 px across at
-    this radius - a real sunspot disc is nearly empty at true scale - so the
-    marks are floored at a legible size. Enlarging the mark keeps the count and
-    the placement honest while making them visible; drawing them true to scale
-    would show an empty circle and assert that nothing was there.
+    ⇒ A PHOTOGRAPH HAS NO POSITION LAG, AND THE DRAWN DISC DID. Marks plotted
+    from SWPC's regional report sat consistently east of the real spots, because
+    that report is a daily snapshot while rotation carries a group about 13.2
+    degrees a day. The frame shows the spots where they were at its own
+    timestamp, so there is no rotation arithmetic to get wrong and no enlarged
+    mark to apologise for - the spots are simply in the picture, at their real
+    size.
+    """
+    cx, r = W // 2, SOL_DISC_R
+    paste_sun(img, photo, cx, y, r)
+    draw.text((MARGIN, y + r + 40),
+              f"SDO/HMI white light, {observed:%H:%M} UTC. Dark patches are the "
+              f"spot groups.",
+              font=f["xs"], fill=DIM)
+
+
+def _draw_solar_disc(draw, groups, y, f, now=None):
+    """The Sun's disc drawn, for when no photograph could be fetched.
+
+    ⚠ THE POSITIONS BEHIND THIS ARE UP TO A DAY STALE and it is the reason the
+    photograph is preferred. SWPC's regional report is a daily snapshot, and
+    solar rotation carries a group about 13.2 degrees a day - measured against
+    an SDO frame, every mark sat east of its real spot by roughly the report's
+    age. Nothing here corrects for that: this path exists so the page still
+    shows the disc when the network is down, and at that point stating roughly
+    where the groups were is better than an empty page. The caption says the
+    positions are as reported rather than as they now are.
+
+    ⇒ THE MARK SIZES ARE NOT REAL EITHER. A group of 120 millionths of the
+    hemisphere is about 3 px across at this radius, so the marks are floored at
+    a legible size - the same bargain the Moon card makes, stated on the page.
 
     Far-side positions are dropped rather than folded onto the visible half. A
     region that has rotated over the west limb is genuinely not in view, and the
@@ -1811,8 +1835,8 @@ def _draw_solar_disc(draw, groups, y, f, now=None):
         drawn += 1
 
     draw.text((MARGIN, y + r + 40),
-              f"{drawn} spot group{'' if drawn == 1 else 's'} in view, at their "
-              f"measured positions.",
+              f"{drawn} spot group{'' if drawn == 1 else 's'}, as last reported "
+              f"rather than as they now are.",
               font=f["xs"], fill=DIM)
     draw.text((MARGIN, y + r + 84),
               "Marks are enlarged to be visible; real spots are far smaller.",
@@ -1873,10 +1897,22 @@ def render_solar(states, lat, lon, now=None):
     # The disc is centred in whatever is left below the rows rather than pinned,
     # because the two states end their rows 250 px apart - a fixed centre either
     # leaves a gap in one or puts the disc under the last row in the other.
+    # The photograph is preferred and the drawing is the fallback, not the other
+    # way round: the frame carries no position lag, and the drawn marks do.
     groups = (data.get("regions") or {}).get("groups") or []
-    if groups:
+    photo, observed = sun_image()
+    if photo is not None or groups:
         cy = max(y + SOL_DISC_R + 40, (y + SOL_DISC_BOTTOM) // 2)
-        _draw_solar_disc(draw, groups, cy, f, now=now)
+        if photo is not None:
+            _draw_solar_photo(img, draw, photo, observed, cy, f)
+        else:
+            _draw_solar_disc(draw, groups, cy, f, now=now)
+    # Credited only when the frame was actually used. Left unconditional, the
+    # page would attribute a disc it had drawn itself to SDO, on precisely the
+    # occasions SDO could not be reached.
+    credit = ("CME arrival: NASA DONKI via CCMC  ·  disc: NASA SDO/HMI"
+              if photo is not None else
+              "CME arrival: NASA DONKI model runs, served by CCMC")
 
     # The eclipse line stays in the footer whenever the band is not up, however
     # far off the event is. It is the rarest thing this panel shows and the one
@@ -1897,9 +1933,7 @@ def render_solar(states, lat, lon, now=None):
     draw.text((MARGIN, H - 100),
               "Spots, flares and radio flux: NOAA Space Weather Prediction Centre",
               font=f["xs"], fill=DIM)
-    draw.text((MARGIN, H - 44),
-              "CME arrival: NASA DONKI model runs, served by CCMC",
-              font=f["xs"], fill=DIM)
+    draw.text((MARGIN, H - 44), credit, font=f["xs"], fill=DIM)
     return img
 
 

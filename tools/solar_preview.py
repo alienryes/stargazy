@@ -143,6 +143,20 @@ if cme:
 else:
     print("  08_cme_inbound          -> no historical CME found to render")
 
+# 9. The disc, both ways. The photographic path is what ships; the drawn one is
+#    reached only when SDO cannot be fetched, which is exactly the state nobody
+#    looks at until it happens.
+save("09_disc_photo", display.render_solar({}, LAT, LON, now=now))
+real_sun = display.sun_image
+display.sun_image = lambda: (None, None)
+save("10_disc_drawn_fallback", display.render_solar({}, LAT, LON, now=now))
+display.sun_image = real_sun
+photo, observed = display.sun_image()
+print(f"     SDO frame: {'fetched' if photo is not None else 'UNAVAILABLE'}"
+      + (f", observed {observed:%Y-%m-%d %H:%M %Z}, "
+         f"{(datetime.now(timezone.utc) - observed).total_seconds() / 3600:.1f} h old"
+         if photo is not None else ""))
+
 # ⇒ EVERY STRING THE PAGE DRAWS, NOT A LIST WRITTEN BY HAND. The first pass
 # measured the band lines and the rows and passed, while the line that actually
 # ran off the edge - the sentence under the verdict - was not in the list,

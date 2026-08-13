@@ -157,13 +157,17 @@ Source: NOAA SWPC's OVATION model. No key, no registration.
 
 Every other conditional page here exists only after dark, because aurora and meteors are conditions of the night sky. This one inverts that: it appears **whenever the Sun is above the horizon**, and fills the hours when the rest of the panel has least to say.
 
-![The solar page on a quiet day: the word QUIET over the day's strongest flare, rows for sunspots, flare odds and radio flux, and the solar disc below with six spot groups marked at their measured positions either side of a tilted equator.](screenshots/10in-solar.png)
+![The solar page on a quiet day: the word QUIET over the day's strongest flare, rows for sunspots, flare odds and radio flux, and below them a photograph of the Sun's disc in white light with its spot groups visible as small dark marks.](screenshots/10in-solar.png)
 
 > **An ordinary quiet day, 13 August 2026** — captured off the panel. Six spot groups, nothing above a B-class flare, and no CME modelled to arrive.
 
 It is also the only page here that is **always present rather than gated on something happening**. That is a deliberate departure from the rule the other pages follow, and what makes it honest is that the subject really is always there: a quiet Sun is a fact about today, not an empty page.
 
-**The disc is drawn from measured positions.** Each spot group's heliographic latitude and longitude comes from SWPC's regional reports, projected orthographically and tilted by the season — the Sun's axis leans up to 7.25° either way through the year, so the equator bows above or below centre and the disc reads as a sphere rather than a circle. Groups that have rotated onto the far side are dropped rather than folded back onto the wrong limb, and solar west is to the right, as in every published solar image. **The positions are real and the mark sizes are not**: a group covering a hundred-millionth of the visible hemisphere is a few pixels across, so the marks are enlarged to be visible and the page says so.
+**The disc is a photograph.** SDO's HMI continuum frame — the white-light view, which is the one with the sunspots actually in it — composited the same way the Moon card composites its Dial-a-Moon frame, on the same black field with the same circular mask. The mask is doing real work here: it removes the caption strip SDO prints along the bottom of every frame.
+
+That replaced a drawn disc, and fixed it. The drawing plotted each group from SWPC's regional report, and overlaying those computed positions on an SDO frame showed **every mark sitting east of its real spot by about the same amount** — because the report is a *daily* snapshot while solar rotation carries a group roughly 13.2° a day, up to 110 px at this scale by the time the next one is issued. The projection was correct; its input was stale, and only a photograph could have shown that. A frame has no such lag: it shows the spots where they were at its own timestamp, which the page prints.
+
+The drawn disc survives as the fallback for when SDO cannot be reached — orthographic, tilted by the season (the Sun's axis leans up to 7.25° either way through the year, so the equator bows off centre and the disc reads as a sphere), far-side groups dropped rather than folded onto the wrong limb, and solar west to the right as in every published solar image. In that state the marks are enlarged to be visible and the caption says the positions are as last reported rather than as they now are.
 
 **An eclipse takes the top of the page** when one is within a day, with a countdown, and is stated as a single line at the foot however far off it is otherwise — the rarest thing this panel shows is worth knowing about in advance. From southern England expect roughly one visible partial a year and none at all in some years; the next is 2 August 2027.
 
@@ -173,7 +177,7 @@ It is also the only page here that is **always present rather than gated on some
 
 **Nothing on the page is phrased as an instruction to look at the Sun**, and the filter warning is attached to the coverage figures rather than left as a footnote, because that is the number somebody acts on.
 
-Sources: NOAA SWPC for spots, flares and radio flux; NASA's DONKI model runs served by CCMC for a coronal mass ejection's predicted arrival and Kp. Both keyless, neither requiring registration.
+Sources: NOAA SWPC for spots, flares and radio flux; NASA's DONKI model runs served by CCMC for a coronal mass ejection's predicted arrival and Kp; NASA SDO/HMI for the disc. All keyless, none requiring registration.
 
 ## 👆 Touch controls
 
