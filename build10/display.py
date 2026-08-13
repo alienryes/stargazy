@@ -66,6 +66,8 @@ from core.positions import alt_az, next_rise, observer, plot_instant
 from core.satellites import elements_age, passes
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
+from core.solar import activity as solar_activity
+from core.solar import next_eclipse, project_spot, solar_b0, sun_up
 from core.starfield import (
     SIZE_BANDS_SPARSE_10,
     SPARSE_BRIGHT,
@@ -80,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.40.2"
+VERSION = "0.41.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1582,6 +1584,325 @@ def render_satellites(states, lat, lon):
     return img
 
 
+# ── Page 6: the Sun ───────────────────────────────────────────────────────
+# ⇒ THE FIRST PAGE GATED ON DAYLIGHT. Every other conditional page here exists
+# only while it is dark, because aurora and meteors are conditions of the night
+# sky and a page about either is worthless at noon. The Sun inverts that
+# exactly, and it fills the hours in which the rest of the panel has least to
+# say - so this is a departure from the "absent unless firing" pattern rather
+# than an instance of it. What makes the departure honest is that the subject is
+# genuinely always there: a quiet Sun is a fact about today, not an empty page.
+SOLAR_ENABLED = True
+
+# How close an eclipse has to be before it takes the top of the page. Outside
+# this it is still stated, as one line in the footer, because the next partial
+# visible from 51.4N is in August 2027 and an event mentioned only on the day is
+# one nobody knew was coming. Inside it the eclipse displaces the activity
+# figures, which is the point: those are the same every day and this is not.
+SOL_ECLIPSE_BAND_HOURS = 24.0
+
+SOL_Y0, SOL_ROW_H, SOL_VALUE_DY = 420, 132, 58
+SOL_BAND_ROWS_Y = 780
+
+# The disc, and the marks on it. SOL_SPOT_SCALE is an exaggeration factor, not a
+# measurement: at true scale a 120-millionths group is about 3 px across here.
+SOL_DISC_R, SOL_DISC_BOTTOM = 250, 1400
+SOL_SPOT_MIN, SOL_SPOT_MAX, SOL_SPOT_SCALE = 9, 30, 6.0
+
+
+def _solar_verdict(peak_class):
+    """One word for the day's flare activity, from the day's strongest flare.
+
+    Derived from a single stated quantity and printed beside it, so the word can
+    be checked against the figure rather than standing on its own. A label
+    making a claim about activity that is not computed from the activity is the
+    fault the meteor page's "peaking now" had, where a claim about a RATE was
+    measured in time.
+    """
+    return {"X": "SEVERE", "M": "ACTIVE", "C": "MODERATE"}.get(
+        (peak_class or " ")[0], "QUIET")
+
+
+def _eclipse_line(eclipse):
+    """The always-present footer statement about the next eclipse."""
+    if not eclipse:
+        return "No solar eclipse is visible from here in the next two years."
+    return (f"Next eclipse here: {eclipse['maximum']:%-d %b %Y}, "
+            f"{eclipse['magnitude'] * 100:.0f}% of the Sun's diameter covered.")
+
+
+def _draw_eclipse_band(draw, eclipse, now, f):
+    """The eclipse at the top of the page, and where the rest may start.
+
+    ⚠ NO WORDING HERE MAY READ AS AN INSTRUCTION TO LOOK AT THE SUN, and the
+    filter caveat is attached to the figures rather than footnoted - which is
+    why it is drawn here and not with the other footer lines. In the ordinary
+    state there is no figure for it to attach to and it sits in the footer
+    instead; the placement follows what it qualifies.
+
+    ⚠ MAGNITUDE AND OBSCURATION ARE BOTH PRINTED AND BOTH NAMED. Magnitude is
+    the fraction of the solar DIAMETER covered and obscuration the fraction of
+    its AREA; they read 0.94 and 0.90 at the same event. Printing either under
+    the other's label is the ZHR-versus-observed-rate error in a new place.
+    """
+    started = eclipse["begins"] <= now <= (eclipse["ends"] or now)
+    heading = "PARTIAL ECLIPSE IN PROGRESS" if started else "PARTIAL ECLIPSE"
+    draw.text((MARGIN, 150), heading, font=font("IBMPlexSans-Bold.ttf", 66),
+              fill=WHITE)
+
+    # The countdown counts to the MAXIMUM once the eclipse has begun and to the
+    # first contact before it. Counting to a start that has passed reads as an
+    # event that has not happened yet.
+    #
+    # ⇒ THE RELATIVE LINE NAMES NO CLOCK TIME AND THE ABSOLUTE LINE NO INTERVAL.
+    # Both carried "begins 09:02" on the first render, one under the other - the
+    # same duplication the meteors footer and the satellite listing each had,
+    # where a headline repeated the first row beneath it. Split by KIND, the two
+    # lines answer different questions.
+    target, label = ((eclipse["maximum"], "Maximum") if started
+                     else (eclipse["begins"], "Starts"))
+    draw.text((MARGIN, 250), f"{label} {_until(target, now)}",
+              font=f["med"], fill=WHITE)
+    day = "" if eclipse["maximum"].date() == now.date() \
+        else f"{eclipse['maximum']:%a %-d %b}  ·  "
+    times = (f"{day}begins {eclipse['begins']:%H:%M}  ·  "
+             f"maximum {eclipse['maximum']:%H:%M}")
+    if eclipse["ends"]:
+        times += f"  ·  ends {eclipse['ends']:%H:%M}"
+    draw.text((MARGIN, 320), times, font=f["sm"], fill=MUTED)
+
+    draw.text((MARGIN, 420),
+              f"{eclipse['magnitude'] * 100:.0f}% of the Sun's diameter is "
+              f"covered at maximum",
+              font=f["sm"], fill=WHITE)
+    draw.text((MARGIN, 476),
+              f"{eclipse['obscuration'] * 100:.0f}% of its disc area  ·  "
+              f"Sun {eclipse['sun_altitude']:.0f}° above the horizon",
+              font=f["sm"], fill=MUTED)
+
+    # Attached to the figures above, deliberately. This is the one line on the
+    # page that must not be missed by somebody who read the percentage.
+    draw.text((MARGIN, 566),
+              "Safe to read about, not to look at: the Sun needs a certified",
+              font=f["sm"], fill=WHITE)
+    draw.text((MARGIN, 616),
+              "solar filter at every stage of a partial eclipse.",
+              font=f["sm"], fill=WHITE)
+    draw.line([(MARGIN, 700), (W - MARGIN, 700)], fill=DIM, width=2)
+    return SOL_BAND_ROWS_Y
+
+
+def _draw_activity_head(draw, data, f):
+    """The ordinary state: a verdict, and the figure it was derived from."""
+    xray = data.get("xray") or {}
+    draw.text((MARGIN, 150), _solar_verdict(xray.get("peak_class")),
+              font=font("IBMPlexSans-Bold.ttf", 110), fill=WHITE)
+    # ⇒ THE WORD ABOVE IS DERIVED FROM THIS LINE, so the two are drawn together
+    # and this line is the ONLY place the flare figures appear. Printed here and
+    # again as a row, they read as two measurements that happen to agree.
+    #
+    # Kept to one line that fits: the first render ran off the right edge at
+    # "the level now is B3.8" and lost the figure the sentence existed to give.
+    if xray.get("peak_class"):
+        draw.text((MARGIN, 290),
+                  f"Strongest flare in the last day {xray['peak_class']}  ·  "
+                  f"{xray['latest_class']} now",
+                  font=f["sm"], fill=MUTED)
+    else:
+        draw.text((MARGIN, 290), "No flare measurement is available.",
+                  font=f["sm"], fill=MUTED)
+    return SOL_Y0
+
+
+def _solar_rows(data, compact):
+    """[(label, value)] for the activity block, skipping what did not arrive.
+
+    Each feed is independent and one failing costs its own row rather than the
+    page - which is also why the CME row is absent on most days: no CME is
+    modelled to arrive within the lookahead, and that is the normal case rather
+    than a fault.
+    """
+    regions = data.get("regions") or {}
+    cme = data.get("cme") or {}
+    rows = []
+    if regions:
+        largest = f"  ·  largest group {regions['largest']}" \
+            if regions.get("largest") else ""
+        rows.append(("Sunspots",
+                     f"{regions['regions']} regions  ·  {regions['spots']} spots"
+                     f"{largest}"))
+    if cme:
+        # The repo genuinely holds both conventions - core.satellites returns
+        # aware datetimes while anything that has been through the disk cache
+        # returns ISO strings - so which one arrives depends on the caller, and
+        # assuming either is how the satellite page crashed on first render.
+        arrival = cme["arrival"]
+        if isinstance(arrival, str):
+            arrival = datetime.fromisoformat(arrival)
+        arrival = arrival.astimezone()
+        kp = f"  ·  Kp {cme['kp']:.0f} predicted" if cme.get("kp") else ""
+        rows.append(("Coronal mass ejection",
+                     f"{'Glancing blow' if cme.get('glancing') else 'Direct hit'} "
+                     f"expected {arrival:%a %H:%M}{kp}"))
+    if compact:
+        return rows
+    if regions:
+        rows.append(("Chance of a flare today",
+                     f"C {regions['c_probability']}%     "
+                     f"M {regions['m_probability']}%     "
+                     f"X {regions['x_probability']}%"))
+    # No flare row: the heading above already states the day's strongest and the
+    # current level, and that line is what the verdict word is derived from.
+    if data.get("f107"):
+        rows.append(("Radio flux", f"F10.7 = {data['f107']:.0f}"))
+    return rows
+
+
+def _draw_solar_disc(draw, groups, y, f, now=None):
+    """The Sun's disc with today's spot groups on it, at their real positions.
+
+    ⇒ THE POSITIONS ARE REAL AND THE MARK SIZES ARE NOT, which is the same
+    bargain the Moon card makes and it is stated on the page for the same
+    reason. A group of 120 millionths of the hemisphere is about 3 px across at
+    this radius - a real sunspot disc is nearly empty at true scale - so the
+    marks are floored at a legible size. Enlarging the mark keeps the count and
+    the placement honest while making them visible; drawing them true to scale
+    would show an empty circle and assert that nothing was there.
+
+    Far-side positions are dropped rather than folded onto the visible half. A
+    region that has rotated over the west limb is genuinely not in view, and the
+    projection alone would put it back on the wrong edge.
+    """
+    cx, r = W // 2, SOL_DISC_R
+    draw.ellipse([cx - r, y - r, cx + r, y + r], outline=MUTED, width=3)
+
+    b0 = solar_b0(now)
+    # The equator, which is what makes the tilt visible rather than merely
+    # applied: at +7 degrees the line bows below centre and the disc reads as a
+    # sphere seen slightly from above.
+    equator = [(cx + x * r, y + ey * r)
+               for x, ey, front in
+               (project_spot(0.0, lo, b0) for lo in range(-90, 91, 5))
+               if front]
+    if len(equator) > 1:
+        draw.line(equator, fill=DIM, width=2)
+
+    # The limbs are labelled because the orientation is a convention rather than
+    # anything the picture shows: solar west is to the right, which is the way
+    # rotation carries a group and the way every published solar image is drawn.
+    # Unlabelled, a mirrored disc looks exactly like a correct one.
+    draw.text((cx - r - 34, y - 15), "E", font=f["xs"], fill=DIM)
+    draw.text((cx + r + 14, y - 15), "W", font=f["xs"], fill=DIM)
+
+    drawn = 0
+    for g in groups:
+        if g.get("latitude") is None:
+            continue
+        x, ey, front = project_spot(g["latitude"], g["longitude"], b0)
+        if not front:
+            continue
+        # Area sets the mark size, floored so the smallest group is still
+        # visible and capped so the largest cannot swallow its neighbours.
+        rr = max(SOL_SPOT_MIN, min(SOL_SPOT_MAX,
+                                   r * math.sqrt(max(g["area"], 1) / 1e6) * SOL_SPOT_SCALE))
+        px, py = cx + x * r, y + ey * r
+        draw.ellipse([px - rr, py - rr, px + rr, py + rr], fill=BG, outline=WHITE,
+                     width=2)
+        drawn += 1
+
+    draw.text((MARGIN, y + r + 40),
+              f"{drawn} spot group{'' if drawn == 1 else 's'} in view, at their "
+              f"measured positions.",
+              font=f["xs"], fill=DIM)
+    draw.text((MARGIN, y + r + 84),
+              "Marks are enlarged to be visible; real spots are far smaller.",
+              font=f["xs"], fill=DIM)
+
+
+def render_solar(states, lat, lon, now=None):
+    """Page 6: what the Sun is doing, while the Sun is up.
+
+    Returns None after sunset, which is the whole gate - see the note on
+    SOLAR_ENABLED for why this page departs from the "absent unless firing"
+    rule the others follow.
+
+    ⇒ THE ECLIPSE SURVIVES A NETWORK FAILURE AND THE ACTIVITY DOES NOT. Every
+    figure on this page but the eclipse comes from a feed; the eclipse is
+    computed from ephem alone. So a page with no data at all is still drawn when
+    there is an eclipse to announce, and that is the only thing on this display
+    that can be said with the internet down.
+
+    `now` moves the whole page together - the gate, the eclipse search and the
+    countdown all take it - so a preview of the eclipse states is a page a user
+    could really have rather than one instant dressed in another's clock. The
+    daemon never passes it.
+    """
+    now = now or datetime.now().astimezone()
+    if not SOLAR_ENABLED or not sun_up(lat or 0.0, lon or 0.0, now=now):
+        return None
+    data = solar_activity() or {}
+    eclipse = next_eclipse(lat or 0.0, lon or 0.0, now=now)
+    if not data and not eclipse:
+        return None
+
+    # In the band when the eclipse is close enough to be worth the top of the
+    # page, and while it is actually running.
+    imminent = bool(eclipse
+                    and eclipse["begins"] - now
+                    <= timedelta(hours=SOL_ECLIPSE_BAND_HOURS)
+                    and (eclipse["ends"] or eclipse["maximum"]) >= now)
+
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    f = _fonts()
+    draw.text((MARGIN, 30), "SOLAR", font=font("IBMPlexSans-Bold.ttf", 60),
+              fill=WHITE)
+    draw.line([(0, HLINE1), (W, HLINE1)], fill=DIM, width=2)
+
+    y = (_draw_eclipse_band(draw, eclipse, now, f) if imminent
+         else _draw_activity_head(draw, data, f))
+
+    for label, value in _solar_rows(data, compact=imminent):
+        draw.text((MARGIN, y), label, font=f["med"], fill=WHITE)
+        draw.text((MARGIN, y + SOL_VALUE_DY), value, font=f["sm"], fill=MUTED)
+        y += SOL_ROW_H
+
+    if not data:
+        draw.text((MARGIN, y), "Solar activity data is unavailable.",
+                  font=f["sm"], fill=MUTED)
+    # The disc is centred in whatever is left below the rows rather than pinned,
+    # because the two states end their rows 250 px apart - a fixed centre either
+    # leaves a gap in one or puts the disc under the last row in the other.
+    groups = (data.get("regions") or {}).get("groups") or []
+    if groups:
+        cy = max(y + SOL_DISC_R + 40, (y + SOL_DISC_BOTTOM) // 2)
+        _draw_solar_disc(draw, groups, cy, f, now=now)
+
+    # The eclipse line stays in the footer whenever the band is not up, however
+    # far off the event is. It is the rarest thing this panel shows and the one
+    # worth knowing about in advance.
+    if not imminent:
+        draw.text((MARGIN, H - 212), _eclipse_line(eclipse), font=f["xs"],
+                  fill=DIM)
+        # In this state no figure is being given that the caveat qualifies, so
+        # it sits with the other standing notes rather than beside a number.
+        draw.text((MARGIN, H - 156),
+                  "The Sun is never safe to look at without a certified solar "
+                  "filter.",
+                  font=f["xs"], fill=DIM)
+    else:
+        draw.text((MARGIN, H - 156),
+                  "Eclipse times and coverage are computed for this site.",
+                  font=f["xs"], fill=DIM)
+    draw.text((MARGIN, H - 100),
+              "Spots, flares and radio flux: NOAA Space Weather Prediction Centre",
+              font=f["xs"], fill=DIM)
+    draw.text((MARGIN, H - 44),
+              "CME arrival: NASA DONKI model runs, served by CCMC",
+              font=f["xs"], fill=DIM)
+    return img
+
+
 def target_pages(states, targets, lat):
     """Every screenful of page 2, as a Paged run, or empty if there is nothing.
 
@@ -1632,6 +1953,13 @@ def build_pages(states, targets, lat, moon_ring=False):
     page5 = render_satellites(states, lat, LON)
     if page5 is not None:
         pages.append(page5)
+    # The one page here that requires the Sun to be UP. It does not lengthen the
+    # worst-case rotation: aurora needs darkness and cannot coexist with it, so
+    # the count peaks at five either way - by night with aurora, by day with
+    # this.
+    page6 = render_solar(states, lat, LON)
+    if page6 is not None:
+        pages.append(page6)
     return pages
 
 
@@ -1688,7 +2016,12 @@ def main():
     global LIMITING_MAG, METEOR_COMPRESSION, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV
     global AURORA_ENABLED, AURORA_THRESHOLD, AURORA_EMISSION_KM
     global SAT_ENABLED, SAT_HORIZON_HOURS
+    global SOLAR_ENABLED, SOL_ECLIPSE_BAND_HOURS
     METEOR_COMPRESSION = float(disp.get("meteor_compression", METEOR_COMPRESSION))
+    sol = config.get("solar", {})
+    SOLAR_ENABLED = bool(sol.get("enabled", SOLAR_ENABLED))
+    SOL_ECLIPSE_BAND_HOURS = float(
+        sol.get("eclipse_band_hours", SOL_ECLIPSE_BAND_HOURS))
     sat = config.get("satellites", {})
     SAT_ENABLED = bool(sat.get("enabled", SAT_ENABLED))
     SAT_HORIZON_HOURS = float(sat.get("horizon_hours", SAT_HORIZON_HOURS))

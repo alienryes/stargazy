@@ -151,6 +151,30 @@ The page also carries SWPC's three-day Kp outlook, and says whether the local sk
 
 Source: NOAA SWPC's OVATION model. No key, no registration.
 
+---
+
+### The Sun, while it is up (10.1-inch build)
+
+Every other conditional page here exists only after dark, because aurora and meteors are conditions of the night sky. This one inverts that: it appears **whenever the Sun is above the horizon**, and fills the hours when the rest of the panel has least to say.
+
+![The solar page on a quiet day: the word QUIET over the day's strongest flare, rows for sunspots, flare odds and radio flux, and the solar disc below with six spot groups marked at their measured positions either side of a tilted equator.](screenshots/10in-solar.png)
+
+> **An ordinary quiet day, 13 August 2026** — captured off the panel. Six spot groups, nothing above a B-class flare, and no CME modelled to arrive.
+
+It is also the only page here that is **always present rather than gated on something happening**. That is a deliberate departure from the rule the other pages follow, and what makes it honest is that the subject really is always there: a quiet Sun is a fact about today, not an empty page.
+
+**The disc is drawn from measured positions.** Each spot group's heliographic latitude and longitude comes from SWPC's regional reports, projected orthographically and tilted by the season — the Sun's axis leans up to 7.25° either way through the year, so the equator bows above or below centre and the disc reads as a sphere rather than a circle. Groups that have rotated onto the far side are dropped rather than folded back onto the wrong limb, and solar west is to the right, as in every published solar image. **The positions are real and the mark sizes are not**: a group covering a hundred-millionth of the visible hemisphere is a few pixels across, so the marks are enlarged to be visible and the page says so.
+
+**An eclipse takes the top of the page** when one is within a day, with a countdown, and is stated as a single line at the foot however far off it is otherwise — the rarest thing this panel shows is worth knowing about in advance. From southern England expect roughly one visible partial a year and none at all in some years; the next is 2 August 2027.
+
+**Magnitude and obscuration are given separately and named separately.** Magnitude is the fraction of the Sun's *diameter* covered, obscuration the fraction of its *area*. They are not the same number — at a deep partial they differ by ten points — and the page never prints one under the other's label.
+
+**The eclipse needs no network at all.** It is computed here from the Sun's and Moon's apparent discs, seen from this exact site so that lunar parallax is included. That makes it the one thing this display can still announce with the internet down.
+
+**Nothing on the page is phrased as an instruction to look at the Sun**, and the filter warning is attached to the coverage figures rather than left as a footnote, because that is the number somebody acts on.
+
+Sources: NOAA SWPC for spots, flares and radio flux; NASA's DONKI model runs served by CCMC for a coronal mass ejection's predicted arrival and Kp. Both keyless, neither requiring registration.
+
 ## 👆 Touch controls
 
 As the panel is a touchscreen, there are touch controls. The display reads them directly from `/dev/input/eventN`, so neither X nor Wayland is required.
@@ -413,9 +437,9 @@ build5/                 5" Touch Display 2 on a Pi 4 (720x1280) - the reference 
     fbcon-detach.service        Frees /dev/fb0 from the text console
     install-units.sh            Installs the units - interactive sudo, by design
 build10/                10.1" Touch Display 2 on a Pi 5 (1200x1920) - portrait,
-                        adds a meteor shower PAGE, an aurora page and a
-                        satellite pass page. Both builds fly real meteors in
-                        the sky itself
+                        adds a meteor shower PAGE, an aurora page, a satellite
+                        pass page and a solar page. Both builds fly real
+                        meteors in the sky itself
 screenshots/            README images, regenerated with display.py --save
 tools/                  Development checks and utilities
   grab_panel.py           Capture what the panel is actually showing, off /dev/fb0

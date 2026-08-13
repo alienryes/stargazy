@@ -198,3 +198,33 @@ out_dir = "/home/operations/uptonight/out"
 [satellites]
 # enabled = true
 # horizon_hours = 24
+
+# ── The Sun ───────────────────────────────────────────────────────────────
+# A page carrying sunspots, flares, any inbound coronal mass ejection, and
+# eclipses. It is the only page here that appears while the Sun is UP, and the
+# only one always present rather than gated on something happening: the other
+# conditional pages describe the night sky and are worthless at noon, whereas
+# there is always something true to say about the Sun, and these are the hours
+# when the rest of the panel has least to say.
+#
+# The disc is drawn with today's spot groups at their measured heliographic
+# positions, tilted by the season the way the real disc is. Positions are real;
+# the marks are enlarged, because a group covering a hundred-millionth of the
+# hemisphere is a few pixels across and the disc would otherwise look empty.
+#
+# An eclipse needs no network at all - it is computed here from the Sun and
+# Moon's apparent discs - so it is the one thing this display can still
+# announce with the internet down. It is also rare: from southern England
+# expect roughly one visible partial a year, and none at all in some years.
+#
+# eclipse_band_hours is how close an eclipse must be before it takes the top of
+# the page. Outside that it is still stated as one line at the foot, however
+# far off, because an event announced only on the day is one nobody knew was
+# coming. Raise it to see the full layout ahead of time.
+#
+# Magnitude and obscuration are both given and both named. Magnitude is the
+# fraction of the Sun's DIAMETER covered and obscuration the fraction of its
+# AREA; they are not the same number and the page never prints one as the other.
+[solar]
+# enabled = true
+# eclipse_band_hours = 24
