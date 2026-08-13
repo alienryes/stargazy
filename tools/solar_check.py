@@ -206,6 +206,43 @@ if data:
           f"{[k for k in ('regions', 'xray', 'f107', 'cme') if data.get(k)]} present")
 check("the cache file was written", solar.ACTIVITY_CACHE.exists())
 
+head("10b. A zero flare probability is not always a forecast of calm")
+rows = solar._get(solar.REGIONS_URL)
+by_date = {}
+for r in rows:
+    by_date.setdefault(r["observed_date"], []).append(r)
+classified, unclassified = [], []
+for d, day in sorted(by_date.items(), reverse=True):
+    issued = any(x.get("spot_class") for x in day)
+    probs = [x.get("c_flare_probability") for x in day]
+    (classified if issued else unclassified).append((d, len(day), probs))
+print(f"  {len(by_date)} report dates in the file")
+print(f"  forecast ISSUED on {len(classified)}, NOT issued on {len(unclassified)}")
+for d, n, probs in unclassified:
+    print(f"    not issued: {d}  {n} regions  C probabilities {probs}")
+for d, n, probs in classified[:3]:
+    print(f"    issued    : {d}  {n} regions  C probabilities {probs}")
+
+# The discriminator has to separate two populated classes, or it is untested.
+check("both states are present in the sample",
+      classified and unclassified,
+      f"{len(classified)} issued / {len(unclassified)} not")
+check("every UNISSUED day is all-zero probabilities",
+      all(not any(p for p in probs) for _, _, probs in unclassified))
+check("some ISSUED day has a non-zero probability",
+      any(any(p for p in probs) for _, _, probs in classified))
+# The trap in the other direction: an issued day CAN be all zeros, which is why
+# the marker is spot_class and not the probabilities themselves.
+zero_issued = [d for d, _, probs in classified if not any(p for p in probs)]
+print(f"  issued days that are nevertheless all-zero: {zero_issued or 'none in this sample'}")
+print("  (that is why the marker is spot_class, not the probabilities)")
+
+regions = solar.fetch_regions()
+if regions:
+    check("fetch_regions reports which state today is in",
+          "forecast_issued" in regions,
+          f"forecast_issued={regions.get('forecast_issued')} for {regions['date']}")
+
 head("11. Heliographic position - location strings and the disc projection")
 for text, expect in (("S17W54", (-17.0, -54.0)), ("N14E102", (14.0, 102.0)),
                      ("N00W00", (0.0, 0.0)), ("", (None, None)),

@@ -66,8 +66,8 @@ from core.positions import alt_az, next_rise, observer, plot_instant
 from core.satellites import elements_age, passes
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
+from core.solar import CME_LOOKAHEAD_DAYS, next_eclipse, project_spot, solar_b0, sun_up
 from core.solar import activity as solar_activity
-from core.solar import next_eclipse, project_spot, solar_b0, sun_up
 from core.starfield import (
     SIZE_BANDS_SPARSE_10,
     SPARSE_BRIGHT,
@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.42.0"
+VERSION = "0.43.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1604,9 +1604,21 @@ SOL_ECLIPSE_BAND_HOURS = 24.0
 SOL_Y0, SOL_ROW_H, SOL_VALUE_DY = 420, 132, 58
 SOL_BAND_ROWS_Y = 780
 
-# The disc, and the marks on it. SOL_SPOT_SCALE is an exaggeration factor, not a
-# measurement: at true scale a 120-millionths group is about 3 px across here.
-SOL_DISC_R, SOL_DISC_BOTTOM = 290, 1400
+# ⇒ THE SAME RADIUS AS THE MOON CARD, AND THAT IS NOT A MATTER OF TASTE. The Sun
+# and the Moon subtend almost exactly the same half-degree from Earth - the
+# near-equality that makes eclipses possible at all - so two discs drawn at one
+# scale are in true proportion to each other, and drawing the Sun larger than
+# the Moon would state something false about both. MOON_R is 300; so is this.
+#
+# Both are still enormously exaggerated against the sky layer's 21.3 px per
+# degree, where half a degree is about 11 px. That is the documented bargain
+# behind the Moon card: at this size it is a card and not sky-layer content, and
+# it makes no positional claim. The Sun inherits the same standing.
+#
+# SOL_SPOT_SCALE below is an exaggeration factor, not a measurement, and applies
+# only to the drawn fallback: at true scale a 120-millionths group is about
+# 3 px across here. The photograph needs none of it.
+SOL_DISC_R, SOL_DISC_BOTTOM = 300, 1400
 SOL_SPOT_MIN, SOL_SPOT_MAX, SOL_SPOT_SCALE = 9, 30, 6.0
 
 
@@ -1731,6 +1743,12 @@ def _solar_rows(data, compact):
         rows.append(("Sunspots",
                      f"{regions['regions']} regions  ·  {regions['spots']} spots"
                      f"{largest}"))
+    # ⇒ THE CME ROW IS ALWAYS PRESENT, because its normal state is absence and an
+    # absent row cannot say so. Left conditional, the page said nothing at all
+    # about CMEs on the great majority of days, and a reader could not tell "none
+    # coming" from "not looked at" - the same reasoning that put a permanent
+    # eclipse line in the footer. A failed fetch says so rather than reporting
+    # calm it never established.
     if cme:
         # The repo genuinely holds both conventions - core.satellites returns
         # aware datetimes while anything that has been through the disk cache
@@ -1744,13 +1762,30 @@ def _solar_rows(data, compact):
         rows.append(("Coronal mass ejection",
                      f"{'Glancing blow' if cme.get('glancing') else 'Direct hit'} "
                      f"expected {arrival:%a %H:%M}{kp}"))
+    elif compact:
+        # An eclipse is on the page and the space is the eclipse's. "No CME" is
+        # worth a line on an ordinary day and not worth one today.
+        pass
+    elif "cme" in (data.get("unavailable") or []):
+        rows.append(("Coronal mass ejection", "Model runs are unavailable."))
+    else:
+        rows.append(("Coronal mass ejection",
+                     f"None modelled to reach Earth in the next "
+                     f"{CME_LOOKAHEAD_DAYS} days."))
     if compact:
         return rows
-    if regions:
+    if regions and regions.get("forecast_issued"):
         rows.append(("Chance of a flare today",
                      f"C {regions['c_probability']}%     "
                      f"M {regions['m_probability']}%     "
                      f"X {regions['x_probability']}%"))
+    elif regions:
+        # NOT "C 0%". The day's region list is published before the forecast is
+        # attached, and in that window every probability reads zero - which as a
+        # printed forecast asserts near-certainty of a quiet Sun at the one
+        # moment nobody has forecast anything.
+        rows.append(("Chance of a flare today",
+                     "Today's forecast has not been issued yet."))
     # No flare row: the heading above already states the day's strongest and the
     # current level, and that line is what the verdict word is derived from.
     if data.get("f107"):

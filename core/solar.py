@@ -193,6 +193,20 @@ def fetch_regions():
     one number for the day, and the honest reduction is the maximum rather than
     a sum: the regions are not independent trials and adding them can exceed
     100% while describing a quiet Sun.
+
+    ⚠⚠ A ZERO PROBABILITY IS NOT ALWAYS A FORECAST OF CALM. The day's region
+    list is published BEFORE the classification and flare forecast are attached
+    to it, and in that state every region carries spot_class None and every
+    probability reads 0. Printed as a forecast that is a claim of near-certainty
+    that nothing will happen, made at the exact moment nobody has said anything.
+    Observed 2026-08-13: six regions, all spot_class None, all probabilities 0,
+    against a fully classified previous day reading C 35% / M 5% / X 1%.
+
+    `forecast_issued` reports which state this is, keyed on any region carrying
+    a spot_class - that marker separates the two cleanly across the whole file,
+    while the probabilities alone cannot, since a classified quiet day really
+    can be all zeros. *This is the rows[-1] trap for the third time on this
+    host: establish what a field MEANS before taking it at face value.*
     """
     rows = _get(REGIONS_URL)
     if not rows:
@@ -220,6 +234,7 @@ def fetch_regions():
         })
     return {
         "groups": sorted(groups, key=lambda g: g["area"], reverse=True),
+        "forecast_issued": any(r.get("spot_class") for r in today),
         "date": newest,
         "regions": len(today),
         "spots": sum((r.get("number_spots") or 0) for r in today),
@@ -400,7 +415,13 @@ def activity(now=None):
                 minutes=FETCH_COOLDOWN_MINUTES):
             return cached_or_none()
 
-    out, failures = {}, 0
+    # ⇒ "NOTHING TO REPORT" AND "COULD NOT ASK" ARE RECORDED SEPARATELY. Both
+    # leave the value empty, and a caller that cannot tell them apart has to
+    # either stay silent about a quiet Sun or claim quiet when it simply failed
+    # to look. This matters most for the CME, whose normal state IS absence:
+    # without the distinction a page saying "none expected" would say it just as
+    # confidently with the network down.
+    out, failures = {"unavailable": []}, 0
     for key, fn in (("regions", fetch_regions), ("xray", fetch_xray),
                     ("f107", fetch_f107), ("cme", lambda: fetch_cme(now))):
         try:
@@ -408,6 +429,7 @@ def activity(now=None):
         except Exception as e:
             log.warning("Solar feed %s unavailable (%s).", key, e)
             out[key] = None
+            out["unavailable"].append(key)
             failures += 1
 
     if failures == 4:
