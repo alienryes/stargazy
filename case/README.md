@@ -20,7 +20,8 @@ pocket is 187 × 118 mm, matching the 7-inch outline of 189.32 × 120.24 mm); th
 architecture is RonnyS's — shallow shell, bolt-on Pi clamshell, swappable
 stand, optional fan — re-drawn parametrically in CadQuery at 5-inch scale.
 
-This remix is released under **CC BY** as well. Credit RonnyS and this project.
+This remix is released under **CC BY** as well. Credit RonnyS and alienryes
+(`@alienryes_42883` on Printables).
 
 The Raspberry Pi board models shown in the assembly diagrams are by
 **Pyro_Industries** — <https://www.printables.com/model/727545-raspberry-pi-4>

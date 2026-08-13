@@ -493,6 +493,6 @@ This project is a thin dashboard over other people's hard work.
 
 **GPL-3.0** — see [LICENSE](LICENSE). Chosen to match [pilomar](https://github.com/Short-bus/pilomar), the Pi miniature-observatory project by Short-bus that this display was inspired by.
 
-**Except `case/`**, which is **CC BY** rather than GPL, because it is a remix of RonnyS's CC-BY model and that licence carries forward. Credit RonnyS and this project if remixed further.
+**Except `case/`**, which is **CC BY** rather than GPL, because it is a remix of RonnyS's CC-BY model and that licence carries forward. Credit RonnyS and alienryes (`@alienryes_42883` on Printables) if remixed further.
 
 `stand10/` is **GPL-3.0** like the rest of the repository. It is the 10.1" panel's stand and is original work, not a remix, so the CC BY attribution requirement does not reach it.
