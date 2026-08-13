@@ -36,9 +36,24 @@ MIN_RADIANT_PX = 40
 # Trail geometry: segment length and count, the drawn length being the product.
 # Shower meteors scale the segment by their foreshortening.
 TRAIL_SEG, TRAIL_SEGMENTS = 11.0, 14
-# Radius of the meteor's bright head. It is drawn as a capsule spanning one
-# frame's travel rather than a dot - see draw_meteor for why.
-HEAD_R = 2
+# Stroke width at the leading end of the trail and at its far end.
+#
+# The trail was drawn at a flat 2 px with only its brightness fading, behind a
+# head 5 px across. A constant-width thread trailing a wider rounded head is a
+# tadpole, not a meteor, and the panel duly read as one. A real trail is the
+# ablation trail thinning and cooling behind the object, so the width has to go
+# with the brightness rather than stay put while it fades.
+TRAIL_W_HEAD, TRAIL_W_TAIL = 3, 1
+# Exponent on the trail's brightness ramp. Linear left the far end of a 154 px
+# trail plainly visible, which is most of what made the streak read as long and
+# uniform. Above 1 the light concentrates into the leading third and the rest
+# dies away, shortening the APPARENT trail without touching the geometry the
+# foreshortening in spawn_meteor is calculated against.
+TRAIL_FALLOFF = 1.8
+# The head's glare pass: a wider, dimmer stroke laid under the core so the
+# bright end reads as over-exposure rather than as a body with an edge to it.
+# This is what replaced a pair of filled discs - see draw_meteor.
+HEAD_GLARE_W, HEAD_GLARE = 5, 0.30
 
 # How sharply a star's glare falls off from its core, as an exponent on the
 # radius. 1.0 is linear; higher concentrates the light into the centre and
@@ -534,7 +549,8 @@ def draw_meteor(draw, m, alpha=None, alpha_w=0, off=0, frame=None):
     for i in range(nseg):
         x1, y1 = m["x"] - ux * seg * i, m["y"] - uy * seg * i
         x2, y2 = m["x"] - ux * seg * (i + 1), m["y"] - uy * seg * (i + 1)
-        b = fade * (1.0 - i / nseg)
+        along = i / nseg
+        b = fade * (1.0 - along) ** TRAIL_FALLOFF
         b *= _clear_at(alpha, alpha_w, off, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
         # Skipped rather than drawn dark. A fully occluded segment still has a
         # colour, and drawing it would paint the trail on in black instead of
@@ -543,10 +559,12 @@ def draw_meteor(draw, m, alpha=None, alpha_w=0, off=0, frame=None):
             continue
         c = _lit(frame, (x1 + x2) / 2.0, (y1 + y2) / 2.0,
                  (int(255 * b), int(255 * b), int(235 * b)))
-        draw.line([(x1, y1), (x2, y2)], fill=c, width=2)
+        w = max(TRAIL_W_TAIL,
+                int(round(TRAIL_W_HEAD - (TRAIL_W_HEAD - TRAIL_W_TAIL) * along)))
+        draw.line([(x1, y1), (x2, y2)], fill=c, width=w)
     # The head covers the ground crossed since the previous frame rather than
     # marking a point. A meteor steps 4.5-8.5 px between frames against a head
-    # 5 px across, so a round head lands clear of where it last was: rendering
+    # a few px across, so a round head lands clear of where it last was: rendering
     # three consecutive frames into separate channels shows three separated
     # blobs riding a continuous trail. The path is not gapped - the leading
     # trail segment is full brightness and 11 px long - so what beads is the
@@ -558,14 +576,25 @@ def draw_meteor(draw, m, alpha=None, alpha_w=0, off=0, frame=None):
     # on 0.3% - raising the rate would deliver frames less evenly, not more.
     # A capsule spanning the step tiles continuously at any speed and any rate,
     # by construction, and is also what a camera would record.
+    #
+    # WHAT THE CAPSULE IS NOT ALLOWED TO BE IS A BULB. It was drawn 5 px wide
+    # with a filled disc capping each end, against a 2 px trail: a hard-edged
+    # round head stuck on a thread, which is a spermatozoon and was read as one.
+    # The head now carries the same width as the trail's leading segment, so it
+    # is a brighter continuation of the streak rather than a separate object,
+    # and the discs are gone along with the step change that needed them.
+    #
+    # Brightness past that point is carried by glare instead of by size, the same
+    # trade CORE_BOOST makes for stars: a dim wide pass laid down first, then the
+    # core over it. _lit samples the frame, so the core adds to the glare already
+    # there and saturates towards white at the centre, which is how an
+    # over-exposed streak actually resolves.
     px, py = m["x"] - m["vx"], m["y"] - m["vy"]
     hf = fade * _clear_at(alpha, alpha_w, off, (px + m["x"]) / 2.0, (py + m["y"]) / 2.0)
     if hf <= 0.02:
         return
-    hb = int(255 * hf)
-    head = _lit(frame, (px + m["x"]) / 2.0, (py + m["y"]) / 2.0,
-                (hb, hb, int(235 * hf)))
-    draw.line([(px, py), (m["x"], m["y"])], fill=head, width=HEAD_R * 2 + 1)
-    for cx, cy in ((m["x"], m["y"]), (px, py)):
-        draw.ellipse([cx - HEAD_R, cy - HEAD_R, cx + HEAD_R, cy + HEAD_R],
-                     fill=head)
+    for width, level in ((HEAD_GLARE_W, HEAD_GLARE), (TRAIL_W_HEAD, 1.0)):
+        hb = hf * level
+        head = _lit(frame, (px + m["x"]) / 2.0, (py + m["y"]) / 2.0,
+                    (int(255 * hb), int(255 * hb), int(235 * hb)))
+        draw.line([(px, py), (m["x"], m["y"])], fill=head, width=width)
