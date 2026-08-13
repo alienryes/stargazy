@@ -202,11 +202,25 @@ def fetch_regions():
     Observed 2026-08-13: six regions, all spot_class None, all probabilities 0,
     against a fully classified previous day reading C 35% / M 5% / X 1%.
 
-    `forecast_issued` reports which state this is, keyed on any region carrying
-    a spot_class - that marker separates the two cleanly across the whole file,
-    while the probabilities alone cannot, since a classified quiet day really
-    can be all zeros. *This is the rows[-1] trap for the third time on this
-    host: establish what a field MEANS before taking it at face value.*
+    ⚠ THE REPORT FILLS IN PROGRESSIVELY, AND spot_class IS THE WRONG MARKER.
+    That was the first attempt, and the feed disproved it within the hour: by
+    then four of six regions had a spot_class while every probability was still
+    exactly 0. The decisive observation is region 4507, classified 'Dso' on both
+    2026-08-12 and 2026-08-13, carrying C 35% on the first day and C 0% on the
+    second - the same region at the same classification does not go 35% to 0%
+    overnight, so the zeros are an absence rather than a forecast.
+
+    `forecast_issued` therefore keys on any probability being non-zero. Across
+    all 31 report dates in the file, every fully issued day carries at least one
+    non-zero probability, and a physical argument agrees: a D-class bipolar
+    group always carries some chance of a C flare. A genuinely all-quiet day
+    would be reported here as "not yet issued", which is the conservative
+    failure - saying nothing is known when the answer is "almost certainly
+    nothing", rather than asserting calm nobody forecast.
+
+    *This is the rows[-1] trap for the third time on this host: establish what a
+    field MEANS before taking it at face value - and check again when the first
+    answer was a guess about someone else's publishing pipeline.*
     """
     rows = _get(REGIONS_URL)
     if not rows:
@@ -234,7 +248,10 @@ def fetch_regions():
         })
     return {
         "groups": sorted(groups, key=lambda g: g["area"], reverse=True),
-        "forecast_issued": any(r.get("spot_class") for r in today),
+        "forecast_issued": any((r.get("c_flare_probability") or 0)
+                               or (r.get("m_flare_probability") or 0)
+                               or (r.get("x_flare_probability") or 0)
+                               for r in today),
         "date": newest,
         "regions": len(today),
         "spots": sum((r.get("number_spots") or 0) for r in today),

@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.43.0"
+VERSION = "0.44.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1601,7 +1601,11 @@ SOLAR_ENABLED = True
 # figures, which is the point: those are the same every day and this is not.
 SOL_ECLIPSE_BAND_HOURS = 24.0
 
-SOL_Y0, SOL_ROW_H, SOL_VALUE_DY = 420, 132, 58
+# The row pitch was 132 with three rows. The permanent CME row makes four, and
+# at that pitch the disc's two caption lines ran into the footer block with no
+# gap between them - so the pitch pays for the row rather than the page losing
+# the separation that tells a reader where one block ends.
+SOL_Y0, SOL_ROW_H, SOL_VALUE_DY = 420, 120, 58
 SOL_BAND_ROWS_Y = 780
 
 # ⇒ THE SAME RADIUS AS THE MOON CARD, AND THAT IS NOT A MATTER OF TASTE. The Sun
@@ -1774,8 +1778,19 @@ def _solar_rows(data, compact):
                      f"{CME_LOOKAHEAD_DAYS} days."))
     if compact:
         return rows
+    # ⇒ THE LABEL NAMES THE CLASSES BECAUSE THE FORECAST ONLY COVERS THEM. SWPC
+    # publishes c/m/x_flare_probability and nothing for A or B, which is not an
+    # omission: A and B flares are the continuous background, so their
+    # probability would sit near 100% and say nothing. C is the conventional
+    # threshold for a forecastable event.
+    #
+    # Note the division this creates with the heading above, which reports the
+    # MEASURED strongest flare and today reads B7.4. Measured includes A and B;
+    # forecast never does. "Chance of a flare" over three letters that exclude
+    # the class printed two lines up invites exactly the question it should
+    # answer.
     if regions and regions.get("forecast_issued"):
-        rows.append(("Chance of a flare today",
+        rows.append(("Chance of a C, M or X flare today",
                      f"C {regions['c_probability']}%     "
                      f"M {regions['m_probability']}%     "
                      f"X {regions['x_probability']}%"))
@@ -1784,7 +1799,7 @@ def _solar_rows(data, compact):
         # attached, and in that window every probability reads zero - which as a
         # printed forecast asserts near-certainty of a quiet Sun at the one
         # moment nobody has forecast anything.
-        rows.append(("Chance of a flare today",
+        rows.append(("Chance of a C, M or X flare today",
                      "Today's forecast has not been issued yet."))
     # No flare row: the heading above already states the day's strongest and the
     # current level, and that line is what the verdict word is derived from.
@@ -1809,6 +1824,15 @@ def _draw_solar_photo(img, draw, photo, observed, y, f):
     draw.text((MARGIN, y + r + 40),
               f"SDO/HMI white light, {observed:%H:%M} UTC. Dark patches are the "
               f"spot groups.",
+              font=f["xs"], fill=DIM)
+    # ⇒ THE COLOUR IS SAID TO BE SDO'S, NOT THE SUN'S. The orange is a colour
+    # table applied to continuum intensity - the same measurement is published
+    # as a grey frame - and from space the Sun is white. Saying only "white
+    # light" names the technique and leaves the picture asserting a colour the
+    # Sun does not have. The card makes no positional claim, as the Moon card
+    # does not, but it should not make a false one about appearance either.
+    draw.text((MARGIN, y + r + 84),
+              "Colour is SDO's own; the Sun is white seen from space.",
               font=f["xs"], fill=DIM)
 
 

@@ -211,31 +211,46 @@ rows = solar._get(solar.REGIONS_URL)
 by_date = {}
 for r in rows:
     by_date.setdefault(r["observed_date"], []).append(r)
-classified, unclassified = [], []
+issued, pending = [], []
 for d, day in sorted(by_date.items(), reverse=True):
-    issued = any(x.get("spot_class") for x in day)
     probs = [x.get("c_flare_probability") for x in day]
-    (classified if issued else unclassified).append((d, len(day), probs))
+    classes = [x.get("spot_class") for x in day]
+    (issued if any(p for p in probs) else pending).append((d, len(day), probs, classes))
 print(f"  {len(by_date)} report dates in the file")
-print(f"  forecast ISSUED on {len(classified)}, NOT issued on {len(unclassified)}")
-for d, n, probs in unclassified:
-    print(f"    not issued: {d}  {n} regions  C probabilities {probs}")
-for d, n, probs in classified[:3]:
-    print(f"    issued    : {d}  {n} regions  C probabilities {probs}")
+print(f"  forecast ISSUED on {len(issued)}, PENDING on {len(pending)}")
+for d, n, probs, classes in pending:
+    print(f"    pending: {d}  {n} regions  C {probs}")
+    print(f"             spot_class {classes}   <- note some ARE classified")
+for d, n, probs, _ in issued[:3]:
+    print(f"    issued : {d}  {n} regions  C {probs}")
 
 # The discriminator has to separate two populated classes, or it is untested.
 check("both states are present in the sample",
-      classified and unclassified,
-      f"{len(classified)} issued / {len(unclassified)} not")
-check("every UNISSUED day is all-zero probabilities",
-      all(not any(p for p in probs) for _, _, probs in unclassified))
-check("some ISSUED day has a non-zero probability",
-      any(any(p for p in probs) for _, _, probs in classified))
-# The trap in the other direction: an issued day CAN be all zeros, which is why
-# the marker is spot_class and not the probabilities themselves.
-zero_issued = [d for d, _, probs in classified if not any(p for p in probs)]
-print(f"  issued days that are nevertheless all-zero: {zero_issued or 'none in this sample'}")
-print("  (that is why the marker is spot_class, not the probabilities)")
+      issued and pending, f"{len(issued)} issued / {len(pending)} pending")
+check("every ISSUED day carries a non-zero probability",
+      all(any(p for p in probs) for _, _, probs, _ in issued))
+
+# ⇒ WHY THE MARKER IS THE PROBABILITY AND NOT spot_class. The first attempt used
+# spot_class and the feed disproved it within the hour: regions get classified
+# before the probabilities are attached, so a partly-filled report reads as
+# issued. This asserts that state exists rather than describing it.
+partly = [(d, sum(1 for c in classes if c), n)
+          for d, n, probs, classes in pending if any(classes)]
+check("a PENDING day can already carry spot classes - so spot_class is the "
+      "wrong marker", bool(partly),
+      f"{partly}" if partly else "no partly-classified pending day right now")
+
+# The decisive case: one region, one classification, two very different
+# probabilities on consecutive days. A real forecast does not do that.
+dates = sorted(by_date, reverse=True)
+if len(dates) > 1:
+    a = {r["region"]: r for r in by_date[dates[0]]}
+    b = {r["region"]: r for r in by_date[dates[1]]}
+    for reg in sorted(set(a) & set(b)):
+        if a[reg].get("spot_class") and a[reg]["spot_class"] == b[reg].get("spot_class"):
+            print(f"    region {reg} is {a[reg]['spot_class']} on both days: "
+                  f"C {b[reg]['c_flare_probability']}% -> "
+                  f"{a[reg]['c_flare_probability']}%")
 
 regions = solar.fetch_regions()
 if regions:
