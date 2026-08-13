@@ -101,7 +101,7 @@ The stars behind the dashboard are not decoration. They are plotted from the Yal
 
 **Constellations are recognisable** — checked on the panel rather than claimed from the code. On 11 August 2026 at 09:30 the 10.1-inch build had all seven of Orion's main stars in frame, Betelgeuse within two degrees of the view centre, and the belt read at a glance. That is a daylight sky: Orion is a morning object in August, so the panel was showing a real sky nobody could see out of the window.
 
-An earlier version of this paragraph asserted the same thing from the day the real starfield landed, and it was **not true** — 1,204 stars were drawn where the site can see about 220, and the patterns were buried in stars that are not visible from it. The claim is restored here only because someone looked.
+An earlier version of this paragraph asserted the same thing from the day the real starfield landed, and it was **unfortunately inaccurate** — 1,204 stars were drawn whereas the reference site can see only about 220, so the patterns were buried in stars that are not actually visible from it. The claim is restored here only because of external observations.
 
 **Only down to `limiting_magnitude`, default 5.0 — not the catalogue's 6.5.** The catalogue's faint end is stars nobody at the panel could see: measured over the 5" field of view it put 1,204 stars on screen, of which 983 were fainter than magnitude 5, and those carried 56% of the drawn area. They buried the sixteen stars that actually make a pattern, and a real sky came out looking random. Raise it for a genuinely dark site. The catalogue ships in the repository, so this needs no network.
 
