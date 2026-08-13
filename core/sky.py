@@ -58,6 +58,13 @@ HEAD_GLARE_W, HEAD_GLARE = 5, 0.30
 # How sharply a star's glare falls off from its core, as an exponent on the
 # radius. 1.0 is linear; higher concentrates the light into the centre and
 # leaves a fainter halo.
+#
+# NOT A CONFIG KEY, BY DESIGN - as for CORE_BOOST below. Both were tuned by eye
+# against the panel over several reversals, and neither stands alone: they act
+# with SIZE_BANDS and the SPARSE_* ratios in core/starfield.py, none of which is
+# exposed either. Moving one of an interacting set is enough to break the tuning
+# and not enough to restore it. Hardware variation is already answered the right
+# way - a second calibrated band table per panel, plus the min_size floor.
 HALO_FALLOFF = 1.8
 
 # The core is drawn this much brighter than the star's own value, and clipped.
@@ -73,6 +80,10 @@ HALO_FALLOFF = 1.8
 # grey, and read as flat however large it was drawn. The clip means magnitude
 # stops being carried by the core past a point and is carried by the halo
 # instead, which is what glare does.
+#
+# The 1.9 case above is also why this is not exposed in config: a wrong value
+# does not read as a setting turned too far, it reads as a defect in the
+# starfield. See HALO_FALLOFF.
 CORE_BOOST = 1.25
 
 # Cloud drift, stated as an ANGLE and converted to pixels by each build.

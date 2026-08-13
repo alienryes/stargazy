@@ -133,6 +133,11 @@ out_dir = "/home/operations/uptonight/out"
 # limiting_magnitude sets how faint the catalogue is read down to. Raising it
 # puts more stars in view at a cost per frame; 6.5 is the naked-eye limit under
 # a dark sky and roughly triples the count.
+#
+# The value is a property of the SITE, not of the panel: it stands for the
+# faintest star actually visible from where the display sits. A genuinely dark
+# rural sky justifies raising it; a suburban one does not, and setting it above
+# what the sky delivers draws stars nobody at the panel could see.
 [sky]
 # real_stars = true
 # camera_azimuth = 180
