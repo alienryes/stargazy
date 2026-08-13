@@ -104,6 +104,25 @@ CLOUD_BASE_M = 1500.0
 # Time compression, declared for the same reason METEOR_COMPRESSION is: the
 # honest rate is far too slow to read as motion on an ambient display. This
 # scales what the wind is actually doing rather than inventing a speed.
+#
+# NOT CURRENTLY A CONFIG KEY, and that is a fact rather than a principle:
+# METEOR_COMPRESSION *is* one (`display.meteor_compression`, documented in both
+# config examples). The asymmetry is recorded here so it reads as undecided
+# rather than as an oversight. Nothing about this constant makes it a trap the
+# way CORE_BOOST is - it is a standalone multiplier on a rate, and a wrong value
+# looks like slow or fast cloud rather than like a defect.
+#
+# ⇒ THE OPEN QUESTION IS NOT WHETHER TO EXPOSE IT. It is that the panel runs
+# TWO time-lapse rates at once: cloud at 8x and meteors at 20x. Neither is "the"
+# compression - they are independently tuned for legibility and only share a
+# name - so setting them equal would make the sky less coherent, not more.
+# Exposing one half of that would ossify it. Decide whether the sky is meant to
+# be a single coherent time-lapse first; the config question follows from the
+# answer, not the other way round.
+#
+# Note also that the site-varying number in this block is CLOUD_BASE_M, not this
+# one. The compression has no correct value; the base height has one that
+# differs by climate and day. If anything here ever earns a key, it is that.
 CLOUD_COMPRESSION = 8.0
 # Below this the drift is imperceptible over any time anyone looks at the panel.
 # Real calm does mean stationary cloud, but a sky that never moves reads as a
