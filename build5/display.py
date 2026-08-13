@@ -73,7 +73,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.37.0"
+FIRMWARE_VERSION = "3.38.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -436,6 +436,21 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
           f"Wind {wind_dir} {wind_spd * KMH_TO_MPH:.1f} mph")
     draw.text((MARGIN, 652), wx, fill=WHITE, font=f_sm)
 
+    # The lunar imagery credit, which this build was missing along with the 10.1"
+    # one. Page 2 has carried "Sky imagery: DSS2 / CDS Strasbourg" since it had
+    # cutouts, while the Moon - the largest photograph on either panel - was
+    # credited only in the README. It shares the version stamp's line, which is
+    # otherwise empty on the left, so it costs no height on a 720px-tall panel.
+    #
+    # Only when the frame was used: without one the phase is this program's own
+    # drawing, and NASA should not be credited for it.
+    # 22px rather than the 26px xs face: at 26 the descenders ran off the bottom
+    # of a 720px panel from this baseline, which the version stamp beside it had
+    # never revealed because "v3.38.0" has none. Matches the 10.1" build, where
+    # footnotes have their own smaller size for the same reason.
+    if moon_photo is not None:
+        draw.text((MARGIN, H - 30), "Lunar imagery: NASA SVS Dial-a-Moon",
+                  fill=DIM, font=font("IBMPlexSans-Regular.ttf", 22))
     ver   = f"v{FIRMWARE_VERSION}"
     ver_w = int(draw.textlength(ver, font=f_xs))
     draw.text((W - ver_w - MARGIN, H - 30), ver, fill=DIM, font=f_xs)

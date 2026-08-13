@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.46.0"
+VERSION = "0.47.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -522,6 +522,19 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None)
               f"Wind {wind_dir} {wind_spd * KMH_TO_MPH:.1f} mph",
               fill=WHITE, font=f["sm"])
 
+    # ⇒ THE LUNAR IMAGERY WAS THE ONE PICTURE ON THIS DISPLAY WITH NO CREDIT ON
+    # SCREEN. Page 2 has carried "Sky imagery: DSS2 / CDS Strasbourg" since it
+    # had cutouts, and the solar page credits SDO, while the largest photograph
+    # of the lot went unattributed - the README named Dial-a-Moon and the panel
+    # never did. It shares the version stamp's line, which is otherwise empty on
+    # the left, so it costs no height.
+    #
+    # Only when the frame was actually used: the parametric fallback is this
+    # program's own drawing, and crediting NASA for it would be wrong in exactly
+    # the state where the fetch failed.
+    if moon_photo is not None:
+        draw.text((MARGIN, H - 44), "Lunar imagery: NASA SVS Dial-a-Moon",
+                  font=f["fn"], fill=DIM)
     _right(draw, f"v{VERSION}", H - 44, DIM, f["fn"])
     return img
 
@@ -1613,6 +1626,8 @@ SOL_ECLIPSE_BAND_HOURS = 24.0
 # gap between them - so the pitch pays for the row rather than the page losing
 # the separation that tells a reader where one block ends.
 SOL_ROW_H, SOL_VALUE_DY = 120, 58
+# Vertical pitch of the footnote block, which is drawn upward from the page foot.
+FOOTNOTE_PITCH = 56
 
 # ⇒ THE GRAPHIC GOES ABOVE THE DETAIL, WHICH IS WHAT EVERY OTHER PAGE DOES. The
 # Moon disc is centred at MOON_CY and its facts sit under it; the aurora field
@@ -1828,7 +1843,49 @@ def _solar_rows(data, compact):
     return rows
 
 
-def _draw_solar_photo(img, draw, photo, observed, y, f):
+def _sun_imagery_note(observed):
+    """The imagery credit for the solar frame, as a footnote line.
+
+    ⇒ A FOOTNOTE RATHER THAN A CAPTION UNDER THE DISC, which is where the other
+    imagery credits on this display live: page 2 has carried "Sky imagery: DSS2
+    / CDS Strasbourg" at its foot for as long as it has had cutouts. A credit is
+    marginal to the picture rather than a label on it.
+
+    ⇒ "SUNSPOTS", NOT "SPOT GROUPS", AND THAT WAS MEASURED RATHER THAN JUDGED.
+    SWPC counts both regions and the spots inside them, so this can only be
+    right about one. Labelling the dark blobs in the frame gives 11 to 21 of
+    them depending on threshold, merging to 4-5 clusters, against SWPC's 7
+    regions and 22 spots the same day. The blob count tracks the SPOT count, so
+    what is resolved here is individual spots - several close enough to read as
+    one patch - and the groups are the clusters they form, which the sunspot row
+    already counts.
+
+    ⇒ THE COLOUR IS SAID TO BE SDO'S, NOT THE SUN'S. The orange is a colour
+    table applied to continuum intensity - the same measurement is published as
+    a grey frame - and from space the Sun is white. "White light" names the
+    technique and would leave the picture asserting a colour the Sun does not
+    have. Stated flatly and left there: the claim needs no argument attached.
+    """
+    return (f"Imagery: SDO/HMI white light, {observed:%H:%M} UTC. Colour is "
+            f"SDO's own; dark marks are sunspots.")
+
+
+def _footnotes(draw, lines, f, bottom=None):
+    """Draw footnote lines UPWARD from the foot of the page.
+
+    Bottom-up because the count varies - the eclipse state drops the eclipse
+    line and the drawn-disc state drops the imagery credit - and anchoring the
+    block to the page foot keeps the last line in the same place whatever is
+    above it. Hardcoded slots had to be renumbered every time a line came or
+    went, which is how a caption ended up flush against the footer.
+    """
+    y = (H - 44) if bottom is None else bottom
+    for text in reversed([ln for ln in lines if ln]):
+        draw.text((MARGIN, y), text, font=f["fn"], fill=DIM)
+        y -= FOOTNOTE_PITCH
+
+
+def _draw_solar_photo(img, photo, y):
     """The photographed disc, which is the preferred drawing and the honest one.
 
     ⇒ A PHOTOGRAPH HAS NO POSITION LAG, AND THE DRAWN DISC DID. Marks plotted
@@ -1838,29 +1895,14 @@ def _draw_solar_photo(img, draw, photo, observed, y, f):
     timestamp, so there is no rotation arithmetic to get wrong and no enlarged
     mark to apologise for - the spots are simply in the picture, at their real
     size.
+
+    Nothing is captioned here. What the picture needs said - the observation
+    time, whose colour it is, and that the dark marks are individual spots
+    rather than the groups - is a CREDIT, and credits live in the footnotes with
+    the other imagery attributions. See _sun_imagery_note.
     """
-    cx, r = W // 2, SOL_DISC_R
-    paste_sun(img, photo, cx, y, r)
-    # ⇒ "SUNSPOTS", NOT "SPOT GROUPS", AND THAT WAS MEASURED RATHER THAN JUDGED.
-    # SWPC counts both regions and the spots inside them, so the caption can only
-    # be right about one. Labelling the dark blobs in the frame: 11 to 21 of them
-    # depending on threshold, merging to 4-5 clusters, against SWPC's 7 regions
-    # and 22 spots on the same day. The blob count tracks the SPOT count, so what
-    # is resolved here is individual spots - several close enough to read as one
-    # patch - and the groups are the clusters they form, which the row above
-    # already counts.
-    #
-    # ⇒ THE COLOUR IS SAID TO BE SDO'S, NOT THE SUN'S. The orange is a colour
-    # table applied to continuum intensity - the same measurement is published as
-    # a grey frame - and from space the Sun is white. "White light" names the
-    # technique and leaves the picture asserting a colour the Sun does not have.
-    # Stated flatly and left there: the claim needs no argument attached, and one
-    # line costs the page less than two.
-    draw.text((MARGIN, y + r + 40),
-              f"SDO/HMI white light, {observed:%H:%M} UTC. Colour is SDO's own; "
-              f"the dark marks are sunspots.",
-              font=f["fn"], fill=DIM)
-    return y + r + 80
+    paste_sun(img, photo, W // 2, y, SOL_DISC_R)
+    return y + SOL_DISC_R + 40
 
 
 def _draw_solar_disc(draw, groups, y, f, now=None):
@@ -1983,8 +2025,7 @@ def render_solar(states, lat, lon, now=None):
     photo, observed = sun_image()
     if photo is not None or groups:
         cy = max(SOL_DISC_CY, y + SOL_DISC_R)
-        y = (_draw_solar_photo(img, draw, photo, observed, cy, f)
-             if photo is not None
+        y = (_draw_solar_photo(img, photo, cy) if photo is not None
              else _draw_solar_disc(draw, groups, cy, f, now=now))
         y += SOL_ROWS_GAP
 
@@ -1996,33 +2037,24 @@ def render_solar(states, lat, lon, now=None):
     if not data:
         draw.text((MARGIN, y), "Solar activity data is unavailable.",
                   font=f["sm"], fill=MUTED)
-    # Credited only when the frame was actually used. Left unconditional, the
-    # page would attribute a disc it had drawn itself to SDO, on precisely the
-    # occasions SDO could not be reached.
-    credit = ("CME arrival: NASA DONKI via CCMC  ·  disc: NASA SDO/HMI"
-              if photo is not None else
-              "CME arrival: NASA DONKI model runs, served by CCMC")
-
     # The eclipse line stays in the footer whenever the band is not up, however
-    # far off the event is. It is the rarest thing this panel shows and the one
-    # worth knowing about in advance.
-    if not imminent:
-        draw.text((MARGIN, H - 212), _eclipse_line(eclipse), font=f["xs"],
-                  fill=DIM)
-        # In this state no figure is being given that the caveat qualifies, so
-        # it sits with the other standing notes rather than beside a number.
-        draw.text((MARGIN, H - 156),
-                  "The Sun is never safe to look at without a certified solar "
-                  "filter.",
-                  font=f["fn"], fill=DIM)
-    else:
-        draw.text((MARGIN, H - 156),
-                  "Eclipse times and coverage are computed for this site.",
-                  font=f["fn"], fill=DIM)
-    draw.text((MARGIN, H - 100),
-              "Spots, flares and radio flux: NOAA Space Weather Prediction Centre",
-              font=f["fn"], fill=DIM)
-    draw.text((MARGIN, H - 44), credit, font=f["fn"], fill=DIM)
+    # far off the event is: it is the rarest thing this panel shows and the one
+    # worth knowing about in advance. The safety caveat moves with what it
+    # qualifies - beside the coverage figures while the band is up, and down
+    # here with the standing notes when no figure is being given.
+    #
+    # ⇒ THE IMAGERY CREDIT APPEARS ONLY WHEN THE FRAME WAS USED. Unconditional,
+    # the page would attribute a disc it had drawn itself to SDO, on precisely
+    # the occasions SDO could not be reached.
+    _footnotes(draw, [
+        _eclipse_line(eclipse) if not imminent else None,
+        ("The Sun is never safe to look at without a certified solar filter."
+         if not imminent else
+         "Eclipse times and coverage are computed for this site."),
+        _sun_imagery_note(observed) if photo is not None else None,
+        "Spots, flares and radio flux: NOAA Space Weather Prediction Centre",
+        "CME arrival: NASA DONKI model runs, served by CCMC",
+    ], f)
     return img
 
 
