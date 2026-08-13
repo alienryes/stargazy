@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.47.0"
+VERSION = "0.47.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1675,10 +1675,18 @@ def _solar_verdict(peak_class):
 
 
 def _eclipse_line(eclipse):
-    """The always-present footer statement about the next eclipse."""
+    """The always-present footer statement about the next eclipse.
+
+    "At the configured location" rather than "here": an eclipse is visible from
+    some places and not others, and this page is the one that says so, so the
+    line has to name WHERE it means. "Here" on a panel is ambiguous between the
+    site it was set up for and wherever the panel happens to be standing.
+    """
     if not eclipse:
-        return "No solar eclipse is visible from here in the next two years."
-    return (f"Next eclipse here: {eclipse['maximum']:%-d %b %Y}, "
+        return ("No solar eclipse is visible from the configured location in "
+                "the next two years.")
+    return (f"Next eclipse at the configured location: "
+            f"{eclipse['maximum']:%-d %b %Y}, "
             f"{eclipse['magnitude'] * 100:.0f}% of the Sun's diameter covered.")
 
 
@@ -1867,7 +1875,7 @@ def _sun_imagery_note(observed):
     have. Stated flatly and left there: the claim needs no argument attached.
     """
     return (f"Imagery: SDO/HMI white light, {observed:%H:%M} UTC. Colour is "
-            f"SDO's own; dark marks are sunspots.")
+            f"SDO's own; dark areas are sunspots.")
 
 
 def _footnotes(draw, lines, f, bottom=None):
@@ -1897,7 +1905,7 @@ def _draw_solar_photo(img, photo, y):
     size.
 
     Nothing is captioned here. What the picture needs said - the observation
-    time, whose colour it is, and that the dark marks are individual spots
+    time, whose colour it is, and that the dark areas are individual spots
     rather than the groups - is a CREDIT, and credits live in the footnotes with
     the other imagery attributions. See _sun_imagery_note.
     """
