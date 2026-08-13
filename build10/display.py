@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.44.0"
+VERSION = "0.45.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -254,6 +254,13 @@ def _fonts():
         "med": font("IBMPlexSans-SemiBold.ttf", 44),
         "sm":  font("IBMPlexSans-Regular.ttf", 38),
         "xs":  font("IBMPlexSans-Regular.ttf", 30),
+        # ⇒ THE FOOTNOTE SIZE, AND DIM IS WHAT SELECTS IT. core.palette defines
+        # DIM as rules, ticks and marginal notes and says outright that it is
+        # never content, so "drawn in DIM" already means "this is a footnote" -
+        # the size follows the colour rather than being chosen per call site.
+        # Four stacked credit lines at the xs size read as a block rather than
+        # as margin, which is what prompted the separate size.
+        "fn":  font("IBMPlexSans-Regular.ttf", 26),
     }
 
 
@@ -515,7 +522,7 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None)
               f"Wind {wind_dir} {wind_spd * KMH_TO_MPH:.1f} mph",
               fill=WHITE, font=f["sm"])
 
-    _right(draw, f"v{VERSION}", H - 44, DIM, f["xs"])
+    _right(draw, f"v{VERSION}", H - 44, DIM, f["fn"])
     return img
 
 
@@ -839,7 +846,7 @@ def render_targets(states, targets, images, lat=None, lon=None, offset=0):
     _draw_cards(img, draw, page_objects, images, lat, obs, f)
 
     draw.text((MARGIN, H - 44), "Sky imagery: DSS2 / CDS Strasbourg",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     return img
 
 
@@ -961,7 +968,7 @@ def render_meteors(states, lat, lon):
         # Pi: core.fonts resolves two Linux paths and otherwise silently returns
         # Pillow's default bitmap face, which is narrow enough to report a
         # comfortable fit for a string that collides.
-        _right(draw, f"ZHR {s['zhr']} overhead", by + 8, DIM, f["xs"])
+        _right(draw, f"ZHR {s['zhr']} overhead", by + 8, DIM, f["fn"])
         y += MET_GAP
 
     # Anchored to the bottom rather than flowing after the last shower: the
@@ -992,7 +999,7 @@ def render_meteors(states, lat, lon):
         if soon:
             uy = used + MET_UP_PAD
             draw.text((MARGIN, uy), "COMING UP",
-                      font=f["xs"], fill=DIM)
+                      font=f["fn"], fill=DIM)
             uy += MET_UP_HEAD
             for name, days, zhr in soon:
                 draw.text((MARGIN, uy), name, font=f["med"], fill=MUTED)
@@ -1023,10 +1030,10 @@ def render_meteors(states, lat, lon):
     # carries every row, where the rows themselves have about two words of space.
     draw.text((MARGIN, H - 88),
               "ZHR assumes an overhead radiant and a perfect sky",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     draw.text((MARGIN, H - 44),
               "Shower elements are orbital constants, stored by solar longitude",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     return img
 
 
@@ -1318,8 +1325,8 @@ def render_aurora(states, lat, lon):
         draw.text((MARGIN, y - 10),
                   "Strongest is the brightest patch in view; best placed is the "
                   "one highest",
-                  font=f["xs"], fill=DIM)
-        draw.text((MARGIN, y + 32), "above your horizon.", font=f["xs"], fill=DIM)
+                  font=f["fn"], fill=DIM)
+        draw.text((MARGIN, y + 32), "above your horizon.", font=f["fn"], fill=DIM)
         y += 60
 
     # What the local sky is doing about it. A forecast the observer cannot act
@@ -1335,13 +1342,13 @@ def render_aurora(states, lat, lon):
     when = (data.get("forecast_at") or "").replace("T", " ").rstrip("Z")
     draw.text((MARGIN, H - 156),
               "The figure is the chance of aurora above a model point, not a sighting.",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     draw.text((MARGIN, H - 100),
               f"OVATION forecast for {when} UTC",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     draw.text((MARGIN, H - 44),
               "Aurora model: NOAA Space Weather Prediction Center",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     return img
 
 
@@ -1574,13 +1581,13 @@ def render_satellites(states, lat, lon):
     draw.text((MARGIN, H - 156),
               "Sunlit satellite in a dark sky. Times are predicted from orbital "
               "elements.",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     draw.text((MARGIN, H - 100),
               f"Elements: CelesTrak, {elements_age()}",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     draw.text((MARGIN, H - 44),
               "Positions computed for this site; brightness is not predicted.",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     return img
 
 
@@ -1821,19 +1828,25 @@ def _draw_solar_photo(img, draw, photo, observed, y, f):
     """
     cx, r = W // 2, SOL_DISC_R
     paste_sun(img, photo, cx, y, r)
-    draw.text((MARGIN, y + r + 40),
-              f"SDO/HMI white light, {observed:%H:%M} UTC. Dark patches are the "
-              f"spot groups.",
-              font=f["xs"], fill=DIM)
+    # ⇒ "SUNSPOTS", NOT "SPOT GROUPS", AND THAT WAS MEASURED RATHER THAN JUDGED.
+    # SWPC counts both regions and the spots inside them, so the caption can only
+    # be right about one. Labelling the dark blobs in the frame: 11 to 21 of them
+    # depending on threshold, merging to 4-5 clusters, against SWPC's 7 regions
+    # and 22 spots on the same day. The blob count tracks the SPOT count, so what
+    # is resolved here is individual spots - several close enough to read as one
+    # patch - and the groups are the clusters they form, which the row above
+    # already counts.
+    #
     # ⇒ THE COLOUR IS SAID TO BE SDO'S, NOT THE SUN'S. The orange is a colour
-    # table applied to continuum intensity - the same measurement is published
-    # as a grey frame - and from space the Sun is white. Saying only "white
-    # light" names the technique and leaves the picture asserting a colour the
-    # Sun does not have. The card makes no positional claim, as the Moon card
-    # does not, but it should not make a false one about appearance either.
-    draw.text((MARGIN, y + r + 84),
-              "Colour is SDO's own; the Sun is white seen from space.",
-              font=f["xs"], fill=DIM)
+    # table applied to continuum intensity - the same measurement is published as
+    # a grey frame - and from space the Sun is white. "White light" names the
+    # technique and leaves the picture asserting a colour the Sun does not have.
+    # Stated flatly and left there: the claim needs no argument attached, and one
+    # line costs the page less than two.
+    draw.text((MARGIN, y + r + 40),
+              f"SDO/HMI white light, {observed:%H:%M} UTC. Colour is SDO's own; "
+              f"the dark marks are sunspots.",
+              font=f["fn"], fill=DIM)
 
 
 def _draw_solar_disc(draw, groups, y, f, now=None):
@@ -1874,8 +1887,8 @@ def _draw_solar_disc(draw, groups, y, f, now=None):
     # anything the picture shows: solar west is to the right, which is the way
     # rotation carries a group and the way every published solar image is drawn.
     # Unlabelled, a mirrored disc looks exactly like a correct one.
-    draw.text((cx - r - 34, y - 15), "E", font=f["xs"], fill=DIM)
-    draw.text((cx + r + 14, y - 15), "W", font=f["xs"], fill=DIM)
+    draw.text((cx - r - 34, y - 15), "E", font=f["fn"], fill=DIM)
+    draw.text((cx + r + 14, y - 15), "W", font=f["fn"], fill=DIM)
 
     drawn = 0
     for g in groups:
@@ -1896,10 +1909,10 @@ def _draw_solar_disc(draw, groups, y, f, now=None):
     draw.text((MARGIN, y + r + 40),
               f"{drawn} spot group{'' if drawn == 1 else 's'}, as last reported "
               f"rather than as they now are.",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
     draw.text((MARGIN, y + r + 84),
               "Marks are enlarged to be visible; real spots are far smaller.",
-              font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
 
 
 def render_solar(states, lat, lon, now=None):
@@ -1984,15 +1997,15 @@ def render_solar(states, lat, lon, now=None):
         draw.text((MARGIN, H - 156),
                   "The Sun is never safe to look at without a certified solar "
                   "filter.",
-                  font=f["xs"], fill=DIM)
+                  font=f["fn"], fill=DIM)
     else:
         draw.text((MARGIN, H - 156),
                   "Eclipse times and coverage are computed for this site.",
-                  font=f["xs"], fill=DIM)
+                  font=f["fn"], fill=DIM)
     draw.text((MARGIN, H - 100),
               "Spots, flares and radio flux: NOAA Space Weather Prediction Centre",
-              font=f["xs"], fill=DIM)
-    draw.text((MARGIN, H - 44), credit, font=f["xs"], fill=DIM)
+              font=f["fn"], fill=DIM)
+    draw.text((MARGIN, H - 44), credit, font=f["fn"], fill=DIM)
     return img
 
 

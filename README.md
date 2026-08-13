@@ -157,13 +157,13 @@ Source: NOAA SWPC's OVATION model. No key, no registration.
 
 Every other conditional page here exists only after dark, because aurora and meteors are conditions of the night sky. This one inverts that: it appears **whenever the Sun is above the horizon**, and fills the hours when the rest of the panel has least to say.
 
-![The solar page on a quiet day: the word QUIET over the day's strongest flare, rows for sunspots, flare odds and radio flux, and below them a photograph of the Sun's disc in white light with its spot groups visible as small dark marks.](screenshots/10in-solar.png)
+![The solar page on a quiet day: the word QUIET over the day's strongest flare, rows for sunspots, coronal mass ejections, flare odds and radio flux, and below them a photograph of the Sun's disc in white light with individual sunspots visible as small dark marks.](screenshots/10in-solar.png)
 
-> **An ordinary quiet day, 13 August 2026** — captured off the panel. Six spot groups, nothing above a B-class flare, and no CME modelled to arrive.
+> **An ordinary quiet day, 13 August 2026** — captured off the panel. Seven spot regions, nothing above a B-class flare, and no CME modelled to arrive.
 
 It is also the only page here that is **always present rather than gated on something happening**. That is a deliberate departure from the rule the other pages follow, and what makes it honest is that the subject really is always there: a quiet Sun is a fact about today, not an empty page.
 
-**The disc is a photograph.** SDO's HMI continuum frame — the white-light view, which is the one with the sunspots actually in it — composited the same way the Moon card composites its Dial-a-Moon frame, on the same black field with the same circular mask. The mask is doing real work here: it removes the caption strip SDO prints along the bottom of every frame.
+**The disc is a photograph.** SDO's HMI continuum frame — the white-light view, which is the one with the sunspots actually in it — composited the same way the Moon card composites its Dial-a-Moon frame, on the same black field with the same circular mask. The mask is doing real work here: it removes the caption strip SDO prints along the bottom of every frame. What the frame resolves is **individual spots** rather than the groups they belong to: labelling the dark blobs gives 11–21 of them against SWPC's 22 spots in 7 regions on the same day, so the caption names spots and the row above carries both counts. The colour is SDO's own — a table applied to continuum intensity — and the page says so, because from space the Sun is white.
 
 That replaced a drawn disc, and fixed it. The drawing plotted each group from SWPC's regional report, and overlaying those computed positions on an SDO frame showed **every mark sitting east of its real spot by about the same amount** — because the report is a *daily* snapshot while solar rotation carries a group roughly 13.2° a day, up to 110 px at this scale by the time the next one is issued. The projection was correct; its input was stale, and only a photograph could have shown that. A frame has no such lag: it shows the spots where they were at its own timestamp, which the page prints.
 
