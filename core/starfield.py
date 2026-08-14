@@ -25,8 +25,10 @@ from core.positions import alt_az
 CATALOGUE = Path(__file__).resolve().parent / "data" / "stars.tsv"
 
 # Brightest and faintest the renderer maps between. Sirius is -1.46 and the
-# catalogue stops at 5.6; anchoring to fixed values rather than to the data
-# means one faint star dropping out cannot re-scale the whole sky.
+# catalogue is trimmed at 6.5, the naked-eye limit under a genuinely dark sky
+# (5.6 was a first attempt and was rejected - see the module docstring).
+# Anchoring to fixed values rather than to the data means one faint star
+# dropping out cannot re-scale the whole sky.
 MAG_BRIGHT, MAG_FAINT = -1.5, 6.5
 
 # Drawn size per magnitude, as (fainter-than, size) with the last entry the
