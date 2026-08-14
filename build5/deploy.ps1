@@ -1,6 +1,6 @@
 param(
     [string]$User = "operations",
-    [string]$PiHost = "astro-pi.local",
+    [string]$PiHost = "stargazy5.local",
     [string]$KeyFile = "$env:USERPROFILE\.ssh\id_rsa"
 )
 
