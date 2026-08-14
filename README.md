@@ -380,6 +380,8 @@ The project originally ran on a **Pimoroni Inky Impression 4"** with a bespoke s
 | Drawn moon instead of a photograph | The Dial-a-Moon fetch failed — the log says why. It will not substitute an older cached frame, because the phase moves ~12°/day and yesterday's picture would be wrong |
 | `KeyError: 'ha'` in config | Only applies with `weather.source = "homeassistant"`: `config.toml` is missing the `[ha]` section header |
 | 401 Unauthorized from HA | Likewise — the token in `config.toml` is wrong or expired |
+| The Pi's hostname reverts, days or weeks after being changed | cloud-init owns it on an Imager-provisioned Pi and reapplies it at boot. `sudo bash rename-host.sh <newname>` sets it and disarms that; only a reboot proves it held |
+| After a rename, `/etc/hosts` keeps the old name as an alias | cloud-init caches its datasource per instance-id, so correcting `/boot/firmware/user-data` alone has no effect. `sudo bash disable-cloud-init.sh`, then reboot; afterwards `stat -c %y /etc/hosts` must predate `uptime -s` |
 
 **Check logs / CPU:**
 
@@ -451,6 +453,8 @@ tools/                  Development checks and utilities
   check_ranking.py        Deep-sky ordering, incl. UpTonight's 0.0 magnitude
   check_paging.py         Deep-sky card paging arithmetic, both card counts
 harden-pi.sh            Optional: key-only SSH + automatic security updates
+rename-host.sh          Optional: rename the Pi so the change survives a reboot
+disable-cloud-init.sh   Optional: stop cloud-init reapplying its provisioning
 case/
   README.md               Print settings, hardware, assembly
   shell.py                Display shell (front frame + back plate)
