@@ -147,18 +147,24 @@ TUNING_DEFAULTS = {
 
 
 def fetch_states(ha_url, token):
-    """Weather and sun/moon conditions, as entity -> state string."""
-    session = requests.Session()
-    session.headers["Authorization"] = f"Bearer {token}"
+    """Weather and sun/moon conditions, as entity -> state string.
+
+    One session for the ~30 entity reads, closed on the way out: the connection
+    is kept alive across them, and this runs on the data thread several times an
+    hour for as long as the daemon is up, so a session left open each time is a
+    socket left open each time.
+    """
     states = {}
-    for eid in ENTITIES:
-        try:
-            r = session.get(f"{ha_url}/api/states/{eid}", timeout=10)
-            r.raise_for_status()
-            states[eid] = r.json()["state"]
-        except Exception as e:
-            log.warning("Failed to fetch %s: %s", eid, e)
-            states[eid] = "unknown"
+    with requests.Session() as session:
+        session.headers["Authorization"] = f"Bearer {token}"
+        for eid in ENTITIES:
+            try:
+                r = session.get(f"{ha_url}/api/states/{eid}", timeout=10)
+                r.raise_for_status()
+                states[eid] = r.json()["state"]
+            except Exception as e:
+                log.warning("Failed to fetch %s: %s", eid, e)
+                states[eid] = "unknown"
     return states
 
 

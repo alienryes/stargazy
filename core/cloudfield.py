@@ -30,7 +30,6 @@ kept in step with the sprite size and count by hand.
 import math
 
 import numpy as np
-from PIL import Image
 
 # Feature height as a fraction of the canvas's SHORTER side, and how much wider
 # than tall a cloud is. The aspect is applied in pixels, so it is the same on
@@ -172,30 +171,3 @@ def make_tone_rgb(field):
 def alpha_for(field, cover):
     """Alpha covering `cover` (0-1) of the field, as uint8."""
     return (alpha_from(field, solve_threshold(field, cover)) * 255.0).astype(np.uint8)
-
-
-def make_layer(field, cover):
-    """An RGBA cloud layer covering `cover` (0-1) of the canvas, and its alpha.
-
-    Takes the field rather than making one: the field is independent of cover
-    and costs a sort of the whole canvas to build, so it is generated once and
-    only this part is redone when the forecast moves.
-
-    The alpha is returned alongside the image because the stars and meteors are
-    occluded by sampling it per point rather than by being painted over: cloud
-    hides what is behind it and only that, where a global dimming factor washes
-    out a partly clear sky as well. It comes back as uint8, a quarter the size
-    of the float array on a field this wide, and it is only ever read a point
-    at a time.
-    """
-    alpha = alpha_from(field, solve_threshold(field, cover))
-
-    # Tone tracks the field, so thicker cloud reads lighter. Without this the
-    # layer is one colour at one opacity, and overcast comes out as the flat
-    # panel the sheet used to produce.
-    tone = (1.0 - TONE_SWING / 2.0) + TONE_SWING * field
-    rgb = np.clip(np.array(CLOUD_COLOUR, dtype=np.float32) * tone[..., None], 0, 255)
-
-    a8 = (alpha * 255.0).astype(np.uint8)
-    img = np.dstack([rgb, a8[..., None]]).astype(np.uint8)
-    return Image.fromarray(img, "RGBA"), a8
