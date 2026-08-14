@@ -73,7 +73,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.38.2"
+FIRMWARE_VERSION = "3.38.3"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -614,7 +614,9 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
         # which fixes the Moon/Neptune and Uranus/Saturn crowding at source
         # instead of nudging labels around it. The bearing stays: it is the one
         # number worth reading off precisely, and a compass axis cannot give it.
-        bearing = f"  {int(round(az))}°"
+        # Modulo AFTER rounding: 359.7 rounds to 360, which is a bearing that
+        # does not exist and reads as an error next to a compass axis marked N.
+        bearing = f"  {int(round(az)) % 360}°"
         nw = draw.textlength(name, font=f_sm)
         lx = x + r + 8
         lw = max(nw + draw.textlength(bearing, font=f_sm), 60)
