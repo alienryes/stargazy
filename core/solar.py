@@ -631,7 +631,15 @@ def next_eclipse(lat, lon, elevation=0.0, now=None,
                 return None
             if same_site and event:
                 event = _revive(dict(event), ("maximum", "begins", "ends"))
-                if event["ends"] and event["ends"] > now:
+                # Keyed on the MAXIMUM, not on `ends`. Both contact times come
+                # from _contact, which returns None if the discs have not
+                # separated within its four-hour bound, and _revive nulls any
+                # field whose cached string will not parse - so `ends` is the
+                # one field of the three that can legitimately be absent on a
+                # real event. Keyed on it, such an event never satisfies the
+                # cache and the two-year lunation search reruns on every data
+                # refresh, on a Pi, forever. The maximum is what the event is.
+                if event["maximum"] and (event["ends"] or event["maximum"]) > now:
                     return event
         except (ValueError, TypeError) as e:
             log.warning("Unusable eclipse cache (%s); recomputing.", e)

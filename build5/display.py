@@ -73,7 +73,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.38.3"
+FIRMWARE_VERSION = "3.38.4"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -979,6 +979,28 @@ def target_pages(states, targets, lat):
     return out
 
 
+def _optional(name, fn, *args):
+    """One conditional page, or None if building it raised.
+
+    Ported from the 10.1" build, where six renderers over five feeds made the
+    single try boundary expensive. It matters less here - this build has one
+    conditional page and it reads UpTonight's reports off local disk - but the
+    failure is the same shape: an exception escaping build_pages fails the whole
+    refresh, so the refresher keeps the previous overlays and the panel silently
+    stops advancing. A malformed report file is enough to do it.
+
+    ⇒ render_foreground IS DELIBERATELY NOT WRAPPED, for the same reason as on
+    the other build: the rotation cannot be empty, so one page has to be
+    mandatory, and it is the one drawing from the states dict.
+    """
+    try:
+        return fn(*args)
+    except Exception as e:
+        log.warning("%s page could not be built (%s); leaving it out of the "
+                    "rotation this refresh.", name, e)
+        return None
+
+
 def build_pages(states, targets, lat, moon_ring=False):
     """Both dashboard pages as RGBA overlays.
 
@@ -992,7 +1014,7 @@ def build_pages(states, targets, lat, moon_ring=False):
     # better a single page than a dead one before UpTonight's first run. It
     # carries every object UpTonight passed, as a Paged run stepped by its own
     # button; four cards against a list of forty is the case that most needs it.
-    page2 = target_pages(states, targets, lat)
+    page2 = _optional("Targets", target_pages, states, targets, lat)
     if page2:
         pages.append(page2)
     return pages

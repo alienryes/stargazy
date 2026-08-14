@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.47.3"
+VERSION = "0.47.4"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1722,7 +1722,13 @@ def _draw_eclipse_band(draw, eclipse, now, f):
     its AREA; they read 0.94 and 0.90 at the same event. Printing either under
     the other's label is the ZHR-versus-observed-rate error in a new place.
     """
-    started = eclipse["begins"] <= now <= (eclipse["ends"] or now)
+    # `begins` may be absent: core.solar._contact returns None when the discs
+    # have not separated inside its four-hour bound, and a cached event whose
+    # stored string will not parse is revived with the field nulled. With no
+    # first contact known, "in progress" cannot be established from below, so
+    # the maximum is what decides it.
+    begins = eclipse["begins"]
+    started = ((begins or eclipse["maximum"]) <= now <= (eclipse["ends"] or now))
     heading = "PARTIAL ECLIPSE IN PROGRESS" if started else "PARTIAL ECLIPSE"
     draw.text((MARGIN, 150), heading, font=font("IBMPlexSans-Bold.ttf", 66),
               fill=WHITE)
@@ -1736,14 +1742,17 @@ def _draw_eclipse_band(draw, eclipse, now, f):
     # same duplication the meteors footer and the satellite listing each had,
     # where a headline repeated the first row beneath it. Split by KIND, the two
     # lines answer different questions.
-    target, label = ((eclipse["maximum"], "Maximum") if started
-                     else (eclipse["begins"], "Starts"))
+    # Counting to a start that is not known would state a precision the search
+    # did not produce, so an absent first contact falls back to the maximum -
+    # which is always present - and the label says so.
+    target, label = ((eclipse["maximum"], "Maximum") if started or not begins
+                     else (begins, "Starts"))
     draw.text((MARGIN, 250), f"{label} {_until(target, now)}",
               font=f["med"], fill=WHITE)
     day = "" if eclipse["maximum"].date() == now.date() \
         else f"{eclipse['maximum']:%a %-d %b}  ·  "
-    times = (f"{day}begins {eclipse['begins']:%H:%M}  ·  "
-             f"maximum {eclipse['maximum']:%H:%M}")
+    times = f"{day}" + (f"begins {begins:%H:%M}  ·  " if begins else "")
+    times += f"maximum {eclipse['maximum']:%H:%M}"
     if eclipse["ends"]:
         times += f"  ·  ends {eclipse['ends']:%H:%M}"
     draw.text((MARGIN, 320), times, font=f["sm"], fill=MUTED)
@@ -2026,9 +2035,12 @@ def render_solar(states, lat, lon, now=None):
 
     # In the band when the eclipse is close enough to be worth the top of the
     # page, and while it is actually running.
-    imminent = bool(eclipse
-                    and eclipse["begins"] - now
-                    <= timedelta(hours=SOL_ECLIPSE_BAND_HOURS)
+    # Measured from first contact where it is known and from the maximum where
+    # it is not: `begins` comes from _contact, which returns None when the discs
+    # have not separated inside its bound, and subtracting from that raised.
+    onset = (eclipse or {}).get("begins") or (eclipse or {}).get("maximum")
+    imminent = bool(eclipse and onset
+                    and onset - now <= timedelta(hours=SOL_ECLIPSE_BAND_HOURS)
                     and (eclipse["ends"] or eclipse["maximum"]) >= now)
 
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -2104,6 +2116,33 @@ def target_pages(states, targets, lat):
     return out
 
 
+def _optional(name, fn, *args):
+    """One conditional page, or None if building it raised.
+
+    Each of these pages stands on its own feed - UpTonight on disk, CelesTrak,
+    OVATION, SWPC, DONKI - and an exception escaping here fails the whole
+    build_pages call, so one supplier changing shape takes down the pages that
+    rendered perfectly alongside it. The refresher then keeps the previous
+    overlays indefinitely and the panel silently stops advancing.
+
+    The daemon's stated contract is already that a page with nothing to show is
+    simply not returned. A page that could not be built has nothing to show, so
+    this routes a raising renderer down that same path.
+
+    ⇒ render_conditions IS DELIBERATELY NOT WRAPPED. The rotation cannot be
+    empty - the render loop indexes pages modulo their count - so exactly one
+    page has to be mandatory, and that is the one that draws from the states
+    dict with no feed of its own beyond the lunar frame, which already fails
+    soft to the parametric drawing.
+    """
+    try:
+        return fn(*args)
+    except Exception as e:
+        log.warning("%s page could not be built (%s); leaving it out of the "
+                    "rotation this refresh.", name, e)
+        return None
+
+
 def build_pages(states, targets, lat, moon_ring=False):
     """Every page as an RGBA overlay. Data thread only: this fetches the hour's
     lunar frame and any deep-sky cutouts not already cached."""
@@ -2114,31 +2153,31 @@ def build_pages(states, targets, lat, moon_ring=False):
     # UpTonight passed rather than the first screenful, as a Paged run stepped
     # by its own button: the heading has always said "of 40" while showing six,
     # and naming what it is withholding is not the same as offering it.
-    page2 = target_pages(states, targets, lat)
+    page2 = _optional("Targets", target_pages, states, targets, lat)
     if page2:
         pages.append(page2)
-    page3 = render_meteors(states, lat, LON)
+    page3 = _optional("Meteors", render_meteors, states, lat, LON)
     if page3 is not None:
         pages.append(page3)
     # Aurora joins the rotation only when there is aurora to see, which is the
     # same mechanism pages 2 and 3 use - and the reason this page is independent
     # of UpTonight. Drawn on the targets panorama instead, a real storm could
     # have gone unshown because an unrelated data source had failed.
-    page4 = render_aurora(states, lat, LON)
+    page4 = _optional("Aurora", render_aurora, states, lat, LON)
     if page4 is not None:
         pages.append(page4)
     # Same mechanism again: present only when a bright satellite crosses a dark
     # sky within the day. Unlike the pages above it this one is not gated on the
     # sky being dark NOW, because a pass is an appointment rather than a
     # condition - and it is the only page here whose subject is man-made.
-    page5 = render_satellites(states, lat, LON)
+    page5 = _optional("Satellites", render_satellites, states, lat, LON)
     if page5 is not None:
         pages.append(page5)
     # The one page here that requires the Sun to be UP. It does not lengthen the
     # worst-case rotation: aurora needs darkness and cannot coexist with it, so
     # the count peaks at five either way - by night with aurora, by day with
     # this.
-    page6 = render_solar(states, lat, LON)
+    page6 = _optional("Solar", render_solar, states, lat, LON)
     if page6 is not None:
         pages.append(page6)
     return pages
