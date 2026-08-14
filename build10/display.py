@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.47.2"
+VERSION = "0.47.3"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1260,10 +1260,33 @@ def _draw_kp_forecast(draw, rows, top, f):
         draw.rectangle([bx, base - bh, bx + bw, base], fill=NOMINAL)
         # A day label at each midnight, so the bars carry dates without a
         # tick for every three-hour step.
-        when = datetime.fromisoformat(tag)
+        #
+        # The parse is guarded because the BAR does not depend on it and the
+        # label does: a change in SWPC's time_tag spelling should cost the
+        # weekday underneath one bar, not the aurora page and with it the whole
+        # data refresh, which is what an exception here would take down.
+        try:
+            when = datetime.fromisoformat(tag)
+        except (TypeError, ValueError):
+            continue
         if when.hour == 0:
             draw.text((bx, base + 12), when.strftime("%a"), font=f["xs"], fill=MUTED)
     draw.line([(x0, base), (x1, base)], fill=STEEL, width=2)
+
+
+def _local_sky_note(cloud):
+    """What the local sky is doing about whatever the page has just announced.
+
+    Both the aurora and the satellite page carry this: a forecast the observer
+    cannot act on because it is overcast is worth saying out loud rather than
+    leaving them to go outside and find out. Shared so the two cannot drift
+    into describing the same sky differently.
+    """
+    if cloud <= 20:
+        return "Your sky is clear."
+    if cloud < 80:
+        return f"Your sky is {cloud}% obscured."
+    return f"Your sky is {cloud}% obscured - almost certainly not visible from here."
 
 
 def render_aurora(states, lat, lon):
@@ -1345,10 +1368,7 @@ def render_aurora(states, lat, lon):
     # What the local sky is doing about it. A forecast the observer cannot act
     # on because it is overcast is worth saying out loud rather than leaving
     # them to look up and find out.
-    sky = ("Your sky is clear." if cloud <= 20
-           else f"Your sky is {cloud}% obscured." if cloud < 80
-           else f"Your sky is {cloud}% obscured - almost certainly not visible from here.")
-    draw.text((MARGIN, y + 20), sky, font=f["sm"], fill=MUTED)
+    draw.text((MARGIN, y + 20), _local_sky_note(cloud), font=f["sm"], fill=MUTED)
 
     _draw_kp_forecast(draw, data.get("kp_forecast") or [], y + 130, f)
 
@@ -1582,10 +1602,8 @@ def render_satellites(states, lat, lon):
     # leaving them to go outside and find out. Pinned rather than following the
     # list, so a short list cannot walk this line into the footer.
     cloud = obscuration_of(states)
-    sky = ("Your sky is clear." if cloud <= 20
-           else f"Your sky is {cloud}% obscured." if cloud < 80
-           else f"Your sky is {cloud}% obscured - almost certainly not visible from here.")
-    draw.text((MARGIN, min(y + 40, SAT_SKY_MAX_Y)), sky, font=f["sm"], fill=MUTED)
+    draw.text((MARGIN, min(y + 40, SAT_SKY_MAX_Y)), _local_sky_note(cloud),
+              font=f["sm"], fill=MUTED)
 
     # ⇒ NO BRIGHTNESS IS CLAIMED ANYWHERE ON THIS PAGE. Apparent magnitude
     # depends on which face the station has turned towards the observer, and

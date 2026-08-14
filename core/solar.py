@@ -111,8 +111,6 @@ def flare_class(flux):
 def _location(text):
     """("S17W54") -> (-17.0, -54.0) in degrees, north and east positive.
 
-    East positive so that longitude increases the way the Sun rotates carries a
-    group towards the west limb, which is the direction spots actually drift.
     East positive, so a group's longitude DECREASES as solar rotation carries it
     from the east limb towards the west over about thirteen days.
 
@@ -438,9 +436,10 @@ def activity(now=None):
     # to look. This matters most for the CME, whose normal state IS absence:
     # without the distinction a page saying "none expected" would say it just as
     # confidently with the network down.
+    feeds = (("regions", fetch_regions), ("xray", fetch_xray),
+             ("f107", fetch_f107), ("cme", lambda: fetch_cme(now)))
     out, failures = {"unavailable": []}, 0
-    for key, fn in (("regions", fetch_regions), ("xray", fetch_xray),
-                    ("f107", fetch_f107), ("cme", lambda: fetch_cme(now))):
+    for key, fn in feeds:
         try:
             out[key] = fn()
         except Exception as e:
@@ -449,7 +448,11 @@ def activity(now=None):
             out["unavailable"].append(key)
             failures += 1
 
-    if failures == 4:
+    # Counted from the feed list rather than written as a literal: a fifth feed
+    # added above would otherwise leave this comparing against four forever, and
+    # the cooldown that protects a throttled endpoint would silently stop firing
+    # - a failure that shows up as extra traffic, not as an error.
+    if failures == len(feeds):
         _last_failure = datetime.now(timezone.utc)
         return cached_or_none()
 
