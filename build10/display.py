@@ -63,7 +63,7 @@ from core.palette import (
 )
 from core.panel import PIL_ROTATION, Framebuffer, Strip
 from core.positions import alt_az, next_rise, observer, plot_instant
-from core.satellites import elements_age, passes
+from core.satellites import elements_age, passes, track_of
 from core.sky import Sky
 from core.sky import sky_params as core_sky_params
 from core.solar import CME_LOOKAHEAD_DAYS, next_eclipse, project_spot, solar_b0, sun_up
@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.47.4"
+VERSION = "0.48.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1404,6 +1404,34 @@ SAT_ENABLED = True
 # state a precision the elements do not carry. A week is already the edge of it.
 SAT_SCHEDULE_HOURS = 168
 SAT_ROWS = 8
+# Column offsets for a listing row, MEASURED on the panel's own fonts rather
+# than chosen: date 251 px, name 323 px, geometry 383 px, in a row 1120 px wide.
+# The name column was 220 px while the objects were two whose names were short,
+# and "COSMO-SKYMED 1" ran 103 px into the geometry beside it.
+SAT_COL_NAME = 280
+SAT_COL_GEOM = 640
+
+
+def _rank(p):
+    """How worth watching a pass is: its tier first, then how high it climbs."""
+    return (p["notable"], p["max_altitude"])
+
+
+def _best_per_night(candidates):
+    """One pass per object per night, the highest-climbing of them.
+
+    A schedule answers "is it worth going out on Thursday", and an object that
+    crosses three times in a night answers that once. Applied by DISPLAY NAME
+    rather than catalogue number, which is what collapses the nine BlueBirds:
+    they share a name because they fly as one thing as far as a reader is
+    concerned, so they group as one thing here.
+    """
+    best = {}
+    for p in candidates:
+        key = (p["name"], p["culminate"].date())
+        if key not in best or p["max_altitude"] > best[key]["max_altitude"]:
+            best[key] = p
+    return list(best.values())
 SAT_Y0, SAT_ROW_H = 900, 80
 # The sky line follows the listing, but may not be pushed past this: a full list
 # would otherwise walk it into the footer.
@@ -1513,11 +1541,18 @@ def _until(when, now):
 
 
 def render_satellites(states, lat, lon):
-    """Page 5: the next bright satellite pass, when there is one worth going out for.
+    """Page 5: the best satellite pass of the coming day, and the week behind it.
 
     Returns None unless a pass clears every gate in core.satellites within the
-    next day. That module decides visibility; this one decides only whether the
-    result is worth a page, which is the same division the meteor page uses.
+    next day. That module decides visibility; this one decides only which of the
+    results are worth the space, which is the same division the meteor page uses.
+
+    ⚠ SELECTION MATTERS HERE IN A WAY IT DID NOT WHEN THIS WALKED TWO OBJECTS.
+    Forty-five of them produce a few hundred passes a week, nearly all of them
+    faint things low in the haze, so showing the next few in time order would
+    fill the page with exactly what a reader should ignore. Height ranks both the
+    headline and the list; _best_per_night keeps one object from taking several
+    rows of one night.
 
     ⇒ THE PATH IS THE POINT, and it is why this is a page rather than a line of
     text. A pass is the one man-made thing the display can plot honestly - the
@@ -1527,16 +1562,29 @@ def render_satellites(states, lat, lon):
     """
     if not SAT_ENABLED:
         return None
-    # ONE walk for both answers: the soonest pass decides whether there is a
-    # page, the rest become the schedule under the plot.
-    found = passes(lat or 0.0, lon or 0.0, hours=SAT_SCHEDULE_HOURS, with_track=True)
+    # ONE walk for both answers: what is imminent decides whether there is a
+    # page, the rest become the schedule under the plot. No track is asked for
+    # here - a week of the visual group runs to several hundred passes and only
+    # the headline is plotted, so its path is fetched separately below.
+    found = passes(lat or 0.0, lon or 0.0, hours=SAT_SCHEDULE_HOURS)
     if not found:
         return None
 
-    nxt = found[0]
     now = datetime.now().astimezone()
-    if nxt["culminate"] - now > timedelta(hours=SAT_HORIZON_HOURS):
+    soon = [p for p in found
+            if p["culminate"] - now <= timedelta(hours=SAT_HORIZON_HOURS)]
+    if not soon:
         return None
+    # ⇒ THE HEADLINE IS THE BEST PASS OF THE COMING DAY, NOT THE FIRST. With two
+    # objects those were nearly the same question; across forty-five they are
+    # not, and the soonest is usually some faint thing grazing the horizon.
+    #
+    # ⚠ AND HEIGHT IS THE SECOND KEY, NOT THE FIRST. Ranking on height alone was
+    # tried and measured: it fills the page with whatever happens to pass near
+    # the zenith, which across this many objects is nearly always something
+    # nobody has heard of, and it left ISS out entirely. core.satellites.NOTABLE
+    # carries the tier and explains what it does and does not claim.
+    nxt = max(soon, key=_rank)
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     f = _fonts()
@@ -1566,7 +1614,7 @@ def render_satellites(states, lat, lon):
     # Track first, then the axes over it, matching the aurora page: the path is
     # the background its numbers annotate. No marks are passed - the track draws
     # its own culmination dot, and see _draw_pass_track for why it is unlabelled.
-    _draw_pass_track(img, nxt.get("track") or [], NOMINAL)
+    _draw_pass_track(img, track_of(nxt, lat or 0.0, lon or 0.0), NOMINAL)
     _draw_panorama(draw, [], "pass", f["sm"], f["xs"])
 
     # The FIRST pass is the heading above, so the list starts after it. Printed
@@ -1574,13 +1622,21 @@ def render_satellites(states, lat, lon):
     # meteor page's footer had, where "Next peak" repeated the first row of its
     # own list. The heading is suppressed with the list rather than left
     # standing over nothing.
-    later = found[1:SAT_ROWS + 1]
+    # SELECTED by height, then shown in time order. Chronological selection
+    # would fill all eight rows with the next two evenings and never reach the
+    # good pass on Friday; chronological DISPLAY is still right, because the
+    # thing being read off these rows is which night to plan for.
+    later = [p for p in _best_per_night(found) if p is not nxt]
+    later.sort(key=_rank, reverse=True)
+    later = sorted(later[:SAT_ROWS], key=lambda p: p["culminate"])
     if later:
         y = SAT_Y0
-        # "Over the next week", not "later this week": the listing runs a week
-        # forward from now, so on a Wednesday it reaches the following Wednesday
-        # and "this week" is simply untrue of the last rows.
-        draw.text((MARGIN, y), "Over the next week", font=f["med"], fill=WHITE)
+        # "The best of the next week", because these rows are no longer simply
+        # the next few passes: they are the highest one each object makes on
+        # each night, capped at the rows that fit. Calling that "over the next
+        # week" would imply a completeness the list does not have.
+        draw.text((MARGIN, y), "The best of the next week", font=f["med"],
+                  fill=WHITE)
         y += 70
         for p in later:
             # The DATE as well as the weekday. A week's listing can contain the
@@ -1588,8 +1644,9 @@ def render_satellites(states, lat, lon):
             # read "Wed" on a Wednesday and looked like they meant tonight.
             draw.text((MARGIN, y), f"{p['culminate']:%a %d  %H:%M}", font=f["sm"],
                       fill=WHITE)
-            draw.text((MARGIN + 280, y), p["name"], font=f["sm"], fill=MUTED)
-            draw.text((MARGIN + 500, y),
+            draw.text((MARGIN + SAT_COL_NAME, y), p["name"], font=f["sm"],
+                      fill=MUTED)
+            draw.text((MARGIN + SAT_COL_GEOM, y),
                       f"{p['max_altitude']:.0f}° up  ·  {compass(p['rise_bearing'])} to "
                       f"{compass(p['set_bearing'])}",
                       font=f["sm"], fill=MUTED)
