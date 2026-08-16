@@ -13,16 +13,24 @@ night - deep in the night the station is in the Earth's shadow and there is
 nothing to see. ephem answers the hard half of that directly with
 `sat.eclipsed`, so no illumination geometry is computed here.
 
-⇒ NOTHING HERE PREDICTS A BRIGHTNESS. The station's apparent magnitude depends
-on which face is turned towards the observer, and no keyless source reports the
+⇒ NOTHING HERE PREDICTS A BRIGHTNESS. An object's apparent magnitude depends on
+which face is turned towards the observer, and no keyless source reports the
 attitude. Range and altitude are reported instead, both of which are computed
 rather than guessed; a caller wanting to rank passes should rank on those.
+
+⇒ WHICH OBJECTS QUALIFY IS DELEGATED, NOT DECIDED HERE. CelesTrak maintains a
+"visual" group of the objects bright enough to be seen without a telescope, so
+membership of it is the brightness test - which is how this module can select on
+brightness while still predicting none. The alternative was a hand-kept list of
+catalogue numbers, and that decays silently: objects re-enter and new bright ones
+launch, and nothing in a static list would ever say so.
 
 Source: CelesTrak's GP element sets, keyless and unregistered. Orbital elements
 age, so the cache below has a hard expiry rather than an unbounded fallback.
 """
 import logging
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -38,13 +46,13 @@ CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php"
 # entirely after a handful of requests. Two consequences, both structural rather
 # than cosmetic:
 #
-#   - ONE request covers every satellite here, by fetching the "stations" GROUP
-#     rather than querying each catalogue number. CelesTrak's own guidance is to
-#     pull groups for exactly this reason, and both stations are in that group.
+#   - ONE request covers every satellite here, by fetching a GROUP rather than
+#     querying each catalogue number. CelesTrak's own guidance is to pull groups
+#     for exactly this reason.
 #   - A failed fetch starts a cooldown. Without one, a display whose cache has
 #     expired retries on every data refresh, which is how a throttle becomes a
 #     block.
-CELESTRAK_GROUP = "stations"
+CELESTRAK_GROUP = "visual"
 FETCH_COOLDOWN_MINUTES = 30
 _last_failure = None
 
@@ -52,18 +60,60 @@ _last_failure = None
 # core.aurora - the endpoints are free and being a good citizen is the rent.
 HEADERS = {"User-Agent": "stargazy (github.com/alienryes)"}
 
-# The only two crewed stations bright enough to be worth naming on a panel. The
-# ISS reaches roughly magnitude -3 at a high pass, brighter than anything in the
-# sky but the Moon and Venus; Tiangong is a magnitude or two fainter and still
-# an easy naked-eye object. Nothing else is added on purpose: the visible
-# Starlink phenomenon is a freshly launched train rather than a catalogued
-# object, and no keyless source predicts one.
-SATELLITES = (("ISS", 25544), ("Tiangong", 48274))
+# ⇒ THREE QUARTERS OF THE VISUAL GROUP IS SPENT HARDWARE. Of the 157 objects it
+# held when this was written, 114 were rocket bodies or numbered military
+# payloads: a dozen identical "SL-16 R/B" rows say nothing a reader can act on,
+# and they would crowd out the objects that do. What survives is the 43 named
+# payloads - the two stations, the BlueBirds, and the reliable sun-synchronous
+# set (Envisat, Terra, Aqua, ERS-1).
+#
+# Matched on the name because that is the only thing the TLE format carries: a
+# three-line set has no object type field, and the alternative is a second
+# request to a different endpoint for a classification this expresses adequately.
+EXCLUDED_NAME = re.compile(r"\bR/B(\(\d+\))?\b|\bDEB\b|^COSMOS \d|^USA \d")
+
+# Where the catalogue name is not what a reader would recognise. Deliberately
+# short: a name only earns an entry here when the catalogue's own is actively
+# unhelpful, and everything absent from it prints as CelesTrak gives it.
+ALIASES = {
+    25544: "ISS",
+    48274: "Tiangong",
+}
+
+# ⇒ A CONSTELLATION FLIES AS ONE OBJECT AS FAR AS A READER IS CONCERNED. The ten
+# BlueBirds share an orbital plane, so a good night produces ten near-identical
+# rows differing only in the minute. Mapping them to one display name is the
+# whole of the collapse: passes are grouped by display name below, so this makes
+# them a single entry showing the best of the group without any special case in
+# the selection itself.
+CONSTELLATIONS = ((re.compile(r"^SPACEMOBILE-\d+"), "BlueBird"),)
+
+# ⇒⇒ THE ONE BRIGHTNESS JUDGEMENT IN THIS MODULE, AND IT IS DELIBERATELY COARSE.
+# Everything else here refuses to rank on brightness because no keyless source
+# reports an attitude - but ranking on height alone was measured to be worse than
+# no ranking at all. Across forty-five objects a week holds dozens of near-zenith
+# passes, so height saturates and the object that wins is effectively arbitrary:
+# the page led with SERT 2, a 1970 ion-engine testbed, at three in the morning,
+# while an ISS pass the same evening went unmentioned.
+#
+# So objects are sorted into two tiers and height orders them WITHIN a tier. This
+# is a claim that these are recognisable or physically large, not a predicted
+# magnitude - the same kind of judgement as accepting CelesTrak's visual group in
+# the first place, one level finer.
+#
+# Held by DISPLAY NAME so the nine BlueBirds need one entry rather than nine.
+NOTABLE = frozenset({
+    "ISS", "Tiangong",   # crewed, and the two brightest things up there
+    "BlueBird",          # phased-array panels tens of metres across
+    "ACS3",              # a solar sail, bright out of all proportion to its mass
+    "AJISAI",            # a mirrored sphere, and it flashes
+    "ENVISAT", "ERS-1", "TERRA", "AQUA",  # large, and reliable from this latitude
+})
 
 # Beside the entry point, as core.imagery does, so a build's cache stays in one
 # place rather than being buried inside the engine.
 CACHE_ROOT = Path(__file__).resolve().parent.parent / "cache"
-TLE_CACHE = CACHE_ROOT / "stations.tle"
+TLE_CACHE = CACHE_ROOT / "visual.tle"
 
 # Refetch after this long, and REFUSE to predict from elements older than the
 # hard limit. A cached element set asserts an orbit, and that assertion decays:
@@ -121,6 +171,44 @@ def _parse_group(text):
             out[int(l1[2:7])] = [name.strip(), l1, l2]
         except ValueError:
             continue
+    return out
+
+
+def _display_name(name, catnr):
+    """What to print for an object, from its catalogue name.
+
+    The parenthetical is dropped rather than kept: CelesTrak uses it for the
+    programme name beside the designation ("ALOS (DAICHI)"), which is the half a
+    reader is least likely to recognise and the half most likely to overrun a
+    column.
+    """
+    if catnr in ALIASES:
+        return ALIASES[catnr]
+    for pattern, label in CONSTELLATIONS:
+        if pattern.match(name):
+            return label
+    return name.split("(")[0].strip()
+
+
+def selected_objects(elements):
+    """[(display name, catalogue number, tle)] worth putting on a panel.
+
+    Sorted by catalogue number so the walk order does not move about between
+    refreshes; passes are sorted properly by their caller.
+    """
+    out = []
+    for catnr, tle in sorted(elements.items()):
+        if EXCLUDED_NAME.search(tle[0]):
+            continue
+        out.append((_display_name(tle[0], catnr), catnr, tle))
+    # NOTABLE is a hand-kept list against a group somebody else maintains, so it
+    # can go stale in the one direction nothing would otherwise reveal: a rename
+    # upstream drops an object out of the top tier and the page simply stops
+    # leading with it. Warning is the cheapest thing that makes that visible.
+    missing = NOTABLE - {name for name, _, _ in out}
+    if missing:
+        log.warning("Notable objects absent from the group: %s.",
+                    ", ".join(sorted(missing)))
     return out
 
 
@@ -247,8 +335,14 @@ def _track(obs, sat, rise_t, set_t, samples=TRACK_SAMPLES):
 
 def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
            min_alt=MIN_CULMINATION_ALT, max_sun_alt=MAX_SUN_ALT, now=None,
-           with_track=False):
-    """Visible passes of every satellite in SATELLITES, soonest first.
+           with_track=False, stats=None):
+    """Visible passes of every selected object, soonest first.
+
+    ⚠ `with_track` COSTS A SAMPLED PATH PER PASS, which was affordable while this
+    walked two objects and is not now: a week of the visual group's named
+    payloads runs to hundreds of passes, and only the one the page plots needs a
+    path. Callers should leave it False and ask `track_of` for the single pass
+    they draw.
 
     A pass is reported only when all three gates hold at its culmination: it
     climbs above `min_alt`, the observer's sun is below `max_sun_alt`, and the
@@ -258,17 +352,20 @@ def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
 
     Returns [] rather than None: the caller decides whether an empty sky is
     worth a page, and there is no failure to distinguish here.
+
+    `stats`, when a dict is passed, is filled with the count in each rejection
+    class. It exists because a gate that never rejects anything reports success
+    exactly like one that works: the counts are what show each gate was actually
+    exercised by the sample, and taking them from the walk itself keeps them from
+    disagreeing with the gates they describe.
     """
     out = []
+    tally = {"low": 0, "daylight": 0, "eclipsed": 0, "kept": 0}
     start = ephem.Date(now) if now is not None else ephem.now()
     end = ephem.Date(start + hours * ephem.hour)
     elements = fetch_elements()
 
-    for name, catnr in SATELLITES:
-        tle = elements.get(catnr)
-        if tle is None:
-            log.warning("No elements for %s (%s).", name, catnr)
-            continue
+    for name, catnr, tle in selected_objects(elements):
         try:
             sat = ephem.readtle(*tle)
         except ValueError as e:
@@ -293,13 +390,27 @@ def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
 
             alt = math.degrees(p["max_alt"])
             if alt < min_alt:
+                tally["low"] += 1
                 continue
             _, culm_az, sun_alt, eclipsed, range_km = _at(obs, sat, p["max_t"])
-            if sun_alt > max_sun_alt or eclipsed:
+            # Counted separately rather than as one rejection: they fail for
+            # unrelated reasons, and a sample exercising only one of them would
+            # otherwise look like a sample exercising both.
+            if sun_alt > max_sun_alt:
+                tally["daylight"] += 1
                 continue
+            if eclipsed:
+                tally["eclipsed"] += 1
+                continue
+            tally["kept"] += 1
 
             entry = {
                 "name": name,
+                "catnr": catnr,
+                # See NOTABLE: a caller ranking passes should order on this
+                # first and height second, or height alone buries the objects
+                # worth going outside for.
+                "notable": name in NOTABLE,
                 "rise": _local(p["rise_t"]),
                 "culminate": _local(p["max_t"]),
                 "set": _local(p["set_t"]),
@@ -314,13 +425,43 @@ def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
                 "range_km": range_km,
                 "sun_altitude": sun_alt,
                 "duration_min": (p["set_t"] - p["rise_t"]) * 24.0 * 60.0,
+                # The raw ephem dates, so a caller can ask for this pass's path
+                # later without the walk having computed one for every pass it
+                # found. Underscored because the local datetimes above are the
+                # interface; these are the arithmetic behind them.
+                "_rise_t": p["rise_t"],
+                "_set_t": p["set_t"],
             }
             if with_track:
                 entry["track"] = _track(obs, sat, p["rise_t"], p["set_t"])
             out.append(entry)
 
     out.sort(key=lambda p: p["culminate"])
+    if stats is not None:
+        stats.update(tally)
     return out
+
+
+def track_of(entry, lat, lon, elevation=0.0):
+    """[(bearing, altitude)] along one pass from `passes`, or [].
+
+    Separate from the walk so the cost is paid once for the pass actually drawn
+    rather than once per pass found. Returns [] when the elements are no longer
+    available, which a caller must treat as "no path to draw" rather than as an
+    error: the page is worth showing without its plot.
+    """
+    tle = fetch_elements().get(entry["catnr"])
+    if tle is None:
+        return []
+    try:
+        sat = ephem.readtle(*tle)
+    except ValueError as e:
+        log.warning("Unusable elements for %s (%s).", entry["name"], e)
+        return []
+    obs = ephem.Observer()
+    obs.lat, obs.lon = str(lat), str(lon)
+    obs.elevation = elevation
+    return _track(obs, sat, entry["_rise_t"], entry["_set_t"])
 
 
 def elements_age():
