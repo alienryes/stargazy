@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.49.4"
+VERSION = "0.50.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1293,26 +1293,18 @@ def _draw_kp_forecast(draw, rows, top, f):
     draw.line([(x0, base), (x1, base)], fill=STEEL, width=2)
 
 
-def _local_sky_note(cloud, imminent=True):
+def _local_sky_note(cloud):
     """What the local sky is doing about whatever the page has just announced.
 
-    Both the aurora and the satellite page carry this: a forecast the observer
-    cannot act on because it is overcast is worth saying out loud rather than
-    leaving them to go outside and find out. Shared so the two cannot drift
-    into describing the same sky differently.
-
-    ⚠ THE CLOUD FIGURE DESCRIBES NOW, SO ONLY AN IMMINENT EVENT MAY BE JUDGED
-    BY IT. Aurora is a condition of the sky at this moment and the verdict
-    transfers directly. A satellite pass is an appointment, and the headline one
-    can be a day out - the page was printing "almost certainly not visible from
-    here" beside a pass nineteen hours away, which is a claim about weather
-    nothing here forecasts. When the event is not imminent the sky is reported
-    in the present tense and no verdict is offered.
+    ⚠ THE CLOUD FIGURE DESCRIBES NOW, so only a page about NOW may carry it.
+    Aurora is a condition of the sky at this moment and the verdict transfers
+    directly. The satellite page carried this line too and no longer does: a
+    pass is an appointment, and the page was printing "almost certainly not
+    visible from here" beside one nineteen hours away, which is a claim about
+    weather nothing here forecasts. Gating the verdict on the pass being within
+    the hour was the first fix and left the line saying very little; the page
+    now says nothing about cloud rather than something unactionable.
     """
-    if not imminent:
-        if cloud <= 20:
-            return "The sky here is clear at the moment."
-        return f"The sky here is {cloud}% obscured at the moment."
     if cloud <= 20:
         return "The sky here is clear."
     if cloud < 80:
@@ -1434,12 +1426,10 @@ SAT_ENABLED = True
 # that age, and the station manoeuvres; quoting a minute a fortnight out would
 # state a precision the elements do not carry. A week is already the edge of it.
 SAT_SCHEDULE_HOURS = 168
+# Listing rows across BOTH blocks, not per block. The two blocks answer
+# different questions and compete for one column of space, so capping them
+# separately would leave a gap under a night that drew no companions.
 SAT_ROWS = 8
-# How close a pass has to be before the CURRENT cloud is allowed to pass verdict
-# on it. Cloud measured now says something real about the next hour and nothing
-# about tomorrow morning, and this page routinely leads with a pass most of a
-# day away.
-SAT_SKY_VERDICT_HOURS = 1
 # Column offsets for a listing row, MEASURED on the panel's own fonts rather
 # than chosen: date 251 px, name 323 px, geometry 383 px, in a row 1120 px wide.
 # The name column was 220 px while the objects were two whose names were short,
@@ -1514,15 +1504,20 @@ def _rank(p):
     return (p["notable"], p["max_altitude"])
 
 
-def _pass_night(p):
-    """The date of the EVENING a pass belongs to.
+def _night_of(when):
+    """The date of the EVENING an instant belongs to.
 
-    ⚠ NOT `culminate.date()`. A night spans midnight, so a pass at 23:50 and one
-    at 01:30 belong together and calendar dates split them - which would list one
-    object twice, on two dates, for a single night's observing. Shifting back
-    twelve hours puts the whole of a night on the evening it started.
+    ⚠ NOT `when.date()`. A night spans midnight, so 23:50 and 01:30 belong
+    together and calendar dates split them - which would list one object twice,
+    on two dates, for a single night's observing. Shifting back twelve hours puts
+    the whole of a night on the evening it started.
     """
-    return (p["culminate"] - timedelta(hours=12)).date()
+    return (when - timedelta(hours=12)).date()
+
+
+def _pass_night(p):
+    """The date of the EVENING a pass belongs to."""
+    return _night_of(p["culminate"])
 
 
 def _splits(track, origin):
@@ -1574,10 +1569,115 @@ def _best_per_night(candidates):
         if key not in best or p["max_altitude"] > best[key]["max_altitude"]:
             best[key] = p
     return list(best.values())
+
+
 SAT_Y0, SAT_ROW_H = 900, 80
-# The sky line follows the listing, but may not be pushed past this: a full list
-# would otherwise walk it into the footer.
-SAT_SKY_MAX_Y = 1660
+# A block's heading, and the space between one block and the next.
+SAT_HEAD_H = 70
+SAT_BLOCK_GAP = 40
+# Where the footnote band starts. Named because the row budget is measured
+# against it: held as two literal copies the two would drift, and the listing
+# would grow into the footnotes without anything saying so.
+SAT_FOOT_Y0 = H - 156
+# The lowest a listing row may reach, leaving the footnotes clear.
+SAT_LIST_BOTTOM = SAT_FOOT_Y0 - 40
+
+
+def _sat_selection(found, now):
+    """Everything the page chooses to show, or None when no pass earns the page.
+
+    Returns `(nxt, others, blocks)` - the headline pass, the companion passes
+    plotted behind it, and `[(heading, rows)]` for the listing beneath.
+
+    ⇒⇒ ALL THREE COME FROM HERE BECAUSE COMPUTING THEM APART IS WHAT WAS WRONG
+    WITH THIS PAGE. The plot drew the headline plus the best few of that night
+    while the listing was the best of the WEEK, so a drawn arc could be missing
+    from the listing altogether and most rows had no arc, with nothing on the page
+    saying which was which. Splitting the rows into a block per question states
+    the relationship rather than leaving it to be inferred.
+
+    ⇒ AND ONE FUNCTION RETURNING ALL OF IT IS WHAT MAKES THE AGREEMENT CHECKABLE,
+    rather than true only until someone edits one half. A check has nothing left
+    to re-derive; the previous check on this page carried its own copy of the
+    ranking rule and fired a confident assertion against correct code.
+
+    The headline is in NEITHER block: it has the heading block above the plot, and
+    printed as a row as well it duplicated itself on every render - the same fault
+    the meteor page's footer had, repeating the first row of its own list.
+    """
+    # ⇒ THE HEADLINE IS THE BEST PASS OF THE COMING DAY, NOT THE FIRST. With two
+    # objects those were nearly the same question; across forty-five they are not,
+    # and the soonest is usually some faint thing grazing the horizon.
+    #
+    # ⚠ AND HEIGHT IS THE SECOND KEY, NOT THE FIRST. Ranking on height alone was
+    # tried and measured: it fills the page with whatever happens to pass near the
+    # zenith, which across this many objects is nearly always something nobody has
+    # heard of, and it left ISS out entirely. core.satellites.NOTABLE carries the
+    # tier and explains what it does and does not claim.
+    soon = [p for p in found
+            if p["culminate"] - now <= timedelta(hours=SAT_HORIZON_HOURS)]
+    if not soon:
+        return None
+    nxt = max(soon, key=_rank)
+    # ⚠ COLLAPSED PER OBJECT, like the listing. Taken from the raw walk this drew
+    # a second, lower pass of an object that already had an arc - two arcs against
+    # one listing row, since the listing keeps only an object's best pass of a
+    # night. _best_per_night's own reason applies here unchanged: an object that
+    # crosses three times in a night is one thing to go out for. Ranked, so a
+    # night with a dozen passes contributes its best few rather than its first few.
+    #
+    # ⇒ RANKED TO SELECT, THEN ORDERED BY TIME TO SHOW - the rule the week's list
+    # below already followed, and block A broke it until someone looked: rows read
+    # 21:30, 04:10, 00:09, which is correct by height and reads as a mistake.
+    # Sorted ONCE here so the arcs and their rows share an order, which is what a
+    # per-arc key has to rely on.
+    night = _pass_night(nxt)
+    collapsed = _best_per_night(found)
+    others = sorted(sorted((p for p in collapsed
+                            if _pass_night(p) == night
+                            and p["name"] != nxt["name"]),
+                           key=_rank, reverse=True)[:SAT_GHOSTS],
+                    key=lambda p: p["culminate"])
+
+    # Excluded on (name, night), the key the listing already collapses by, so the
+    # headline's object can still appear for a DIFFERENT night.
+    shown = {(nxt["name"], night)} | {(p["name"], _pass_night(p)) for p in others}
+    # SELECTED by height, then shown in time order. Chronological selection would
+    # fill every row with the next two evenings and never reach the good pass on
+    # Friday; chronological DISPLAY is still right, because the thing being read
+    # off these rows is which night to plan for.
+    later = sorted((p for p in collapsed
+                    if (p["name"], _pass_night(p)) not in shown),
+                   key=_rank, reverse=True)
+    # ⇒ THE ROW BUDGET IS DERIVED, NOT TUNED. Two blocks cost two headings and a
+    # gap, and how many rows the first takes varies with the night, so a count
+    # fixed per block would either overrun the footnotes or leave a hole under a
+    # night that drew no companions. Both limits are stated because they mean
+    # different things: SAT_ROWS is how many rows read well, the geometry is how
+    # many fit.
+    used = (SAT_HEAD_H + SAT_ROW_H * len(others) + SAT_BLOCK_GAP) if others else 0
+    room = (SAT_LIST_BOTTOM - SAT_Y0 - used - SAT_HEAD_H) // SAT_ROW_H
+    later = sorted(later[:max(0, min(SAT_ROWS - len(others), room))],
+                   key=lambda p: p["culminate"])
+
+    # ⇒ "Tonight" ONLY WHEN IT IS TONIGHT, and TWO nights can be. This page's
+    # gate is a pass within a day and the dark hours it needs straddle midnight,
+    # so at 23:00 the best pass of the coming day can belong to TOMORROW night and
+    # calling that "tonight" would be wrong. The headline line above hedges its
+    # weekday for the same reason.
+    #
+    # ⚠ BUT _night_of PUTS A MORNING HOUR IN THE NIGHT THAT HAS JUST ENDED, so
+    # comparing against it alone declined the word all morning: at 09:00 the page
+    # read "Tuesday night's passes" for a pass the same evening, true and stiff.
+    # Measured over a 240 h sweep it did that at every sampled instant from 06:00
+    # to noon. Before noon both the night in progress and the one starting this
+    # evening are "tonight" in any ordinary reading, so both are accepted; after
+    # noon the two collapse to the same date and only tomorrow is excluded.
+    tonight = ("Tonight's passes" if night in (_night_of(now), now.date())
+               else f"{night:%A} night's passes")
+    blocks = [b for b in ((tonight, others),
+                          ("The best for the next seven days", later)) if b[1]]
+    return nxt, others, blocks
 
 
 # ⚠ PIL ANTIALIASES NEITHER LINES NOR ELLIPSES, so the track is drawn large and
@@ -1813,8 +1913,12 @@ def _until(when, now):
     return f"in {h}h {m:02d}m" if h else f"in {m} min"
 
 
-def render_satellites(states, lat, lon):
+def render_satellites(lat, lon):
     """Page 5: the best satellite pass of the coming day, and the week behind it.
+
+    ⇒ TAKES NO `states`: this is the one conditional page that asks nothing of
+    the weather feed. It carried a cloud line until the line was found to be
+    reporting the sky NOW beside an event up to a day away; see _local_sky_note.
 
     Returns None unless a pass clears every gate in core.satellites within the
     next day. That module decides visibility; this one decides only which of the
@@ -1844,20 +1948,12 @@ def render_satellites(states, lat, lon):
         return None
 
     now = datetime.now().astimezone()
-    soon = [p for p in found
-            if p["culminate"] - now <= timedelta(hours=SAT_HORIZON_HOURS)]
-    if not soon:
+    # Every choice this page makes is in _sat_selection, so that the arcs and the
+    # rows describing them cannot be computed apart. Nothing below selects.
+    picked = _sat_selection(found, now)
+    if picked is None:
         return None
-    # ⇒ THE HEADLINE IS THE BEST PASS OF THE COMING DAY, NOT THE FIRST. With two
-    # objects those were nearly the same question; across forty-five they are
-    # not, and the soonest is usually some faint thing grazing the horizon.
-    #
-    # ⚠ AND HEIGHT IS THE SECOND KEY, NOT THE FIRST. Ranking on height alone was
-    # tried and measured: it fills the page with whatever happens to pass near
-    # the zenith, which across this many objects is nearly always something
-    # nobody has heard of, and it left ISS out entirely. core.satellites.NOTABLE
-    # carries the tier and explains what it does and does not claim.
-    nxt = max(soon, key=_rank)
+    nxt, others, blocks = picked
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     f = _fonts()
@@ -1890,13 +1986,6 @@ def render_satellites(states, lat, lon):
     # ⇒ THE OTHER PASSES OF THE SAME NIGHT, drawn behind the headline one. They
     # are dimmed and unlabelled: the listing beneath names every one of them, and
     # the plot's job is to show what the sky does rather than to repeat a table.
-    # Ranked, so a night with a dozen passes contributes its best few rather than
-    # its first few.
-    night = _pass_night(nxt)
-    others = sorted((p for p in found
-                     if p is not nxt and _pass_night(p) == night),
-                    key=_rank, reverse=True)[:SAT_GHOSTS]
-
     head_track = track_of(nxt, lat or 0.0, lon or 0.0)
     ghost_tracks = [track_of(p, lat or 0.0, lon or 0.0) for p in others]
 
@@ -1914,28 +2003,11 @@ def render_satellites(states, lat, lon):
                        WHITE)
     _draw_panorama(draw, [], "pass", f["sm"], f["xs"], axis_origin)
 
-    # The FIRST pass is the heading above, so the list starts after it. Printed
-    # in full it duplicated the headline on every render - the same fault the
-    # meteor page's footer had, where "Next peak" repeated the first row of its
-    # own list. The heading is suppressed with the list rather than left
-    # standing over nothing.
-    # SELECTED by height, then shown in time order. Chronological selection
-    # would fill all eight rows with the next two evenings and never reach the
-    # good pass on Friday; chronological DISPLAY is still right, because the
-    # thing being read off these rows is which night to plan for.
-    later = [p for p in _best_per_night(found) if p is not nxt]
-    later.sort(key=_rank, reverse=True)
-    later = sorted(later[:SAT_ROWS], key=lambda p: p["culminate"])
-    if later:
-        y = SAT_Y0
-        # "The best of the next week", because these rows are no longer simply
-        # the next few passes: they are the highest one each object makes on
-        # each night, capped at the rows that fit. Calling that "over the next
-        # week" would imply a completeness the list does not have.
-        draw.text((MARGIN, y), "The best of the next week", font=f["med"],
-                  fill=WHITE)
-        y += 70
-        for p in later:
+    y = SAT_Y0
+    for heading, rows in blocks:
+        draw.text((MARGIN, y), heading, font=f["med"], fill=WHITE)
+        y += SAT_HEAD_H
+        for p in rows:
             # The DATE as well as the weekday. A week's listing can contain the
             # same weekday as today - it did on the first render, where two rows
             # read "Wed" on a Wednesday and looked like they meant tonight.
@@ -1948,21 +2020,10 @@ def render_satellites(states, lat, lon):
                       f"{compass(p['set_bearing'])}",
                       font=f["sm"], fill=MUTED)
             y += SAT_ROW_H
-    else:
-        y = SAT_Y0
-
-    # What the local sky is doing about it, as the aurora page does - but only
-    # as a VERDICT when the pass is close enough for present cloud to bear on
-    # it. Beyond that the line states the sky now and claims nothing about the
-    # pass; see _local_sky_note. Pinned rather than following the list, so a
-    # short list cannot walk this line into the footer.
-    cloud = obscuration_of(states)
-    imminent = nxt["culminate"] - now <= timedelta(hours=SAT_SKY_VERDICT_HOURS)
-    draw.text((MARGIN, min(y + 40, SAT_SKY_MAX_Y)),
-              _local_sky_note(cloud, imminent), font=f["sm"], fill=MUTED)
+        y += SAT_BLOCK_GAP
 
     for i, line in enumerate(SAT_FOOTNOTES):
-        draw.text((MARGIN, H - 156 + i * 56), line.format(age=elements_age()),
+        draw.text((MARGIN, SAT_FOOT_Y0 + i * 56), line.format(age=elements_age()),
                   font=f["fn"], fill=DIM)
 
     # The marker travels this path in compose(), the only per-frame hook a page
@@ -2522,7 +2583,7 @@ def build_pages(states, targets, lat, moon_ring=False):
     # sky within the day. Unlike the pages above it this one is not gated on the
     # sky being dark NOW, because a pass is an appointment rather than a
     # condition - and it is the only page here whose subject is man-made.
-    page5 = _optional("Satellites", render_satellites, states, lat, LON)
+    page5 = _optional("Satellites", render_satellites, lat, LON)
     if page5 is not None:
         pages.append(page5)
     # The one page here that requires the Sun to be UP. It does not lengthen the
