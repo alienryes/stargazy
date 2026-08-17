@@ -28,6 +28,8 @@ launch, and nothing in a static list would ever say so.
 Source: CelesTrak's GP element sets, keyless and unregistered. Orbital elements
 age, so the cache below has a hard expiry rather than an unbounded fallback.
 """
+import hashlib
+import json
 import logging
 import math
 import re
@@ -169,6 +171,77 @@ MAX_STEPS = 400
 # this value leaves about 0.8 px, still under a pixel. If a near-overhead pass
 # ever looks faceted, that ratio is the thing to work from.
 TRACK_SAMPLES = 3072
+
+
+PASS_CACHE = CACHE_ROOT / "passes.json"
+# How far past the requested window to walk when filling the cache. The window
+# slides forwards continuously while the elements only change daily, so a walk
+# computed exactly to `hours` would expire within minutes of being written. A day
+# of slack means one walk serves every refresh until the elements themselves are
+# replaced, which is the natural lifetime of the answer.
+PASS_CACHE_SLACK_HOURS = 24.0
+
+
+def _elements_key(elements):
+    """A short, stable fingerprint of the element set a walk was computed from.
+
+    ⚠ THE CACHE IS KEYED ON THE ELEMENTS THEMSELVES, NOT ON A TIMESTAMP. A pass
+    list is a claim about where objects will be, derived entirely from the orbits
+    it was computed from - so the moment those change the claim is stale, whatever
+    the clock says, and while they do not it stays true. Hashing the TLE text
+    makes that relationship exact rather than approximated by an expiry.
+    """
+    payload = "".join("".join(v) for _, v in sorted(elements.items()))
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _pass_cache_read(key, lat, lon, elevation, hours, min_alt, max_sun_alt, now):
+    """The cached walk when it still answers this question, else None.
+
+    Every gate is part of the key. A walk computed with a 10 degree floor cannot
+    answer a question asked with a 20 degree one, and serving it would look like
+    the gate had stopped working.
+    """
+    try:
+        blob = json.loads(PASS_CACHE.read_text())
+    except (OSError, ValueError):
+        return None
+    want = [key, round(lat, 4), round(lon, 4), round(elevation, 1),
+            min_alt, max_sun_alt]
+    if blob.get("key") != want:
+        return None
+    start, end = blob.get("start", 0.0), blob.get("end", 0.0)
+    # The cached span must still cover the whole window being asked for. Serving
+    # a short answer would silently truncate the schedule rather than fail.
+    if not (start <= now <= end) or now + hours / 24.0 > end:
+        return None
+    out = []
+    for e in blob.get("passes", []):
+        p = dict(e)
+        for f in ("rise", "culminate", "set"):
+            p[f] = datetime.fromisoformat(p[f])
+        out.append(p)
+    return out
+
+
+def _pass_cache_write(key, lat, lon, elevation, min_alt, max_sun_alt,
+                      start, end, found):
+    """Persist a walk. Best effort: a cache that cannot be written is not an error."""
+    payload = []
+    for p in found:
+        e = dict(p)
+        for f in ("rise", "culminate", "set"):
+            e[f] = e[f].isoformat()
+        payload.append(e)
+    try:
+        CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+        PASS_CACHE.write_text(json.dumps({
+            "key": [key, round(lat, 4), round(lon, 4), round(elevation, 1),
+                    min_alt, max_sun_alt],
+            "start": start, "end": end, "passes": payload,
+        }))
+    except (OSError, TypeError) as e:
+        log.warning("Could not write the pass cache (%s); recomputing next time.", e)
 
 
 def _cache_age():
@@ -391,6 +464,36 @@ def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
     end = ephem.Date(start + hours * ephem.hour)
     elements = fetch_elements()
 
+    # ⇒⇒ THE WALK IS CACHED TO DISK, keyed on the elements it was computed from.
+    # Across 45 objects and a week it costs 9.8 s on the data thread, which is
+    # affordable every quarter of an hour and is NOT affordable once at startup:
+    # it was most of the delay before the first frame after a restart, and an
+    # in-memory cache cannot help there because it is empty exactly then.
+    #
+    # ⚠ NOT USED WHEN `stats` IS ASKED FOR. The rejection counts are accumulated
+    # inside the loop below and exist to show each gate was exercised; served from
+    # a cache they would be absent or, worse, stale - a check would report a gate
+    # untested when it had merely not run this time. A caller wanting the counts
+    # is asking about the walk itself, so it gets a real one.
+    key = _elements_key(elements) if elements else None
+    if key and stats is None and not with_track:
+        cached = _pass_cache_read(key, lat, lon, elevation, hours,
+                                  min_alt, max_sun_alt, float(start))
+        if cached is not None:
+            log.debug("Pass walk served from cache (%d passes).", len(cached))
+            # ⚠ TRIMMED AT BOTH ENDS. The cache deliberately holds a longer walk
+            # than any one caller asked for, so serving it whole would answer a
+            # 168 hour question with 192 hours of passes - which a caller cannot
+            # detect, since every pass in it is correct. Caught by comparing the
+            # cached answer against a real walk field by field rather than by
+            # timing it: the fast answer was simply a different one.
+            lo = _local(start)
+            hi = _local(ephem.Date(start + hours * ephem.hour))
+            return [p for p in cached if lo < p["culminate"] <= hi]
+        # Walk further than asked, so one computation serves until the elements
+        # are replaced rather than expiring as the window slides.
+        end = ephem.Date(start + (hours + PASS_CACHE_SLACK_HOURS) * ephem.hour)
+
     for name, catnr, tle in selected_objects(elements):
         try:
             sat = ephem.readtle(*tle)
@@ -465,6 +568,13 @@ def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
     out.sort(key=lambda p: p["culminate"])
     if stats is not None:
         stats.update(tally)
+        return out
+    if key and not with_track:
+        _pass_cache_write(key, lat, lon, elevation, min_alt, max_sun_alt,
+                          float(start), float(end), out)
+        # The extra day walked for the cache is not part of the answer.
+        cut = _local(ephem.Date(start + hours * ephem.hour))
+        return [p for p in out if p["culminate"] <= cut]
     return out
 
 
