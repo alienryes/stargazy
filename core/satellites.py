@@ -334,7 +334,13 @@ def _pass_after(obs, sat, when):
 
 
 def _track(obs, sat, rise_t, set_t, samples=TRACK_SAMPLES):
-    """[(bearing, altitude)] along the pass, in degrees.
+    """[(bearing, altitude, eclipsed)] along the pass, degrees and a flag.
+
+    ⇒ THE FLAG IS WHY MANY PASSES END WITHOUT SETTING. The gates in `passes`
+    test the shadow at the CULMINATION only, so a pass reported as visible can
+    slide into the Earth's shadow on its descending limb and simply vanish
+    partway across the sky. A caller drawing the track can say so; one drawing a
+    solid line to the horizon is claiming something that does not happen.
 
     COMPUTED at each sample rather than interpolated between rise, culmination
     and set. A satellite's path across a bearing-by-altitude plot is a curve,
@@ -348,8 +354,8 @@ def _track(obs, sat, rise_t, set_t, samples=TRACK_SAMPLES):
     out = []
     for i in range(samples + 1):
         when = ephem.Date(rise_t + (set_t - rise_t) * i / samples)
-        alt, az, _, _, _ = _at(obs, sat, when)
-        out.append((az % 360.0, max(0.0, alt)))
+        alt, az, _, eclipsed, _ = _at(obs, sat, when)
+        out.append((az % 360.0, max(0.0, alt), eclipsed))
     return out
 
 
@@ -463,7 +469,7 @@ def passes(lat, lon, elevation=0.0, hours=DEFAULT_HOURS,
 
 
 def track_of(entry, lat, lon, elevation=0.0):
-    """[(bearing, altitude)] along one pass from `passes`, or [].
+    """[(bearing, altitude, eclipsed)] along one pass from `passes`, or [].
 
     Separate from the walk so the cost is paid once for the pass actually drawn
     rather than once per pass found. Returns [] when the elements are no longer
