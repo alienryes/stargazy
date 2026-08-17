@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.49.2"
+VERSION = "0.49.3"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1467,18 +1467,41 @@ SAT_MARKER_PERIOD = 6.0
 # Sized to the culmination dot this replaced, which was the right weight against
 # a 3 px track; the marker had been drawn half again as wide and read as heavy.
 SAT_MARKER_R = 7
-# Minute ticks stand OUTWARD from the track, clear of it, and in the track's own
-# colour.
+# Whole minutes are marked with a BEAD ON the track, not a tick across it.
 #
-# ⚠ THE FIRST VERSION WAS DARKER THAN THE LINE IT CROSSED - STEEL at luma 100
-# over NOMINAL at 187 - and centred on it, so a third of each tick punched a
-# dark gap in the arc while the rest sat on dark sky at almost no contrast. They
-# read as blemishes in the line rather than as marks on it, which is exactly how
-# they were reported. Drawn outward in the line's colour they cannot damage it,
-# and they carry in RED night mode too, where all hue collapses to luma and a
-# tick distinguished only by colour would disappear.
-SAT_TICK_LEN = 11
-SAT_TICK_GAP = 3
+# ⚠ TWO EARLIER VERSIONS FAILED, AND FOR DIFFERENT REASONS. The first drew a
+# mark in STEEL, luma 100, centred on a NOMINAL arc at 187: it punched dark
+# notches in the line and read as damage. The second moved it outward, clear of
+# the line and in the line's colour, which fixed the contrast - and looked wrong
+# anyway, because the outward normal ROTATES THROUGH 180 DEGREES along a dome.
+# Marks pointed up at the culmination and sideways near the horizon, and read as
+# sticking out at random angles.
+#
+# A bead has no direction to get wrong. The spacing still carries the whole
+# point - beads SPREAD at the culmination, where the object sweeps bearing
+# fastest, and CROWD towards the horizon where it is slowest - and it survives
+# red night mode, where hue collapses to luma and only shape and brightness
+# remain. Kept well under the moving marker's radius so the two do not read as
+# the same kind of thing.
+SAT_MINUTE_R = 3
+
+# ⇒ THE PAGE'S FOOTNOTES, AS DATA, so a width check reads the strings the page
+# actually draws. Three separate checks have now carried their own retyped copy
+# of something they were verifying and gone stale against it - a selection rule,
+# a pair of column offsets, and this text, which still measured "Ticks mark
+# whole minutes" after the marks became beads.
+#
+# ⇒ NO BRIGHTNESS IS CLAIMED ANYWHERE HERE. Apparent magnitude depends on which
+# face an object presents and nothing keyless reports it.
+#
+# ⇒ AND THE MARKER IS DECLARED NOT TO BE A CLOCK. It sweeps the arc in six
+# seconds whatever the pass takes, so without saying so the page would imply a
+# speed it does not have. The beads are the honest timing.
+SAT_FOOTNOTES = (
+    "Sunlit satellite in a dark sky. A faint track is time spent in the Earth's shadow.",
+    "Beads mark whole minutes; the moving marker shows direction only.",
+    "Elements: CelesTrak, {age}. Brightness is not predicted.",
+)
 
 
 def _rank(p):
@@ -1691,18 +1714,14 @@ def _plot_points(track, axis_origin):
     return out
 
 
-def _draw_minute_ticks(img, track, axis_origin, rise, set_, colour):
-    """A tick at each whole minute of the pass, standing outward from its path.
+def _draw_minute_marks(img, track, axis_origin, rise, set_, colour):
+    """A bead at each whole minute of the pass, sitting on its path.
 
     ⇒ THESE CARRY THE TIMING AND THE MOVING MARKER DOES NOT. The samples are
     evenly spaced in time, so an index maps linearly onto the clock, and the
-    spacing of the ticks along the curve shows directly where the object appears
+    spacing of the beads along the curve shows directly where the object appears
     to move fastest - which is the culmination, and is why the arc flattens
     there.
-
-    Drawn on the upper side throughout rather than on whichever side the normal
-    happens to point: the arc is a dome, so "up" is consistently away from it,
-    and ticks alternating sides down the two limbs would read as noise.
     """
     if len(track) < 2:
         return
@@ -1718,23 +1737,10 @@ def _draw_minute_ticks(img, track, axis_origin, rise, set_, colour):
             i = int(round((minute / total) * (len(pts) - 1)))
             if i <= 0 or i >= len(pts) - 1:
                 continue
-            (x0, y0), (x1, y1) = pts[i - 1], pts[i + 1]
-            dx, dy = x1 - x0, y1 - y0
-            n = math.hypot(dx, dy)
-            if n < 1e-6:
-                continue
-            nx, ny = -dy / n, dx / n
-            if ny > 0:                      # keep it pointing up the page
-                nx, ny = -nx, -ny
             cx = (pts[i][0] - PAN_X0 + TRACK_PAD) * ss
             cy = (pts[i][1] - PAN_TOP + TRACK_PAD) * ss
-            # Starts clear of the line rather than on it, so the track keeps its
-            # full width everywhere and the tick is read against the sky.
-            near = (TRACK_WIDTH / 2.0 + SAT_TICK_GAP) * ss
-            far = near + SAT_TICK_LEN * ss
-            ld.line([(cx + nx * near, cy + ny * near),
-                     (cx + nx * far, cy + ny * far)],
-                    fill=255, width=max(1, ss))
+            r = SAT_MINUTE_R * ss
+            ld.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
 
     _composite_aa(img, corner, size, colour, paint)
 
@@ -1861,8 +1867,8 @@ def render_satellites(states, lat, lon):
         _draw_pass_track(img, gt, STEEL + (SAT_GHOST_ALPHA,), axis_origin)
     _draw_pass_track(img, head_track, NOMINAL, axis_origin,
                      shadow_colour=STEEL + (110,))
-    _draw_minute_ticks(img, head_track, axis_origin, nxt["rise"], nxt["set"],
-                       NOMINAL)
+    _draw_minute_marks(img, head_track, axis_origin, nxt["rise"], nxt["set"],
+                       WHITE)
     _draw_panorama(draw, [], "pass", f["sm"], f["xs"], axis_origin)
 
     # The FIRST pass is the heading above, so the list starts after it. Printed
@@ -1912,24 +1918,9 @@ def render_satellites(states, lat, lon):
     draw.text((MARGIN, min(y + 40, SAT_SKY_MAX_Y)),
               _local_sky_note(cloud, imminent), font=f["sm"], fill=MUTED)
 
-    # ⇒ NO BRIGHTNESS IS CLAIMED ANYWHERE ON THIS PAGE. Apparent magnitude
-    # depends on which face the station has turned towards the observer, and
-    # nothing keyless reports its attitude, so the page gives the geometry it
-    # actually knows and leaves brightness alone.
-    draw.text((MARGIN, H - 156),
-              "Sunlit satellite in a dark sky. A faint track is time spent in "
-              "the Earth's shadow.",
-              font=f["fn"], fill=DIM)
-    # ⇒ THE MARKER IS DECLARED NOT TO BE A CLOCK. It sweeps the arc in six
-    # seconds whatever the pass takes, so without this the page would be
-    # implying a speed it does not have. The ticks are the honest timing and
-    # this says which is which.
-    draw.text((MARGIN, H - 100),
-              "Ticks mark whole minutes; the moving marker shows direction only.",
-              font=f["fn"], fill=DIM)
-    draw.text((MARGIN, H - 44),
-              f"Elements: CelesTrak, {elements_age()}. Brightness is not predicted.",
-              font=f["fn"], fill=DIM)
+    for i, line in enumerate(SAT_FOOTNOTES):
+        draw.text((MARGIN, H - 156 + i * 56), line.format(age=elements_age()),
+                  font=f["fn"], fill=DIM)
 
     # The marker travels this path in compose(), the only per-frame hook a page
     # has. Carried on the image rather than returned alongside it so nothing in
