@@ -144,11 +144,31 @@ DEFAULT_HOURS = 48
 # the loop against a body that never sets rather than against a real sky.
 MAX_STEPS = 400
 
-# Samples along a pass when a caller asks for the path. A pass lasts about ten
-# minutes, so this is roughly one point every fifteen seconds - far finer than a
-# panel can resolve, and cheap enough beside a render loop that there is no
-# reason to be sparing.
-TRACK_SAMPLES = 48
+# Samples along a pass when a caller asks for the path.
+#
+# ⚠ SAMPLED UNIFORMLY IN TIME, PLOTTED AGAINST BEARING, AND THOSE ARE NOT THE
+# SAME SPACING. Azimuth sweeps fastest at culmination - by 1/cos(max altitude),
+# so more than threefold on a high pass - which puts the WIDEST gaps between
+# plotted points exactly at the top of the arc, where the curve is most looked
+# at. At 48 samples the gap there measured 57 px against a median of 3, and the
+# flat top was visibly polygonal.
+#
+# ⚠ AND THE SPACING OF THE POINTS IS THE WRONG THING TO MEASURE. A wide gap
+# along a genuinely flat stretch draws correctly; what reads as polygonal is a
+# point sitting off the line its neighbours imply. Measured as that departure,
+# on the six highest passes of a real week (up to 89.4 deg):
+#
+#     384 samples   5.12 px    13 ms      768   1.76 px    26 ms
+#    1536 samples   0.51 px    52 ms     3072   0.13 px   104 ms
+#
+# against a line 3 px wide. 3072 is affordable because ONE track is drawn per
+# data refresh, beside a pass walk costing 9.8 s on the same thread.
+#
+# The departure falls as 1/n^2 while the azimuth sweep grows as 1/cos(altitude),
+# so a pass closer to the zenith than the 89.4 measured here needs more: at 89.9
+# this value leaves about 0.8 px, still under a pixel. If a near-overhead pass
+# ever looks faceted, that ratio is the thing to work from.
+TRACK_SAMPLES = 3072
 
 
 def _cache_age():
