@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.50.0"
+VERSION = "0.51.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1430,12 +1430,54 @@ SAT_SCHEDULE_HOURS = 168
 # different questions and compete for one column of space, so capping them
 # separately would leave a gap under a night that drew no companions.
 SAT_ROWS = 8
-# Column offsets for a listing row, MEASURED on the panel's own fonts rather
-# than chosen: date 251 px, name 323 px, geometry 383 px, in a row 1120 px wide.
-# The name column was 220 px while the objects were two whose names were short,
-# and "COSMO-SKYMED 1" ran 103 px into the geometry beside it.
+# Column offsets for a listing row, MEASURED on the panel's own fonts rather than
+# chosen, and against the WHOLE object set rather than the rows one night happens
+# to list: worst date 251 px, worst name 323 px ("COSMO-SKYMED 1"), worst geometry
+# 353 px, in a row 1120 px wide. The name column was 220 px while the objects were
+# two whose names were short, and COSMO-SKYMED 1 ran 103 px into the geometry.
+#
+# ⚠⚠ THE WORST GEOMETRY WAS UNDERESTIMATED TWICE, AND BOTH TIMES BY MEASURING A
+# PROXY. 383 px came from whichever compass pair a sample happened to show; 348 px
+# came from taking the LONGEST label by character count, which picks a three-letter
+# label without noticing that this font is not monospaced and 'WNW' is 94.6 px
+# against 'SSE' at 78. Measured over all sixteen labels by WIDTH, the shipped
+# wording ran to 406 px and left the swatch column 7 px short of fitting. Dropping
+# " up" from the row brought it to 353 and the column now has 36 px of slack.
+# ⇒ Enumerate the population and measure in the unit that matters; a count of
+# characters is not a width.
 SAT_COL_NAME = 280
-SAT_COL_GEOM = 640
+SAT_COL_SWATCH = 627
+SAT_COL_GEOM = 731
+# ⇒ THE DASH KEY. Each companion arc is drawn in its own pattern and the same
+# pattern is sampled in its listing row, so a row can be matched to an arc.
+#
+# ⇒⇒ PATTERN, NOT COLOUR, BECAUSE OF RED NIGHT MODE. After dusk the whole frame
+# is reduced to luma and re-packed as red, so every hue collapses to a brightness
+# and a colour key stops keying anything. A dash pattern is carried by the line's
+# geometry and survives the conversion intact. This is why the earlier colour-key
+# idea was dropped.
+#
+# ⇒ AND IT IS CARRIED ALONG THE WHOLE LINE, which is what makes it work here where
+# a label cannot. Labels at the arcs were measured and abandoned: the notable set
+# is dominated by sun-synchronous orbits sharing an inclination, so passes rise and
+# set at nearly the same bearings by construction - across seven nights the closest
+# drawn pair was within a label width at every anchor, worst separations 1.2, 0.4
+# and 1.1 degrees. At a degree the curves are the same line locally and no
+# point-placed mark can say which it belongs to. A pattern needs no clear anchor:
+# coincident feet diverge elsewhere, and the pattern identifies the arc wherever
+# its line is visible alone.
+#
+# ⚠ THE PERIOD IS BOUNDED BY THE SWATCH, NOT BY THE ARC. A pattern whose period
+# exceeds the swatch draws as one dash and a gap, which reads as a solid line, so
+# the swatch has to show at least two periods: at SAT_SWATCH_W of 80 that caps the
+# period at 40 px. Lengths are in panel pixels ALONG THE PATH and alternate drawn,
+# blank, drawn, blank - so an even count, asserted in _dash.
+SAT_SWATCH_W = 80
+SAT_PATTERNS = (
+    (14, 12),           # - - -    period 26
+    (28, 12),           # -- --    period 40
+    (20, 8, 4, 8),      # -·-·-    period 40
+)
 
 
 # How many other passes of the same night are drawn behind the headline one, and
@@ -1444,7 +1486,17 @@ SAT_COL_GEOM = 640
 # across the track it belonged to, and the fix was to remove the label rather
 # than to move it.
 SAT_GHOSTS = 3
-SAT_GHOST_ALPHA = 90
+# ⇒ RAISED 90 -> 170 WHEN THE DASHES ARRIVED, and the two changes are connected.
+# At 90 the dimming was doing two jobs: holding the companions back from the
+# headline, and being the only thing that distinguished them from it. Dashed AND
+# at 90 they were too faint to read as patterns - checked in the red night mode,
+# where the long-dash arc all but disappeared, which is the case that matters
+# since the pattern exists precisely because red destroys hue.
+#
+# The headline is still plainly the subject at 170: it is solid where these are
+# dashed, it carries the minute beads, and it carries the moving marker. Three
+# distinctions, none of which is brightness - so brightness was free to go back up.
+SAT_GHOST_ALPHA = 170
 
 # The marker sweeps the arc in this many seconds whatever the pass really takes.
 # ⚠ IT IS NOT A CLOCK, and the minute ticks beside it are: a real pass runs ten
@@ -1494,7 +1546,7 @@ SAT_MINUTE_R = 3
 # speed it does not have. The beads are the honest timing.
 SAT_FOOTNOTES = (
     "Sunlit satellite in a dark sky. A faint track is time spent in the Earth's shadow.",
-    "Beads mark whole minutes; the moving marker shows direction only.",
+    "Beads mark minutes; the marker shows direction, not speed. Dashes key each arc to its row.",
     "Elements: CelesTrak, {age}. Brightness is not predicted.",
 )
 
@@ -1731,7 +1783,72 @@ def _composite_aa(img, origin, size, colour, paint):
     img.alpha_composite(layer, origin)
 
 
-def _draw_pass_track(img, track, colour, axis_origin=0.0, shadow_colour=None):
+def _dash(points, pattern):
+    """`points` cut into the drawn runs of a repeating on/off `pattern`.
+
+    ⇒⇒ THE PATTERN IS MEASURED ALONG THE PATH, WHICH IS THE ONLY MEASURE THAT
+    DRAWS EVENLY HERE. A track's samples are spaced in TIME, and a pass sweeps
+    bearing by 1/cos(max altitude) faster at its culmination than at its feet -
+    three times at 62 degrees. Dashing by sample index would stretch the dashes
+    across the top of the arc and crowd them at the horizon, so the pattern would
+    change along the line that it exists to identify.
+
+    Cuts fall wherever the pattern says, independently of where the samples are,
+    and every sample inside a drawn run is kept - so a dash spanning several
+    samples still follows the curve rather than chording across it.
+    """
+    assert len(pattern) % 2 == 0, "pattern must alternate drawn and blank"
+    if len(points) < 2:
+        return []
+    runs, cur = [], []
+    i, left, on = 0, pattern[0], True
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        seg = math.hypot(x1 - x0, y1 - y0)
+        if seg <= 0:
+            continue
+        done = 0.0
+        while seg - done > 1e-9:
+            step = min(left, seg - done)
+            if on:
+                a, b = done / seg, (done + step) / seg
+                if not cur:
+                    cur.append((x0 + (x1 - x0) * a, y0 + (y1 - y0) * a))
+                cur.append((x0 + (x1 - x0) * b, y0 + (y1 - y0) * b))
+            done += step
+            left -= step
+            if left <= 1e-9:
+                if cur:
+                    runs.append(cur)
+                    cur = []
+                i = (i + 1) % len(pattern)
+                left, on = pattern[i], not on
+    if cur:
+        runs.append(cur)
+    return runs
+
+
+def _draw_swatch(img, x, y, colour, pattern=None):
+    """A short sample of one arc's line style, for the listing row beside it.
+
+    Drawn through the same antialiasing path as the arcs so the dashes have the
+    same weight and softness; a swatch drawn with a bare line looks like a
+    different kind of mark from the thing it is keying.
+    """
+    size = (SAT_SWATCH_W, 2 * TRACK_PAD)
+    mid = TRACK_PAD
+
+    def paint(ld, ss):
+        span = [(0.0, mid), (float(SAT_SWATCH_W), mid)]
+        pieces = [span] if pattern is None else _dash(span, pattern)
+        for piece in pieces:
+            ld.line([(px * ss, py * ss) for px, py in piece], fill=255,
+                    width=TRACK_WIDTH * ss)
+
+    _composite_aa(img, (x, y - mid), size, colour, paint)
+
+
+def _draw_pass_track(img, track, colour, axis_origin=0.0, shadow_colour=None,
+                     pattern=None):
     """The pass's own path across the bearing-by-altitude plot.
 
     `axis_origin` must be the one the axis beneath was drawn with, or the curve
@@ -1768,6 +1885,27 @@ def _draw_pass_track(img, track, colour, axis_origin=0.0, shadow_colour=None):
         only half of it would end a companion arc in mid-sky with nothing to say
         why.
         """
+        def stroke(ld, run, ss):
+            """One wrap-free polyline, dashed if this track carries a pattern.
+
+            ⚠ DASHED PER RUN RATHER THAN OVER THE WHOLE TRACK, because a companion
+            arc CAN still be split: _axis_origin protects the headline from the
+            seam and explicitly accepts splitting a dimmed companion. Dashing
+            across the break would draw a dash from one edge of the plot to the
+            other. The pattern restarts at each piece, which is invisible - the
+            pieces are a plot's width apart.
+            """
+            if len(run) < 2:
+                return
+            pts = [p[1] for p in run]
+            # Lengths are in panel pixels and this mask is drawn at ss scale.
+            pieces = ([pts] if pattern is None
+                      else _dash(pts, [n * ss for n in pattern]))
+            for piece in pieces:
+                if len(piece) > 1:
+                    ld.line(piece, fill=255, width=TRACK_WIDTH * ss,
+                            joint="curve")
+
         def paint(ld, ss):
             run = []
             for az, alt, ecl in track:
@@ -1775,16 +1913,12 @@ def _draw_pass_track(img, track, colour, axis_origin=0.0, shadow_colour=None):
                 broke = run and abs(offset - run[-1][0]) > 180.0
                 skip = want_eclipsed is not None and bool(ecl) != want_eclipsed
                 if broke or skip:
-                    if len(run) > 1:
-                        ld.line([p[1] for p in run], fill=255,
-                                width=TRACK_WIDTH * ss, joint="curve")
+                    stroke(ld, run, ss)
                     run = []
                     if skip:
                         continue
                 run.append((offset, point(az, alt, ss)))
-            if len(run) > 1:
-                ld.line([p[1] for p in run], fill=255,
-                        width=TRACK_WIDTH * ss, joint="curve")
+            stroke(ld, run, ss)
         return paint
 
     # ⇒ THE SHADOWED LIMB IS DRAWN, NOT DROPPED. The object is still up there and
@@ -1965,10 +2099,17 @@ def render_satellites(lat, lon):
     # The weekday only when the pass is not today. A bare time reads as tonight,
     # and at 22:30 a pass at 04:56 is not.
     day = "" if nxt["culminate"].date() == now.date() else f"{nxt['culminate']:%a} "
-    draw.text((MARGIN, 160),
-              f"{nxt['name']}  ·  {day}{nxt['culminate']:%H:%M}  ·  "
-              f"{_until(nxt['culminate'], now)}",
-              font=f["sm"], fill=WHITE)
+    head = (f"{nxt['name']}  ·  {day}{nxt['culminate']:%H:%M}  ·  "
+            f"{_until(nxt['culminate'], now)}")
+    draw.text((MARGIN, 160), head, font=f["sm"], fill=WHITE)
+    # ⇒ THE HEADLINE'S OWN KEY SAMPLE, SOLID, and here rather than in the listing.
+    # It is the one pass NOT given a row: the three lines above already carry its
+    # name, time, bearings, duration and range, and printing it as a row too
+    # duplicated it on every render. Trailing the text rather than aligned with
+    # the listing's swatch column, because the heading line's width varies with
+    # the name and the time and a fixed column would sometimes land on top of it.
+    _draw_swatch(img, MARGIN + int(draw.textlength(head, font=f["sm"])) + 30,
+                 160 + f["sm"].size // 2, WHITE)
     draw.text((MARGIN, 210),
               f"Rises {compass(nxt['rise_bearing'])}, highest {nxt['max_altitude']:.0f}° "
               f"in the {compass(nxt['culminate_bearing'])} at "
@@ -1995,8 +2136,13 @@ def render_satellites(lat, lon):
     # happened to culminate opposite the headline.
     axis_origin = _axis_origin(head_track, ghost_tracks)
 
-    for gt in ghost_tracks:
-        _draw_pass_track(img, gt, STEEL + (SAT_GHOST_ALPHA,), axis_origin)
+    # ⇒ THE PATTERN IS TAKEN BY POSITION, and the order is the one _sat_selection
+    # settled: the companions are sorted once there and the same list drives both
+    # the arcs and the listing rows, so the arc at index i and the row at index i
+    # cannot describe different passes.
+    for gt, dash in zip(ghost_tracks, SAT_PATTERNS):
+        _draw_pass_track(img, gt, STEEL + (SAT_GHOST_ALPHA,), axis_origin,
+                         pattern=dash)
     _draw_pass_track(img, head_track, NOMINAL, axis_origin,
                      shadow_colour=STEEL + (110,))
     _draw_minute_marks(img, head_track, axis_origin, nxt["rise"], nxt["set"],
@@ -2007,7 +2153,12 @@ def render_satellites(lat, lon):
     for heading, rows in blocks:
         draw.text((MARGIN, y), heading, font=f["med"], fill=WHITE)
         y += SAT_HEAD_H
-        for p in rows:
+        # Identity, not equality: this block's rows ARE the companion list, so
+        # the row at index i keys the arc drawn at index i. Comparing the pass
+        # dicts by value would work by accident and break the day two passes
+        # agreed in every field.
+        drawn = rows is others
+        for i, p in enumerate(rows):
             # The DATE as well as the weekday. A week's listing can contain the
             # same weekday as today - it did on the first render, where two rows
             # read "Wed" on a Wednesday and looked like they meant tonight.
@@ -2015,8 +2166,19 @@ def render_satellites(lat, lon):
                       fill=WHITE)
             draw.text((MARGIN + SAT_COL_NAME, y), p["name"], font=f["sm"],
                       fill=MUTED)
+            # ⇒ A SWATCH ONLY WHERE THERE IS AN ARC TO KEY. Rows of the week's
+            # block are not plotted, so they leave the column empty and the
+            # blank says so - the presence of a sample is what marks a row as
+            # drawn above, which is why no extra wording is needed to explain
+            # that most rows have no arc.
+            if drawn:
+                _draw_swatch(img, MARGIN + SAT_COL_SWATCH,
+                             y + f["sm"].size // 2, MUTED, SAT_PATTERNS[i])
+            # "up" was dropped to make room for the swatch column. The bearings
+            # beside it are compass letters and the heading block above states
+            # "highest N degrees in the ...", so the figure is not ambiguous.
             draw.text((MARGIN + SAT_COL_GEOM, y),
-                      f"{p['max_altitude']:.0f}° up  ·  {compass(p['rise_bearing'])} to "
+                      f"{p['max_altitude']:.0f}°  ·  {compass(p['rise_bearing'])} to "
                       f"{compass(p['set_bearing'])}",
                       font=f["sm"], fill=MUTED)
             y += SAT_ROW_H
