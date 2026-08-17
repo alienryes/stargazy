@@ -10,7 +10,7 @@ Both paths build the identical entity-keyed dict of strings, which is what lets
 the render code be written once.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
@@ -22,6 +22,16 @@ log = logging.getLogger(__name__)
 # property. ONE table, because the two weather sources must stay in step: the
 # Home Assistant path uses the keys, the direct path uses the values, and the
 # render code is keyed on the full entity id either way.
+#
+# ⚠ THE TWO PATHS NOW DIFFER IN ONE RESPECT, DELIBERATELY. The Home Assistant
+# path interpolates the conditions between the current forecast hour and the
+# next (see _interpolate_hour); the direct path serves the hour's row as
+# published. Both are honest readings of the same hourly series and the values
+# agree on the hour, but between hours the HA path moves and the direct one
+# steps. The table above still governs WHICH values exist and what they are
+# called - that part has not diverged - and the direct path can be brought into
+# line by giving it the same treatment against pyastroweatherio's own hourly
+# forecast. Recorded here rather than left for someone to notice from a diff.
 HA_PREFIX = "sensor.astroweather_backyard_"
 
 FIELDS = {
@@ -165,7 +175,143 @@ def fetch_states(ha_url, token):
             except Exception as e:
                 log.warning("Failed to fetch %s: %s", eid, e)
                 states[eid] = "unknown"
+        _interpolate_hour(session, ha_url, states)
     return states
+
+
+# The forecast properties worth moving between one hour and the next: everything
+# the four bars rest on, the three cloud layers obscuration is derived from, and
+# the footer's air figures. All vary continuously and share their units across
+# both sources.
+#
+# ⚠ NOTHING HERE IS A STATE, A TIME OR A DIRECTION. Averaging a condition string
+# or a moonrise is meaningless, and a bearing averaged across the compass seam
+# gives the opposite heading.
+#
+# ⚠ WIND IS DELIBERATELY ABSENT. The two sources publish it in different units -
+# metres per second direct, km/h through Home Assistant, which fetch_states_direct
+# converts for the hour's own value - so a shared blend would have to know which
+# source it was serving. It feeds the footer and the starfield drift rather than
+# any verdict, so the hour's step costs nothing worth that.
+_SMOOTH = {"cloudcover_percentage", "cloud_area_fraction_high_percentage",
+           "cloud_area_fraction_medium_percentage",
+           "cloud_area_fraction_low_percentage",
+           "seeing_percentage", "transparency_percentage", "calm_percentage",
+           "temp2m", "dewpoint2m", "rh2m"}
+
+
+def _astroweather_entity(session, ha_url):
+    """The AstroWeather weather entity, found by what it carries.
+
+    ⚠ NOT BY NAME. The entity is named after whatever the integration was called
+    when it was set up - the reference install's reads `almaterrace` while every
+    sensor beside it says `backyard` - so matching on the id would work here and
+    nowhere else. Its `seeing_percentage` attribute is the signature: no other
+    weather integration publishes one.
+    """
+    try:
+        r = session.get(f"{ha_url}/api/states", timeout=15)
+        r.raise_for_status()
+        for s in r.json():
+            if (s.get("entity_id", "").startswith("weather.")
+                    and "seeing_percentage" in (s.get("attributes") or {})):
+                return s["entity_id"]
+    except Exception as e:
+        log.debug("Could not look for an AstroWeather weather entity (%s).", e)
+    return None
+
+
+def _interpolate_hour(session, ha_url, states):
+    """Move the conditions between this hour's forecast row and the next.
+
+    ⇒⇒ THE ROW IS THE HOUR, FLOORED, AND THAT IS THE SOURCE'S RESOLUTION RATHER
+    THAN A CHOICE MADE HERE. AstroWeather publishes one row per hour and its
+    sensors carry the current row unchanged, so a value can be up to an hour old
+    and a real change arrives as a single step. Measured on a live evening,
+    cloudless ran 84, 64, 32, 8 over four consecutive hours - so for most of the
+    hour before midnight the panel showed 84 while the sky was well past it.
+
+    ⚠ THIS INVENTS VALUES THE MODEL DID NOT PUBLISH, and says so on the panel.
+    Linear interpolation between two forecast hours is an ordinary reading of an
+    hourly series, not new information: it cannot know that cloud arrived early.
+    What it removes is the step and the staleness, both of which are artefacts of
+    the publishing interval rather than statements about the sky.
+
+    Best effort throughout. A failure here leaves `states` exactly as fetched -
+    the floored row, which is what the display has always drawn - so the page
+    degrades to correct rather than to empty.
+    """
+    entity = _astroweather_entity(session, ha_url)
+    if not entity:
+        return
+    try:
+        r = session.post(
+            f"{ha_url}/api/services/weather/get_forecasts?return_response",
+            json={"entity_id": entity, "type": "hourly"}, timeout=15)
+        r.raise_for_status()
+        rows = (r.json().get("service_response", {})
+                .get(entity, {}).get("forecast") or [])
+    except Exception as e:
+        log.warning("Hourly forecast unavailable (%s); using the hour's row.", e)
+        return
+    pairs = []
+    for row in rows:
+        try:
+            when = datetime.fromisoformat(row["datetime"])
+        except (KeyError, ValueError):
+            continue
+        pairs.append((when, {_HA_FORECAST_ALIAS.get(k, k): v
+                             for k, v in row.items()}))
+    moved = _blend(pairs, states)
+    if not moved:
+        log.debug("No forecast row contained the current instant.")
+
+
+# ⚠ HOME ASSISTANT'S FORECAST ROWS DO NOT USE pyastroweatherio's PROPERTY NAMES,
+# and the overlap is close enough to look complete when it is not. The four bar
+# percentages happen to match, so a check that watched only those would pass
+# while the THREE CLOUD LAYERS obscuration is derived from were silently left on
+# the hour - the page's headline figure stepping while the bars beside it moved.
+_HA_FORECAST_ALIAS = {
+    "cloud_area_fraction_high": "cloud_area_fraction_high_percentage",
+    "cloud_area_fraction_medium": "cloud_area_fraction_medium_percentage",
+    "cloud_area_fraction_low": "cloud_area_fraction_low_percentage",
+    "temperature": "temp2m",
+    "humidity": "rh2m",
+}
+
+
+def _blend(rows, states):
+    """Move `states` between the forecast row containing now and the next.
+
+    `rows` is [(aware datetime, mapping of pyastroweatherio property -> value)],
+    in order. ONE implementation for both weather sources: they publish the same
+    hourly series under the same property names, and the whole point of FIELDS is
+    that neither path gets its own arithmetic. The alternative was two copies of
+    a linear blend that would agree until one of them was edited.
+    """
+    now = datetime.now(timezone.utc)
+    for (t0, a), (t1, b) in zip(rows, rows[1:]):
+        if not t0 <= now < t1:
+            continue
+        span = (t1 - t0).total_seconds()
+        if span <= 0:
+            return 0
+        f = (now - t0).total_seconds() / span
+        moved = 0
+        for suffix, prop in FIELDS.items():
+            if prop not in _SMOOTH:
+                continue
+            lo, hi = a.get(prop), b.get(prop)
+            try:
+                lo, hi = float(lo), float(hi)
+            except (TypeError, ValueError):
+                continue
+            states[HA_PREFIX + suffix] = _as_state(round(lo + (hi - lo) * f, 1))
+            moved += 1
+        log.debug("Interpolated %d values %.0f%% into the hour.", moved, f * 100)
+        return moved
+    return 0
 
 
 def _as_state(value):
@@ -216,10 +362,11 @@ def fetch_states_direct(loc, tuning):
                 experimental_features=tuning["experimental_features"],
                 forecast_model=tuning["forecast_model"],
             )
-            return await aw.get_location_data()
+            return (await aw.get_location_data(),
+                    await aw.get_hourly_forecast())
 
     try:
-        data = asyncio.run(_fetch())
+        data, hourly = asyncio.run(_fetch())
     except Exception as e:
         log.warning("Direct weather fetch failed: %s", e)
         return {eid: "unknown" for eid in ENTITIES}
@@ -237,6 +384,17 @@ def fetch_states_direct(loc, tuning):
         if suffix == "10m_wind_speed" and value is not None:
             value = _f(value) * MS_TO_KMH
         states[HA_PREFIX + suffix] = _as_state(value)
+
+    # The same blend the Home Assistant path gets, over the same hourly series -
+    # `get_location_data` returns the containing hour's row unchanged, which is
+    # where the step and the staleness come from. Best effort: a forecast that
+    # cannot be read leaves the hour's own values in place.
+    try:
+        rows = [(r.forecast_time, {p: getattr(r, p, None) for p in _SMOOTH})
+                for r in (hourly or [])]
+        _blend([(t, v) for t, v in rows if t is not None], states)
+    except Exception as e:
+        log.warning("Hourly forecast unusable (%s); using the hour's row.", e)
     return states
 
 
