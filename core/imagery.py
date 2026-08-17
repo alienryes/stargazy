@@ -7,6 +7,7 @@ may be called from a render loop.
 import email.utils
 import io
 import logging
+import math
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -39,11 +40,115 @@ HIPS_URL = "https://alasky.cds.unistra.fr/hips-image-services/hips2fits"
 MOON_CACHE = CACHE_ROOT / "moon"
 DIALAMOON_URL = "https://svs.gsfc.nasa.gov/api/dialamoon/"
 MOON_CACHE_KEEP = 4
-# The disc is 658px across, centred, in a 730px frame. Scaling by the frame
-# rather than by a measured bounding box keeps the Moon's real change of
-# apparent size with distance - and a thin crescent has no bounding box worth
-# measuring anyway, since most of the disc is only lit by earthshine.
+# The disc is 658px across, centred, in a 730px frame. SCALING by the frame
+# rather than by a measured bounding box is deliberate and stays: it keeps the
+# Moon's real change of apparent size with distance, about 4% between perigee
+# and apogee.
+#
+# ⚠ BUT THE MASK MUST NOT BE SIZED FROM IT. That is the same number used two
+# ways - how big to draw the frame, and where the disc ends inside it - and only
+# the first is constant. On 2026-08-17 the disc measured 0.865 of the frame
+# against the 0.901 here, so a ring of the frame's black surround 12 px wide sat
+# inside an opaque mask. Against the navy sky that is invisible; against bright
+# cloud it read as a black halo, which is how it was found. See _disc_radius.
 MOON_DISC_FRAC = 658 / 730
+
+# A pixel counts as disc when it is this fraction of the frame's own peak
+# brightness, with an absolute floor under it.
+#
+# ⇒ RELATIVE TO THE FRAME, BECAUSE A FIXED CUT CANNOT SERVE BOTH. Measured at
+# their true limbs: the Sun lights 100% of the ring down to r=468 and only 37%
+# at 470, where its edge is already falling away; the Moon lights about half,
+# since the illuminated limb of a crescent is a semicircle at any phase. Any
+# fixed fraction-of-ring rule that trims the Sun therefore crops the Moon. What
+# separates them is that the surround is a true zero while a real limb is a
+# large fraction of the disc's own brightness, whatever shape the lit part is.
+DISC_EDGE_FRAC = 0.30
+DISC_LIT = 24
+# What fraction of a ring must be lit before that radius counts as disc.
+#
+# ⇒ HALF, BECAUSE OF THE GEOMETRY, AND THIS IS THE PART THAT MAKES IT ROBUST.
+# The illuminated limb of a crescent is a SEMICIRCLE whatever the phase - the
+# terminator is the inner boundary of the lit region, never the outer one - so
+# any lit disc lights about half of the ring at its true edge, from new moon to
+# full. The Sun lights all of it. Outside the limb the figure collapses to
+# nearly nothing.
+#
+# ⚠ A COUNT OF PIXELS IS NOT A SUBSTITUTE. The first version took three lit
+# pixels as proof, which JPEG ringing around a hard bright limb clears easily:
+# on the solar frame it measured the disc as 299 px of a possible 300 and
+# trimmed nothing at all.
+DISC_MIN_LIT = 0.15
+# Refuse a measurement below this fraction of the geometric circle. Detection
+# failing open to a slightly large mask restores the old black rim; failing open
+# to a small one would crop the Moon, which is worse and less obvious.
+DISC_MIN_FRAC = 0.80
+
+# Pull the mask this many frame pixels inside the measured limb.
+#
+# ⇒ BECAUSE THE EDGE IS A GRADIENT, NOT A LINE. Both feeds fall off over about
+# three pixels - the solar frame runs 70, 20, 3 across r=468..471 - so the
+# outermost radius that still counts as disc is already half sky, and a mask cut
+# there compositing that gradient IS the dark rim. Cutting inside it costs two
+# pixels of real disc on a body drawn 600 across, which is not visible, and
+# removes the rim on both.
+#
+# Applied after detection rather than folded into the threshold because the
+# alternative needed a statistic behaving identically on a fully lit disc and on
+# a crescent, and there is none: at its true limb the Sun lights every sample
+# and the Moon about half.
+DISC_INSET = 3
+
+
+def _disc_radius(photo, disc_frac):
+    """Radius of the imaged disc, in the ORIGINAL frame's own pixels.
+
+    ⚠ MEASURED FROM THE OUTERMOST LIT PIXEL, NOT BY KEYING OUT THE DARK. Keying
+    on brightness across the whole disc looks like the obvious approach and does
+    not work: the unlit part of a crescent reaches a true zero in these frames,
+    so a darkness key punches holes in the Moon. Only the outer EDGE of the lit
+    region is a reliable limb, and a crescent's lit edge is the limb, however
+    thin the crescent.
+
+    ⚠ AND MEASURED BEFORE THE RESIZE, NOT AFTER. Reducing a hard bright limb
+    rings, and the overshoot sits just outside the true edge where a brightness
+    search reads it as disc. Measured on the resized solar frame this returned
+    the search limit unchanged and trimmed nothing, leaving the rim it exists to
+    remove.
+
+    The search starts at the nominal disc edge and never goes beyond it, which
+    is what keeps SDO's corner caption out of the answer.
+    """
+    limit = disc_frac * min(photo.size) / 2.0
+    grey = photo.convert("L")
+    lit_above = max(DISC_LIT, DISC_EDGE_FRAC * grey.getextrema()[1])
+    px = grey.load()
+    w, h = photo.size
+    cx, cy = w / 2.0, h / 2.0
+    for r in range(int(limit), int(limit * DISC_MIN_FRAC), -1):
+        lit = 0
+        # Roughly one sample per pixel of circumference: dense enough that a
+        # crescent's lit edge cannot be stepped over.
+        steps = max(8, int(r * 6))
+        for i in range(steps):
+            a = 2.0 * math.pi * i / steps
+            x, y = int(cx + r * math.cos(a)), int(cy + r * math.sin(a))
+            if 0 <= x < w and 0 <= y < h and px[x, y] > lit_above:
+                lit += 1
+        if lit >= DISC_MIN_LIT * steps:
+            return float(r - DISC_INSET)
+    log.warning("No disc edge found within %d px; using the frame's nominal size.",
+                int(limit))
+    return float(limit)
+
+
+def _mask_radius(photo, disc_frac, d, r):
+    """The measured limb, expressed in the resized frame's pixels and capped.
+
+    Capped at `r` because that circle is what excludes SDO's caption; a
+    measurement may only ever shrink the mask.
+    """
+    return min(r, int(_disc_radius(photo, disc_frac) * d / photo.width))
 
 
 def cutout(obj_id, size_arcmin, px=200):
@@ -212,17 +317,19 @@ def sun_image():
 def paste_sun(img, photo, cx, cy, r):
     """Composite an SDO continuum frame as the solar disc.
 
-    The mask is what removes the caption strip SDO prints along the bottom of
-    every frame, so it is load-bearing rather than cosmetic. Feathered like the
-    lunar one because the disc's size in the frame moves with the Earth-Sun
-    distance - about 1.7% either way over a year - and a hard edge would show
-    that as a black rim in January.
+    The mask is what removes the caption strip SDO prints in the corners of
+    every frame, so it is load-bearing rather than cosmetic. Its radius is
+    MEASURED from the frame rather than taken from SUN_DISC_FRAC: the disc's
+    size moves with the Earth-Sun distance, about 1.7% either way over a year,
+    and the difference between the constant and the truth is drawn as a rim of
+    the frame's own black surround.
     """
     d = int(2 * r / SUN_DISC_FRAC)
     disc = photo.resize((d, d), Image.LANCZOS)
     mask = Image.new("L", (d, d), 0)
-    inset = (d - 2 * r) // 2
-    ImageDraw.Draw(mask).ellipse([inset, inset, d - inset, d - inset], fill=255)
+    mr = _mask_radius(photo, SUN_DISC_FRAC, d, r)
+    ImageDraw.Draw(mask).ellipse([d // 2 - mr, d // 2 - mr, d // 2 + mr, d // 2 + mr],
+                                 fill=255)
     mask = mask.filter(ImageFilter.GaussianBlur(2))
     img.paste(disc, (cx - d // 2, cy - d // 2), mask)
 
@@ -230,17 +337,26 @@ def paste_sun(img, photo, cx, cy, r):
 def paste_moon(img, photo, cx, cy, r, ring=True):
     """Composite a Dial-a-Moon frame as the moon disc.
 
-    The mask edge is feathered because the disc does not always fill it: the
-    Moon is nearer at perigee than at apogee by about 4%, and a hard edge would
-    show that as a black rim against the navy sky on the far weeks.
+    The mask radius is MEASURED from the frame rather than taken from
+    MOON_DISC_FRAC. The Moon is nearer at perigee than at apogee by about 4%, so
+    the disc does not always fill the circle that constant describes, and
+    whatever it does not fill is drawn as a rim of the frame's black surround.
+    The edge is feathered on top of that, against the last pixel of rounding.
+
+    The drawn disc still CHANGES SIZE with distance, which is the point of
+    scaling by the frame: measuring the mask crops the surround without
+    normalising the Moon to a constant size on the panel.
     """
     d     = int(2 * r / MOON_DISC_FRAC)
     disc  = photo.resize((d, d), Image.LANCZOS)
     mask  = Image.new("L", (d, d), 0)
-    inset = (d - 2 * r) // 2
-    ImageDraw.Draw(mask).ellipse([inset, inset, d - inset, d - inset], fill=255)
+    mr    = _mask_radius(photo, MOON_DISC_FRAC, d, r)
+    ImageDraw.Draw(mask).ellipse([d // 2 - mr, d // 2 - mr, d // 2 + mr, d // 2 + mr],
+                                 fill=255)
     mask  = mask.filter(ImageFilter.GaussianBlur(2))
     img.paste(disc, (cx - d // 2, cy - d // 2), mask)
     if ring:
-        ImageDraw.Draw(img).ellipse([cx - r, cy - r, cx + r, cy + r],
+        # On the measured limb, not on r: the outline exists to edge the disc,
+        # and at apogee r is a dozen pixels clear of it.
+        ImageDraw.Draw(img).ellipse([cx - mr, cy - mr, cx + mr, cy + mr],
                                     outline=MOON, width=3)
