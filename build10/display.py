@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.52.0"
+VERSION = "0.53.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -366,7 +366,8 @@ def _moon_facts(facts):
     return "   ·   ".join(bits)
 
 
-def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None):
+def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None,
+                      dropped=()):
     """Page 1 as an RGBA overlay: opaque content, transparent sky."""
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -536,6 +537,21 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None)
         draw.text((MARGIN, H - 44), "Lunar imagery: NASA SVS Dial-a-Moon",
                   font=f["fn"], fill=DIM)
     _right(draw, f"v{VERSION}", H - 44, DIM, f["fn"])
+    # ⇒ SAY WHEN A PAGE WAS DROPPED BY A FAILING FEED. Until now the rotation
+    # simply carried one page fewer and the reason went only to the journal, so
+    # from the panel a broken supplier and a quiet night looked identical - and
+    # the quiet night is overwhelmingly the common case, which is exactly why the
+    # difference has to be stated rather than inferred.
+    #
+    # On the line above the credits, in DIM: it is a note about the display
+    # rather than about the sky, and it must not compete with the conditions
+    # themselves. Named pages rather than a count, because "one page missing" is
+    # not actionable and "Aurora" is - it says which feed to look at.
+    if dropped:
+        draw.text((MARGIN, H - 88),
+                  f"{', '.join(dropped)} unavailable this refresh; the rest of "
+                  f"the rotation is unaffected.",
+                  font=f["fn"], fill=DIM)
     return img
 
 
@@ -2694,7 +2710,7 @@ def target_pages(states, targets, lat):
     return out
 
 
-def _optional(name, fn, *args):
+def _optional(name, fn, *args, dropped=None):
     """One conditional page, or None if building it raised.
 
     Each of these pages stands on its own feed - UpTonight on disk, CelesTrak,
@@ -2712,12 +2728,20 @@ def _optional(name, fn, *args):
     page has to be mandatory, and that is the one that draws from the states
     dict with no feed of its own beyond the lunar frame, which already fails
     soft to the parametric drawing.
+
+    ⇒ `dropped`, when a list is passed, COLLECTS THE NAMES THAT RAISED - and only
+    those. A renderer returning None is the ordinary case, meaning it has nothing
+    to show tonight, and reporting that as a failure would put "Aurora unavailable"
+    on the panel every clear night of the year. The two are indistinguishable from
+    outside, which is why the caller cannot just count the pages it got back.
     """
     try:
         return fn(*args)
     except Exception as e:
         log.warning("%s page could not be built (%s); leaving it out of the "
                     "rotation this refresh.", name, e)
+        if dropped is not None:
+            dropped.append(name)
         return None
 
 
@@ -2725,39 +2749,44 @@ def build_pages(states, targets, lat, moon_ring=False):
     """Every page as an RGBA overlay. Data thread only: this fetches the hour's
     lunar frame and any deep-sky cutouts not already cached."""
     photo, facts = moon_image()
-    pages = [render_conditions(states, photo, moon_ring, facts)]
+    # ⚠ THE OPTIONAL PAGES ARE BUILT FIRST, AND THE ORDER OF THIS FUNCTION IS NOT
+    # THE ORDER OF THE ROTATION. Conditions used to be built here, before any of
+    # them, which meant it could not know what had failed in the same refresh -
+    # it would always have reported the PREVIOUS one's failures, a quarter of an
+    # hour stale, while looking like a statement about now. The rotation is
+    # assembled in its own order below.
+    dropped = []
     # The targets page joins the rotation only when there is something on it -
     # better one live page than two with a dead one. It carries every object
     # UpTonight passed rather than the first screenful, as a Paged run stepped
     # by its own button: the heading has always said "of 40" while showing six,
     # and naming what it is withholding is not the same as offering it.
-    page2 = _optional("Targets", target_pages, states, targets, lat)
-    if page2:
-        pages.append(page2)
-    page3 = _optional("Meteors", render_meteors, states, lat, LON)
-    if page3 is not None:
-        pages.append(page3)
+    page2 = _optional("Targets", target_pages, states, targets, lat, dropped=dropped)
+    page3 = _optional("Meteors", render_meteors, states, lat, LON, dropped=dropped)
     # Aurora joins the rotation only when there is aurora to see, which is the
     # same mechanism pages 2 and 3 use - and the reason this page is independent
     # of UpTonight. Drawn on the targets panorama instead, a real storm could
     # have gone unshown because an unrelated data source had failed.
-    page4 = _optional("Aurora", render_aurora, states, lat, LON)
-    if page4 is not None:
-        pages.append(page4)
+    page4 = _optional("Aurora", render_aurora, states, lat, LON, dropped=dropped)
     # Same mechanism again: present only when a bright satellite crosses a dark
     # sky within the day. Unlike the pages above it this one is not gated on the
     # sky being dark NOW, because a pass is an appointment rather than a
     # condition - and it is the only page here whose subject is man-made.
-    page5 = _optional("Satellites", render_satellites, lat, LON)
-    if page5 is not None:
-        pages.append(page5)
+    page5 = _optional("Satellites", render_satellites, lat, LON, dropped=dropped)
     # The one page here that requires the Sun to be UP. It does not lengthen the
     # worst-case rotation: aurora needs darkness and cannot coexist with it, so
     # the count peaks at five either way - by night with aurora, by day with
     # this.
-    page6 = _optional("Solar", render_solar, states, lat, LON)
-    if page6 is not None:
-        pages.append(page6)
+    page6 = _optional("Solar", render_solar, states, lat, LON, dropped=dropped)
+
+    # Conditions LAST, so it can say what failed in this refresh - but FIRST in
+    # the rotation, which is what the render loop indexes from and what a reader
+    # expects to see. render_conditions is still the one page never wrapped: the
+    # rotation cannot be empty.
+    pages = [render_conditions(states, photo, moon_ring, facts, dropped)]
+    for page in (page2, page3, page4, page5, page6):
+        if page is not None:
+            pages.append(page)
     return pages
 
 

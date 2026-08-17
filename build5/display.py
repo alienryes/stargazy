@@ -73,7 +73,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.38.5"
+FIRMWARE_VERSION = "3.40.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -228,7 +228,7 @@ def _glyph(draw, cx, cy, r, otype):
         draw.ellipse([cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy + r * 0.45], outline=STEEL)
 
 
-def render_foreground(states, moon_photo=None, moon_ring=False):
+def render_foreground(states, moon_photo=None, moon_ring=False, dropped=()):
     """Render the dashboard as an RGBA overlay: opaque content, transparent sky.
 
     moon_photo is a Dial-a-Moon frame fetched by the caller (network, so never
@@ -454,6 +454,16 @@ def render_foreground(states, moon_photo=None, moon_ring=False):
     ver   = f"v{FIRMWARE_VERSION}"
     ver_w = int(draw.textlength(ver, font=f_xs))
     draw.text((W - ver_w - MARGIN, H - 30), ver, fill=DIM, font=f_xs)
+    # ⇒ SAY WHEN A PAGE WAS DROPPED BY A FAILING FEED. Without this the rotation
+    # just carries one page fewer and the reason reaches the journal only, so a
+    # broken supplier and a night with nothing to show look identical from the
+    # panel - and the second is far the commoner, which is why the difference has
+    # to be stated rather than left to be inferred. Named, not counted: "Targets"
+    # says which feed to look at, "one page missing" says nothing to act on.
+    if dropped:
+        draw.text((MARGIN, H - 56),
+                  f"{', '.join(dropped)} unavailable this refresh.",
+                  fill=DIM, font=font("IBMPlexSans-Regular.ttf", 22))
 
     return img
 
@@ -465,12 +475,41 @@ P2_DIV_X = 636       # panorama | deep-sky cards
 P2_CARDS = 4         # cards that fit the right column
 PAN_TOP, PAN_BASE = 214, 566          # top and bottom of the altitude axis
 PAN_X0, PAN_X1 = MARGIN, P2_DIV_X - 24
-# The axis stops at 70 deg, not 90. Everything plotted here sits near the
-# ecliptic, which at 51.4N never climbs past about 62 deg for the planets or
-# 67 for the Moon at extreme standstill - so the top fifth of a 0-90 axis was
-# dead space that squeezed everything else together. Latitude-specific: raise
-# this if the display is ever used much further south.
+# The obliquity of the ecliptic, and the Moon's greatest departure from it.
+# Together they bound how high an ecliptic body can climb from a given latitude.
+OBLIQUITY_DEG = 23.44
+MOON_INCLINATION_DEG = 5.15
+# A little air above the highest thing that can appear, so a mark at the limit
+# is not drawn on the axis line itself.
+PAN_ALT_HEADROOM = 3.0
+# Set from the configured latitude in main(); this default is the reference
+# site's answer so an unconfigured import still draws a sane axis.
 PAN_ALT_MAX = 70.0
+
+
+def panorama_alt_max(lat):
+    """The altitude the panorama's axis must span at `lat`, in degrees.
+
+    ⇒ THE AXIS SPANS WHAT CAN APPEAR ON IT, WHICH IS NOT THE WHOLE SKY. Every
+    mark here is a planet, the Moon or a comet, and the first two are bound to
+    the ecliptic: a body of declination d culminates at 90 - |lat - d|, and the
+    ecliptic only reaches +-23.44 degrees, so an ecliptic body can never exceed
+    90 - |lat| + 23.44. The Moon adds its own 5.15 degrees at extreme standstill.
+    Above that the axis is sky nothing plotted here can occupy, and a full 0-90
+    axis spent its top fifth on it while squeezing everything real together.
+
+    ⚠ THIS WAS A FIXED 70 CARRYING THE NOTE "latitude-specific: raise this if the
+    display is ever used much further south" - which asked a stranger to do
+    arithmetic the code can do, and which nothing would have reminded them about.
+    At the reference site the derivation returns exactly 70, so the tuned value is
+    REPRODUCED rather than changed: this explains the number instead of replacing
+    it. Further south the axis opens out (90 at the tropics and below), further
+    north it tightens and the plot gains resolution.
+    """
+    reach = 90.0 - abs(lat) + OBLIQUITY_DEG + MOON_INCLINATION_DEG + PAN_ALT_HEADROOM
+    # To the nearest 5, which is what keeps the 20/40/60 gridlines landing on
+    # round numbers. Floored at 30 so a polar site still gets a usable axis.
+    return float(min(90.0, max(30.0, round(reach / 5.0) * 5.0)))
 # The "below the horizon" line, in the band between the compass labels (which
 # end near 600) and the comet note at 656. Unlike the 10" build, the cards sit
 # in the right-hand column past P2_DIV_X, so nothing has to move to make room.
@@ -582,13 +621,27 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
     different moments on one plot - and, having no time on it at all, the plot
     read as "now" when it was neither.
     """
+    # ⇒ THE AXIS OPENS UP FOR ANYTHING THAT WOULD NOT FIT. panorama_alt_max bounds
+    # the planets and the Moon exactly, because both are tied to the ecliptic - but
+    # A COMET IS NOT. One at a high declination can culminate near the zenith from
+    # any latitude, and it was previously clamped by min(alt, PAN_ALT_MAX) and drawn
+    # at the same height as a body at the cap: two very different altitudes at one
+    # place on the plot. Taking the highest mark into the axis costs nothing on the
+    # ordinary night, when nothing reaches the cap and the axis does not move.
+    alt_max = PAN_ALT_MAX
+    up = [a for _, a, *_ in marks if a > 0]
+    if up:
+        alt_max = max(alt_max, min(90.0, math.ceil(max(up) / 5.0) * 5.0))
+
     draw.line([(PAN_X0, PAN_BASE), (PAN_X1, PAN_BASE)], fill=STEEL, width=2)
     for az, lab in ((0, "N"), (90, "E"), (180, "S"), (270, "W"), (360, "N")):
         x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
         draw.line([(x, PAN_BASE), (x, PAN_BASE + 8)], fill=STEEL)
         draw.text((x - 8, PAN_BASE + 12), lab, font=f_xs, fill=MUTED)
-    for alt in (20, 40, 60):
-        y = PAN_BASE - (alt / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
+    # Gridlines follow the axis rather than being fixed at 20/40/60, or a taller
+    # axis would carry the same three lines bunched into its lower half.
+    for alt in range(20, int(alt_max), 20):
+        y = PAN_BASE - (alt / alt_max) * (PAN_BASE - PAN_TOP)
         draw.line([(PAN_X0, y), (PAN_X1, y)], fill=STEEL + (70,))
         draw.text((PAN_X1 + 4, y - 12), f"{alt}", font=f_xs, fill=MUTED)
     # The axis numbers were unitless; one marker at the top says what they are.
@@ -604,7 +657,7 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
         if alt < 0 or az < 0:
             continue                       # below the horizon: nothing to see
         x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
-        y = PAN_BASE - (min(alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
+        y = PAN_BASE - (min(alt, alt_max) / alt_max) * (PAN_BASE - PAN_TOP)
         r = max(4.0, min(13.0, 9.0 - mag * 0.8))
         draw.ellipse([x - r, y - r, x + r, y + r], fill=col)
 
@@ -979,8 +1032,13 @@ def target_pages(states, targets, lat):
     return out
 
 
-def _optional(name, fn, *args):
+def _optional(name, fn, *args, dropped=None):
     """One conditional page, or None if building it raised.
+
+    `dropped`, when a list is passed, collects the names that RAISED and only
+    those. A renderer returning None means it has nothing to show, which is the
+    ordinary case; reporting that as a failure would put a warning on the panel
+    on a perfectly good night.
 
     Ported from the 10.1" build, where six renderers over five feeds made the
     single try boundary expensive. It matters less here - this build has one
@@ -998,6 +1056,8 @@ def _optional(name, fn, *args):
     except Exception as e:
         log.warning("%s page could not be built (%s); leaving it out of the "
                     "rotation this refresh.", name, e)
+        if dropped is not None:
+            dropped.append(name)
         return None
 
 
@@ -1007,14 +1067,19 @@ def build_pages(states, targets, lat, moon_ring=False):
     Data thread only: this fetches the hour's lunar frame and any deep-sky
     cutouts not already cached.
     """
-    # The 5" layout has no room for the accompanying facts, so it takes the
-    # frame and drops them; the 10" build shows them.
-    pages = [render_foreground(states, moon_image()[0], moon_ring)]
+    # ⚠ THE OPTIONAL PAGE IS BUILT FIRST and the mandatory one second, which is
+    # the reverse of the rotation. The conditions page reports what failed in
+    # THIS refresh, and built first it could only ever have reported the previous
+    # one's - stale by a refresh interval while reading as a statement about now.
+    dropped = []
     # The targets page joins the rotation only when there is something on it -
     # better a single page than a dead one before UpTonight's first run. It
     # carries every object UpTonight passed, as a Paged run stepped by its own
     # button; four cards against a list of forty is the case that most needs it.
-    page2 = _optional("Targets", target_pages, states, targets, lat)
+    page2 = _optional("Targets", target_pages, states, targets, lat, dropped=dropped)
+    # The 5" layout has no room for the accompanying facts, so it takes the
+    # frame and drops them; the 10" build shows them.
+    pages = [render_foreground(states, moon_image()[0], moon_ring, dropped)]
     if page2:
         pages.append(page2)
     return pages
@@ -1060,11 +1125,17 @@ def main():
     args = parser.parse_args()
 
     global LAT, LON, LIMITING_MAG, REAL_STARS, CAMERA_AZ, CAMERA_ALT, CAMERA_FOV, METEOR_COMPRESSION
+    global PAN_ALT_MAX
     config = load_config(CONFIG_PATH)
     out_dir = config.get("uptonight", {}).get("out_dir", "")
     lat    = config.get("location", {}).get("latitude")
     LON    = config.get("location", {}).get("longitude")
     LAT    = lat
+    # The panorama's axis follows the site: see panorama_alt_max. Not a config
+    # key, because there is a correct answer for a given latitude and it is not
+    # a matter of taste - the same test limiting_magnitude passes and this fails.
+    if lat is not None:
+        PAN_ALT_MAX = panorama_alt_max(lat)
     skycfg = config.get("sky", {})
     REAL_STARS = bool(skycfg.get("real_stars", REAL_STARS))
     CAMERA_AZ  = float(skycfg.get("camera_azimuth", CAMERA_AZ))
