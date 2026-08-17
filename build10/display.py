@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.48.0"
+VERSION = "0.48.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -638,17 +638,36 @@ def _draw_timeline(draw, states, y, f_xs):
     draw.text((x1 - ww - (10 if inside else 0), ty), w_lab, font=f_xs, fill=MUTED)
 
 
-def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
+def _pan_x(az, origin=0.0):
+    """Plot x for a bearing, on an axis whose left edge is `origin`.
+
+    One place, because the axis, its cardinal ticks, its marks and any track
+    drawn over it have to agree about where a bearing sits; they were three
+    separate copies of the same arithmetic before the axis could rotate.
+    """
+    return PAN_X0 + (((az - origin) % 360.0) / 360.0) * (PAN_X1 - PAN_X0)
+
+
+def _draw_panorama(draw, marks, when_label, f_sm, f_xs, origin=0.0):
     """Where to look: azimuth across, altitude up. A bearing and a height.
 
     marks are (az, alt, name, colour, radius) already computed for one instant -
     never taken from two reports written at different times.
+
+    `origin` is the bearing at the left edge, and defaults to north so every
+    caller that has not asked for anything else is unaffected. The satellite
+    page rotates it so a pass cannot run off one end of the plot and resume at
+    the other; see render_satellites.
     """
     draw.line([(PAN_X0, PAN_BASE), (PAN_X1, PAN_BASE)], fill=STEEL, width=2)
-    for az, lab in ((0, "N"), (90, "E"), (180, "S"), (270, "W"), (360, "N")):
-        x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
-        draw.line([(x, PAN_BASE), (x, PAN_BASE + 10)], fill=STEEL)
-        draw.text((x - 9, PAN_BASE + 14), lab, font=f_xs, fill=MUTED)
+    for az, lab in ((0, "N"), (90, "E"), (180, "S"), (270, "W")):
+        # A cardinal landing on the left edge is drawn at BOTH ends, which is
+        # what puts N at each end of an unrotated axis - the plot is a full
+        # circle, so its two edges are the same bearing.
+        off = (az - origin) % 360.0
+        for x in ({_pan_x(az, origin), PAN_X1} if off < 0.5 else {_pan_x(az, origin)}):
+            draw.line([(x, PAN_BASE), (x, PAN_BASE + 10)], fill=STEEL)
+            draw.text((x - 9, PAN_BASE + 14), lab, font=f_xs, fill=MUTED)
     for alt in (30, 60, 90):
         y = PAN_BASE - (alt / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
         draw.line([(PAN_X0, y), (PAN_X1, y)], fill=STEEL + (70,))
@@ -663,7 +682,7 @@ def _draw_panorama(draw, marks, when_label, f_sm, f_xs):
     for az, alt, name, col, r in sorted(marks, key=lambda m: -m[1]):
         if alt < 0 or az < 0:
             continue                       # below the horizon: nothing to see
-        x = PAN_X0 + (az / 360.0) * (PAN_X1 - PAN_X0)
+        x = _pan_x(az, origin)
         y = PAN_BASE - (min(alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
         draw.ellipse([x - r, y - r, x + r, y + r], fill=col)
 
@@ -1482,23 +1501,29 @@ def _composite_aa(img, origin, size, colour, paint):
     img.alpha_composite(layer, origin)
 
 
-def _draw_pass_track(img, track, colour):
+def _draw_pass_track(img, track, colour, axis_origin=0.0):
     """The pass's own path across the bearing-by-altitude plot.
 
-    ⚠ NORTH IS AT BOTH ENDS OF THE AXIS, so a pass crossing north is two
-    polylines rather than one. Joining those samples directly would draw a line
-    straight back across the whole plot - the same wrap that the aurora band had
-    to be split for. The break is detected on the azimuth step rather than on the
-    bearing's sign, because a pass can cross north in either direction.
+    `axis_origin` must be the one the axis beneath was drawn with, or the curve
+    describes a different sky from the ticks under it.
+
+    ⚠ THE AXIS WRAPS, so a pass crossing its seam is two polylines rather than
+    one; joining those samples directly would draw a line straight back across
+    the whole plot. Centring the axis on the culmination puts the seam opposite
+    the pass and this does not arise, but the split is kept because it guards
+    the MAPPING rather than the data: any caller passing a different origin gets
+    a correct drawing rather than a stripe across the page. The break is detected
+    on the azimuth step rather than on the bearing's sign, because a pass can
+    cross the seam in either direction.
     """
     if len(track) < 2:
         return
     size = (PAN_X1 - PAN_X0 + 2 * TRACK_PAD, PAN_BASE - PAN_TOP + 2 * TRACK_PAD)
-    origin = (PAN_X0 - TRACK_PAD, PAN_TOP - TRACK_PAD)
+    corner = (PAN_X0 - TRACK_PAD, PAN_TOP - TRACK_PAD)
 
     def point(az, alt, ss):
         """Plot coordinates on the oversized mask, relative to its corner."""
-        x = TRACK_PAD + (az / 360.0) * (PAN_X1 - PAN_X0)
+        x = TRACK_PAD + (_pan_x(az, axis_origin) - PAN_X0)
         y = TRACK_PAD + (PAN_BASE - PAN_TOP) * (
             1.0 - min(alt, PAN_ALT_MAX) / PAN_ALT_MAX)
         return (x * ss, y * ss)
@@ -1506,12 +1531,13 @@ def _draw_pass_track(img, track, colour):
     def paint_line(ld, ss):
         run = []
         for az, alt in track:
-            if run and abs(az - run[-1][0]) > 180.0:
+            offset = (az - axis_origin) % 360.0
+            if run and abs(offset - run[-1][0]) > 180.0:
                 if len(run) > 1:
                     ld.line([p[1] for p in run], fill=255,
                             width=TRACK_WIDTH * ss, joint="curve")
                 run = []
-            run.append((az, point(az, alt, ss)))
+            run.append((offset, point(az, alt, ss)))
         if len(run) > 1:
             ld.line([p[1] for p in run], fill=255,
                     width=TRACK_WIDTH * ss, joint="curve")
@@ -1521,14 +1547,14 @@ def _draw_pass_track(img, track, colour):
         r = TRACK_DOT_R * ss
         ld.ellipse([px - r, py - r, px + r, py + r], fill=255)
 
-    _composite_aa(img, origin, size, colour, paint_line)
+    _composite_aa(img, corner, size, colour, paint_line)
     # The culmination, marked but NOT labelled. _draw_panorama's labels avoid
     # each other and know nothing about this track, so a name placed here landed
     # squarely across the descending limb. The heading above the plot already
     # names the object and states the bearing, so a label here would be
     # duplication that damages the one thing the plot is for. Composited
     # separately because it is a different colour from the line.
-    _composite_aa(img, origin, size, WHITE, paint_dot)
+    _composite_aa(img, corner, size, WHITE, paint_dot)
 
 
 def _until(when, now):
@@ -1614,8 +1640,20 @@ def render_satellites(states, lat, lon):
     # Track first, then the axes over it, matching the aurora page: the path is
     # the background its numbers annotate. No marks are passed - the track draws
     # its own culmination dot, and see _draw_pass_track for why it is unlabelled.
-    _draw_pass_track(img, track_of(nxt, lat or 0.0, lon or 0.0), NOMINAL)
-    _draw_panorama(draw, [], "pass", f["sm"], f["xs"])
+    # ⇒ THE AXIS IS CENTRED ON THE CULMINATION, NOT ON NORTH. A pass whose
+    # azimuth runs through north otherwise leaves one edge of the plot and
+    # resumes at the other - correct, since the two edges are the same bearing,
+    # and unreadable as a path. 40% of passes here do it. Putting the seam
+    # opposite the culmination cannot fail: the widest pass measured sweeps
+    # 185.6 deg of azimuth against the 360 the axis spans.
+    #
+    # The cardinal ticks move with it, so the plot still says which way to face;
+    # what changes is that the peak is always mid-plot rather than the compass
+    # always starting at north.
+    axis_origin = (nxt["culminate_bearing"] - 180.0) % 360.0
+    _draw_pass_track(img, track_of(nxt, lat or 0.0, lon or 0.0), NOMINAL,
+                     axis_origin)
+    _draw_panorama(draw, [], "pass", f["sm"], f["xs"], axis_origin)
 
     # The FIRST pass is the heading above, so the list starts after it. Printed
     # in full it duplicated the headline on every render - the same fault the
