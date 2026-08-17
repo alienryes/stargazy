@@ -476,7 +476,7 @@ Bug reports, questions and build photos are all welcome via [Issues](https://git
 
 One area where reports are especially useful, because it cannot be verified here:
 
-- **Other latitudes.** The reference build sits at 51°N. The targets page caps its altitude axis at 70° because nothing near the ecliptic rises higher from there; much further south that will clip real objects, and `PAN_ALT_MAX` in `display.py` is the value to raise.
+- **Other latitudes.** The reference build sits at 51°N. The targets page derives its altitude axis from the configured latitude — the highest an ecliptic body can reach, plus the Moon's inclination and a little headroom — so it should not need adjusting anywhere, and reports that it does are useful. The axis also opens beyond that figure for a comet placed higher, comets not being tied to the ecliptic.
 
 ---
 
