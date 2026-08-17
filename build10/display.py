@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.48.2"
+VERSION = "0.49.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1448,9 +1448,74 @@ SAT_COL_NAME = 280
 SAT_COL_GEOM = 640
 
 
+# How many other passes of the same night are drawn behind the headline one, and
+# how far their arcs are held back from it. The listing beneath names them, so
+# they carry no labels: an earlier attempt to label a culmination put the text
+# across the track it belonged to, and the fix was to remove the label rather
+# than to move it.
+SAT_GHOSTS = 3
+SAT_GHOST_ALPHA = 90
+
+# The marker sweeps the arc in this many seconds whatever the pass really takes.
+# ⚠ IT IS NOT A CLOCK, and the minute ticks beside it are: a real pass runs ten
+# to fifteen minutes, which at true speed would be indistinguishable from a
+# stationary dot. The compression states direction and shape; the ticks state
+# timing. Cloud drift and meteors on this panel are compressed for the same
+# reason and by different factors - see core/sky.py, where that is recorded as
+# settled rather than as an inconsistency.
+SAT_MARKER_PERIOD = 6.0
+SAT_MARKER_R = 9
+SAT_TICK_LEN = 9
+
+
 def _rank(p):
     """How worth watching a pass is: its tier first, then how high it climbs."""
     return (p["notable"], p["max_altitude"])
+
+
+def _pass_night(p):
+    """The date of the EVENING a pass belongs to.
+
+    ⚠ NOT `culminate.date()`. A night spans midnight, so a pass at 23:50 and one
+    at 01:30 belong together and calendar dates split them - which would list one
+    object twice, on two dates, for a single night's observing. Shifting back
+    twelve hours puts the whole of a night on the evening it started.
+    """
+    return (p["culminate"] - timedelta(hours=12)).date()
+
+
+def _splits(track, origin):
+    """True when `track` crosses the seam of an axis starting at `origin`."""
+    offs = [(az - origin) % 360.0 for az, _, _ in track]
+    return any(abs(b - a) > 180.0 for a, b in zip(offs, offs[1:]))
+
+
+def _axis_origin(head, others=()):
+    """The bearing to put at the plot's left edge, given every track drawn.
+
+    The seam has to fall where no track crosses it, or an arc leaves one edge and
+    resumes at the other. The middle of the WIDEST GAP in the bearings the tracks
+    occupy is the best candidate, and with a single track it reduces to the
+    antipode of its culmination.
+
+    ⚠ FOUR ARCS CAN COVER THE WHOLE COMPASS, and then no gap exists. Measured
+    over a real week, a third of the nights carrying companions had none. So the
+    HEADLINE is protected explicitly: if the widest gap would split it, the seam
+    goes to the antipode of its culmination instead, which cannot split it since
+    the widest pass measured sweeps 185.6 degrees and reaches only 93 either side.
+    A dimmed companion may still be drawn in two pieces; _draw_pass_track handles
+    that correctly, and a split ghost costs far less than a split subject.
+    """
+    tracks = [t for t in [head] + list(others) if t]
+    if not tracks:
+        return 0.0
+    used = sorted({round(az) % 360 for track in tracks for az, _, _ in track})
+    gaps = [((b - a) % 360.0, a) for a, b in zip(used, used[1:] + used[:1])]
+    width, after = max(gaps)
+    candidate = (after + width / 2.0) % 360.0
+    if head and _splits(head, candidate):
+        return (max(head, key=lambda p: p[1])[0] - 180.0) % 360.0
+    return candidate
 
 
 def _best_per_night(candidates):
@@ -1464,7 +1529,7 @@ def _best_per_night(candidates):
     """
     best = {}
     for p in candidates:
-        key = (p["name"], p["culminate"].date())
+        key = (p["name"], _pass_night(p))
         if key not in best or p["max_altitude"] > best[key]["max_altitude"]:
             best[key] = p
     return list(best.values())
@@ -1513,16 +1578,27 @@ def _composite_aa(img, origin, size, colour, paint):
     w, h = size
     mask = Image.new("L", (w * TRACK_SS, h * TRACK_SS), 0)
     paint(ImageDraw.Draw(mask), TRACK_SS)
-    layer = Image.new("RGBA", size, colour)
-    layer.putalpha(mask.resize(size, Image.BOX))
+    reduced = mask.resize(size, Image.BOX)
+    # ⚠ AN ALPHA IN `colour` HAS TO BE FOLDED INTO THE MASK, because putalpha
+    # REPLACES the alpha channel rather than combining with it. Passing a
+    # four-tuple here silently drew at full opacity: the dimmed companion arcs
+    # came out stronger than the pass they sit behind, which is visible on the
+    # panel and invisible to any check of the data.
+    if len(colour) > 3 and colour[3] != 255:
+        reduced = reduced.point(lambda v: v * colour[3] // 255)
+    layer = Image.new("RGBA", size, tuple(colour[:3]) + (255,))
+    layer.putalpha(reduced)
     img.alpha_composite(layer, origin)
 
 
-def _draw_pass_track(img, track, colour, axis_origin=0.0):
+def _draw_pass_track(img, track, colour, axis_origin=0.0, shadow_colour=None,
+                     dot=True):
     """The pass's own path across the bearing-by-altitude plot.
 
     `axis_origin` must be the one the axis beneath was drawn with, or the curve
-    describes a different sky from the ticks under it.
+    describes a different sky from the ticks under it. `shadow_colour` draws the
+    part of the track spent in the Earth's shadow; omitting it draws the whole
+    track in one colour, which is what the dimmed companion arcs want.
 
     ⚠ THE AXIS WRAPS, so a pass crossing its seam is two polylines rather than
     one; joining those samples directly would draw a line straight back across
@@ -1545,33 +1621,129 @@ def _draw_pass_track(img, track, colour, axis_origin=0.0):
             1.0 - min(alt, PAN_ALT_MAX) / PAN_ALT_MAX)
         return (x * ss, y * ss)
 
-    def paint_line(ld, ss):
-        run = []
-        for az, alt in track:
-            offset = (az - axis_origin) % 360.0
-            if run and abs(offset - run[-1][0]) > 180.0:
-                if len(run) > 1:
-                    ld.line([p[1] for p in run], fill=255,
-                            width=TRACK_WIDTH * ss, joint="curve")
-                run = []
-            run.append((offset, point(az, alt, ss)))
-        if len(run) > 1:
-            ld.line([p[1] for p in run], fill=255,
-                    width=TRACK_WIDTH * ss, joint="curve")
+    def paint_limb(want_eclipsed):
+        """A painter for one lighting state, or for the whole track.
+
+        `want_eclipsed` of None takes every sample regardless, which is what a
+        caller with no shadow colour wants: splitting the track and then drawing
+        only half of it would end a companion arc in mid-sky with nothing to say
+        why.
+        """
+        def paint(ld, ss):
+            run = []
+            for az, alt, ecl in track:
+                offset = (az - axis_origin) % 360.0
+                broke = run and abs(offset - run[-1][0]) > 180.0
+                skip = want_eclipsed is not None and bool(ecl) != want_eclipsed
+                if broke or skip:
+                    if len(run) > 1:
+                        ld.line([p[1] for p in run], fill=255,
+                                width=TRACK_WIDTH * ss, joint="curve")
+                    run = []
+                    if skip:
+                        continue
+                run.append((offset, point(az, alt, ss)))
+            if len(run) > 1:
+                ld.line([p[1] for p in run], fill=255,
+                        width=TRACK_WIDTH * ss, joint="curve")
+        return paint
 
     def paint_dot(ld, ss):
-        px, py = point(*max(track, key=lambda p: p[1]), ss)
+        az, alt, _ = max(track, key=lambda p: p[1])
+        px, py = point(az, alt, ss)
         r = TRACK_DOT_R * ss
         ld.ellipse([px - r, py - r, px + r, py + r], fill=255)
 
-    _composite_aa(img, corner, size, colour, paint_line)
+    # ⇒ THE SHADOWED LIMB IS DRAWN, NOT DROPPED. The object is still up there and
+    # still where the curve says; what stops is the sunlight on it. Drawing
+    # nothing would imply the pass ends at that point, and drawing it solid would
+    # promise something visible. A faint line says "it goes here and cannot be
+    # seen", which is the honest third option.
+    if shadow_colour is None:
+        _composite_aa(img, corner, size, colour, paint_limb(None))
+    else:
+        if any(ecl for _, _, ecl in track):
+            _composite_aa(img, corner, size, shadow_colour, paint_limb(True))
+        _composite_aa(img, corner, size, colour, paint_limb(False))
     # The culmination, marked but NOT labelled. _draw_panorama's labels avoid
     # each other and know nothing about this track, so a name placed here landed
     # squarely across the descending limb. The heading above the plot already
     # names the object and states the bearing, so a label here would be
     # duplication that damages the one thing the plot is for. Composited
     # separately because it is a different colour from the line.
-    _composite_aa(img, corner, size, WHITE, paint_dot)
+    if dot:
+        _composite_aa(img, corner, size, WHITE, paint_dot)
+
+
+def _plot_points(track, axis_origin):
+    """The track in PANEL coordinates, for drawing over the composed frame.
+
+    Separate from the mask arithmetic above, which works in an oversized local
+    frame; a marker pasted onto the finished page needs plain page pixels.
+    """
+    out = []
+    for az, alt, _ in track:
+        x = _pan_x(az, axis_origin)
+        y = PAN_BASE - (min(alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
+        out.append((int(round(x)), int(round(y))))
+    return out
+
+
+def _draw_minute_ticks(img, track, axis_origin, rise, set_):
+    """A tick at each whole minute of the pass, square to its path.
+
+    ⇒ THESE CARRY THE TIMING AND THE MOVING MARKER DOES NOT. The samples are
+    evenly spaced in time, so an index maps linearly onto the clock, and the
+    spacing of the ticks along the curve shows directly where the object appears
+    to move fastest - which is the culmination, and is why the arc flattens
+    there.
+    """
+    if len(track) < 2:
+        return
+    pts = _plot_points(track, axis_origin)
+    total = (set_ - rise).total_seconds() / 60.0
+    if total <= 0:
+        return
+    size = (PAN_X1 - PAN_X0 + 2 * TRACK_PAD, PAN_BASE - PAN_TOP + 2 * TRACK_PAD)
+    corner = (PAN_X0 - TRACK_PAD, PAN_TOP - TRACK_PAD)
+
+    def paint(ld, ss):
+        for minute in range(1, int(total) + 1):
+            i = int(round((minute / total) * (len(pts) - 1)))
+            if i <= 0 or i >= len(pts) - 1:
+                continue
+            (x0, y0), (x1, y1) = pts[i - 1], pts[i + 1]
+            dx, dy = x1 - x0, y1 - y0
+            n = math.hypot(dx, dy)
+            if n < 1e-6:
+                continue
+            # Square to the path, so a tick reads as a mark ON the curve rather
+            # than as a stray line near it.
+            nx, ny = -dy / n, dx / n
+            cx = (pts[i][0] - PAN_X0 + TRACK_PAD) * ss
+            cy = (pts[i][1] - PAN_TOP + TRACK_PAD) * ss
+            half = SAT_TICK_LEN * ss / 2.0
+            ld.line([(cx - nx * half, cy - ny * half),
+                     (cx + nx * half, cy + ny * half)],
+                    fill=255, width=max(1, ss))
+
+    _composite_aa(img, corner, size, STEEL, paint)
+
+
+def _marker_sprite():
+    """A small antialiased dot, drawn once and pasted per frame.
+
+    Built here rather than in the render loop because supersampling a mask
+    twelve times a second to move one dot would be paying the cost of the whole
+    plot for the smallest thing on it.
+    """
+    ss, r = TRACK_SS, SAT_MARKER_R
+    d = 2 * r
+    mask = Image.new("L", (d * ss, d * ss), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, d * ss - 1, d * ss - 1], fill=255)
+    sprite = Image.new("RGBA", (d, d), WHITE)
+    sprite.putalpha(mask.resize((d, d), Image.BOX))
+    return sprite
 
 
 def _until(when, now):
@@ -1657,19 +1829,31 @@ def render_satellites(states, lat, lon):
     # Track first, then the axes over it, matching the aurora page: the path is
     # the background its numbers annotate. No marks are passed - the track draws
     # its own culmination dot, and see _draw_pass_track for why it is unlabelled.
-    # ⇒ THE AXIS IS CENTRED ON THE CULMINATION, NOT ON NORTH. A pass whose
-    # azimuth runs through north otherwise leaves one edge of the plot and
-    # resumes at the other - correct, since the two edges are the same bearing,
-    # and unreadable as a path. 40% of passes here do it. Putting the seam
-    # opposite the culmination cannot fail: the widest pass measured sweeps
-    # 185.6 deg of azimuth against the 360 the axis spans.
-    #
-    # The cardinal ticks move with it, so the plot still says which way to face;
-    # what changes is that the peak is always mid-plot rather than the compass
-    # always starting at north.
-    axis_origin = (nxt["culminate_bearing"] - 180.0) % 360.0
-    _draw_pass_track(img, track_of(nxt, lat or 0.0, lon or 0.0), NOMINAL,
-                     axis_origin)
+    # ⇒ THE OTHER PASSES OF THE SAME NIGHT, drawn behind the headline one. They
+    # are dimmed and unlabelled: the listing beneath names every one of them, and
+    # the plot's job is to show what the sky does rather than to repeat a table.
+    # Ranked, so a night with a dozen passes contributes its best few rather than
+    # its first few.
+    night = _pass_night(nxt)
+    others = sorted((p for p in found
+                     if p is not nxt and _pass_night(p) == night),
+                    key=_rank, reverse=True)[:SAT_GHOSTS]
+
+    head_track = track_of(nxt, lat or 0.0, lon or 0.0)
+    ghost_tracks = [track_of(p, lat or 0.0, lon or 0.0) for p in others]
+
+    # ⇒ THE SEAM GOES WHERE NOTHING CROSSES IT, computed across every track drawn
+    # rather than fixed at the headline's antipode. With one arc the two are the
+    # same; with several, holding the old rule would split whichever companion
+    # happened to culminate opposite the headline.
+    axis_origin = _axis_origin(head_track, ghost_tracks)
+
+    for gt in ghost_tracks:
+        _draw_pass_track(img, gt, STEEL + (SAT_GHOST_ALPHA,), axis_origin,
+                         dot=False)
+    _draw_pass_track(img, head_track, NOMINAL, axis_origin,
+                     shadow_colour=STEEL + (110,))
+    _draw_minute_ticks(img, head_track, axis_origin, nxt["rise"], nxt["set"])
     _draw_panorama(draw, [], "pass", f["sm"], f["xs"], axis_origin)
 
     # The FIRST pass is the heading above, so the list starts after it. Printed
@@ -1724,15 +1908,25 @@ def render_satellites(states, lat, lon):
     # nothing keyless reports its attitude, so the page gives the geometry it
     # actually knows and leaves brightness alone.
     draw.text((MARGIN, H - 156),
-              "Sunlit satellite in a dark sky. Times are predicted from orbital "
-              "elements.",
+              "Sunlit satellite in a dark sky. A faint track is time spent in "
+              "the Earth's shadow.",
               font=f["fn"], fill=DIM)
+    # ⇒ THE MARKER IS DECLARED NOT TO BE A CLOCK. It sweeps the arc in six
+    # seconds whatever the pass takes, so without this the page would be
+    # implying a speed it does not have. The ticks are the honest timing and
+    # this says which is which.
     draw.text((MARGIN, H - 100),
-              f"Elements: CelesTrak, {elements_age()}",
+              "Ticks mark whole minutes; the moving marker shows direction only.",
               font=f["fn"], fill=DIM)
     draw.text((MARGIN, H - 44),
-              "Positions computed for this site; brightness is not predicted.",
+              f"Elements: CelesTrak, {elements_age()}. Brightness is not predicted.",
               font=f["fn"], fill=DIM)
+
+    # The marker travels this path in compose(), the only per-frame hook a page
+    # has. Carried on the image rather than returned alongside it so nothing in
+    # core/daemon.py needs to know that this page exists or that it moves.
+    img.sat_path = _plot_points(head_track, axis_origin)
+    img.sat_marker = _marker_sprite()
     return img
 
 
@@ -2312,6 +2506,18 @@ def compose(frame, overlay, labels=None):
     without also solving the size and the position.
     """
     frame.paste(overlay, (0, 0), overlay)
+    # ⇒ THE ONE ANIMATED THING ON A DASHBOARD PAGE. Overlays are built once per
+    # data refresh on the data thread, so anything that moves has to be drawn
+    # here, where the clock already is. The page carries its own path and a
+    # pre-rendered marker; a page without them is unaffected, which is every
+    # page but the satellite one.
+    path = getattr(overlay, "sat_path", None)
+    marker = getattr(overlay, "sat_marker", None)
+    if path and marker is not None:
+        phase = (time.time() % SAT_MARKER_PERIOD) / SAT_MARKER_PERIOD
+        mx, my = path[int(phase * (len(path) - 1))]
+        frame.paste(marker, (mx - marker.width // 2, my - marker.height // 2),
+                    marker)
     d = ImageDraw.Draw(frame)
     draw_clock(d)
     if labels:
