@@ -1,6 +1,6 @@
 [project]
 name = "stargazy"
-version = "5.10.3"
+version = "5.10.4"
 
 [tool.ruff]
 line-length = 100

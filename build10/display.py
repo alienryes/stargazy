@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.49.3"
+VERSION = "0.49.4"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1464,6 +1464,11 @@ SAT_GHOST_ALPHA = 90
 # reason and by different factors - see core/sky.py, where that is recorded as
 # settled rather than as an inconsistency.
 SAT_MARKER_PERIOD = 6.0
+# Positions along the marker's path, respaced at equal DISTANCES rather than
+# equal times - see _resample_uniform. At 12 fps a six-second loop draws about
+# 72 of these, so this is finer than the panel can step and the marker is never
+# waiting on the same pixel for two frames.
+SAT_MARKER_STEPS = 240
 # Sized to the culmination dot this replaced, which was the right weight against
 # a 3 px track; the marker had been drawn half again as wide and read as heavy.
 SAT_MARKER_R = 7
@@ -1710,7 +1715,45 @@ def _plot_points(track, axis_origin):
     for az, alt, _ in track:
         x = _pan_x(az, axis_origin)
         y = PAN_BASE - (min(alt, PAN_ALT_MAX) / PAN_ALT_MAX) * (PAN_BASE - PAN_TOP)
-        out.append((int(round(x)), int(round(y))))
+        # Kept as floats. Rounding here quantised the marker's respaced steps by
+        # up to a pixel each, which is a fifth of its stride and showed up as
+        # residual variation in a speed that is meant to be constant.
+        out.append((x, y))
+    return out
+
+
+def _resample_uniform(points, count):
+    """`points` respaced at equal distances along the path, `count` of them.
+
+    ⇒ THE MARKER MUST NOT IMPLY A SPEED, and stepping the raw path did. Those
+    samples are evenly spaced in TIME, so walking them at a constant rate
+    reproduces the object's real motion - accelerating hard through the
+    culmination, where a pass covers most of its bearing. That is a faithful
+    time-compressed replay, and it contradicts a footnote saying the marker shows
+    direction only. It also duplicated, badly, what the minute beads state
+    properly: the beads are the timing, spread at the culmination and crowded at
+    the horizon.
+
+    Respaced by distance the marker crosses the plot at a constant rate and
+    carries no timing at all, which is what it is described as doing.
+    """
+    if len(points) < 2:
+        return list(points)
+    cum = [0.0]
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        cum.append(cum[-1] + math.hypot(x1 - x0, y1 - y0))
+    total = cum[-1]
+    if total <= 0:
+        return list(points)
+    out, j = [], 0
+    for k in range(count):
+        target = total * k / (count - 1)
+        while j < len(cum) - 2 and cum[j + 1] < target:
+            j += 1
+        span = cum[j + 1] - cum[j]
+        f = 0.0 if span <= 0 else (target - cum[j]) / span
+        (x0, y0), (x1, y1) = points[j], points[j + 1]
+        out.append((x0 + (x1 - x0) * f, y0 + (y1 - y0) * f))
     return out
 
 
@@ -1925,7 +1968,8 @@ def render_satellites(states, lat, lon):
     # The marker travels this path in compose(), the only per-frame hook a page
     # has. Carried on the image rather than returned alongside it so nothing in
     # core/daemon.py needs to know that this page exists or that it moves.
-    img.sat_path = _plot_points(head_track, axis_origin)
+    img.sat_path = _resample_uniform(_plot_points(head_track, axis_origin),
+                                     SAT_MARKER_STEPS)
     img.sat_marker = _marker_sprite()
     return img
 
@@ -2516,8 +2560,8 @@ def compose(frame, overlay, labels=None):
     if path and marker is not None:
         phase = (time.time() % SAT_MARKER_PERIOD) / SAT_MARKER_PERIOD
         mx, my = path[int(phase * (len(path) - 1))]
-        frame.paste(marker, (mx - marker.width // 2, my - marker.height // 2),
-                    marker)
+        frame.paste(marker, (int(round(mx)) - marker.width // 2,
+                             int(round(my)) - marker.height // 2), marker)
     d = ImageDraw.Draw(frame)
     draw_clock(d)
     if labels:
