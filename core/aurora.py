@@ -133,6 +133,29 @@ def _bin_field(bearing, elevation, prob, theta, alt_max=90.0):
              float(best[i]), float(low[i])) for i in idx]
 
 
+def _bearing_extent(bearings):
+    """The arc a set of bearings occupies, as (from, to) read clockwise.
+
+    ⚠ WRAP-SAFE, AND min/max IS NOT. Bearings are circular: an oval straddling
+    north occupies values near 350 and near 10, where min and max would report an
+    arc of 340 degrees - the whole of the sky it does NOT cover, exactly inverted.
+    The occupied arc is the complement of the widest GAP between adjacent
+    bearings, which is the same reasoning that places the satellite plot's seam.
+
+    Returns None for an empty set. A single bearing returns itself twice, which a
+    caller should render as "in the N" rather than "from N to N".
+    """
+    b = np.sort(np.asarray(bearings, dtype=float) % 360.0)
+    if b.size == 0:
+        return None
+    if b.size == 1:
+        return float(b[0]), float(b[0])
+    # n gaps for n bearings: the last one wraps past 360 back to the first.
+    gaps = np.diff(np.concatenate([b, b[:1] + 360.0]))
+    k = int(np.argmax(gaps))
+    return float(b[(k + 1) % b.size]), float(b[k])
+
+
 def best_visible(grid, lat, lon, emission_km=DEFAULT_EMISSION_KM,
                  threshold_pct=DEFAULT_THRESHOLD_PCT):
     """The strongest aurora above this site's horizon, or None.
@@ -173,9 +196,21 @@ def best_visible(grid, lat, lon, emission_km=DEFAULT_EMISSION_KM,
     out = {
         "strongest": describe(idx[np.argmax(prob[idx])]),
         "highest": describe(idx[np.argmax(elevation[idx])]),
-        # How much sky is lit, not just one cell: a single hot cell and a whole
-        # visible oval look identical through a maximum alone.
-        "visible_cells": int(visible.sum()),
+        # WHERE the lit sky is, not just where its best point is: a single hot
+        # cell and a whole visible oval look identical through a maximum alone.
+        #
+        # ⇒ THIS REPLACED A COUNT OF MODEL CELLS, which was the model's unit
+        # rather than the observer's. "288 cells" had no denominator on the page
+        # (1278 of them are above this horizon), moved with `threshold_pct`
+        # without saying so, and implied cells are equal amounts of sky when
+        # their angular size collapses towards the horizon - which is where
+        # aurora is from a temperate latitude.
+        #
+        # ⚠ TAKEN FROM THE THRESHOLD SET, NOT THE DRAWN FIELD. `field` uses the
+        # far lower FIELD_FLOOR_PCT so the plot is not clipped at its own edge,
+        # so its highest lit bin sits above `highest` - and a caller printing
+        # both would contradict itself on the same page.
+        "extent": _bearing_extent(bearing[idx]),
     }
     # The storm's real extent, for drawing. Every faintly lit cell above the
     # horizon, binned - so what gets plotted is the model's own shape from this

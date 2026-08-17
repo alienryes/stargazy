@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.51.0"
+VERSION = "0.52.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1293,23 +1293,16 @@ def _draw_kp_forecast(draw, rows, top, f):
     draw.line([(x0, base), (x1, base)], fill=STEEL, width=2)
 
 
-def _local_sky_note(cloud):
-    """What the local sky is doing about whatever the page has just announced.
-
-    ⚠ THE CLOUD FIGURE DESCRIBES NOW, so only a page about NOW may carry it.
-    Aurora is a condition of the sky at this moment and the verdict transfers
-    directly. The satellite page carried this line too and no longer does: a
-    pass is an appointment, and the page was printing "almost certainly not
-    visible from here" beside one nineteen hours away, which is a claim about
-    weather nothing here forecasts. Gating the verdict on the pass being within
-    the hour was the first fix and left the line saying very little; the page
-    now says nothing about cloud rather than something unactionable.
-    """
-    if cloud <= 20:
-        return "The sky here is clear."
-    if cloud < 80:
-        return f"The sky here is {cloud}% obscured."
-    return f"The sky here is {cloud}% obscured - almost certainly not visible from here."
+# ⇒ NO PAGE CARRIES A LOCAL CLOUD NOTE ANY MORE, and the removals happened for
+# the same reason a page at a time. The satellite page's went first: a pass is an
+# appointment, and the line was printing "almost certainly not visible from here"
+# beside one nineteen hours away, which is a claim about weather nothing here
+# forecasts. The aurora page's went next at the user's request - its subject IS a
+# condition of the sky now, so the verdict was at least well-founded, but it
+# restated the conditions page rather than telling the aurora reader anything new.
+#
+# The obscuration figure still drives the conditions page, which is where a
+# statement about the sky right now belongs.
 
 
 def render_aurora(states, lat, lon):
@@ -1332,7 +1325,6 @@ def render_aurora(states, lat, lon):
         return None
 
     strongest, highest = data["strongest"], data["highest"]
-    cloud = obscuration_of(states)
 
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -1348,9 +1340,24 @@ def render_aurora(states, lat, lon):
     draw.text((MARGIN, 160),
               f"Up to {strongest['probability']:.0f}% probability in view{kp}",
               font=f["sm"], fill=MUTED)
-    draw.text((MARGIN, 210),
-              f"{data['visible_cells']} model cells above the horizon from here.",
-              font=f["xs"], fill=MUTED)
+    # WHERE the lit sky is, in the observer's own units. This replaced a count of
+    # the forecast model's grid cells - a number with no denominator on the page,
+    # which moved with the probability threshold without saying so, and which
+    # measured the model rather than the sky. The elevation is `highest`, the same
+    # figure the Best placed block prints below, so the two cannot disagree.
+    extent = data.get("extent")
+    if extent:
+        a, b = compass(extent[0]), compass(extent[1])
+        span = (extent[1] - extent[0]) % 360.0
+        if span >= 340.0:
+            where = "all round the horizon"
+        elif a == b:
+            where = f"in the {a}"
+        else:
+            where = f"from {a} to {b}"
+        draw.text((MARGIN, 210),
+                  f"Lit {where}, up to {highest['elevation']:.0f}° above the horizon.",
+                  font=f["xs"], fill=MUTED)
 
     # The same bearing-by-altitude plot page 2 uses, so "north and low" is said
     # by the axes rather than in words - and so it reads the same way at a
@@ -1387,11 +1394,6 @@ def render_aurora(states, lat, lon):
                   font=f["fn"], fill=DIM)
         draw.text((MARGIN, y + 32), "above the horizon.", font=f["fn"], fill=DIM)
         y += 60
-
-    # What the local sky is doing about it. A forecast the observer cannot act
-    # on because it is overcast is worth saying out loud rather than leaving
-    # them to look up and find out.
-    draw.text((MARGIN, y + 20), _local_sky_note(cloud), font=f["sm"], fill=MUTED)
 
     _draw_kp_forecast(draw, data.get("kp_forecast") or [], y + 130, f)
 
@@ -2050,9 +2052,10 @@ def _until(when, now):
 def render_satellites(lat, lon):
     """Page 5: the best satellite pass of the coming day, and the week behind it.
 
-    ⇒ TAKES NO `states`: this is the one conditional page that asks nothing of
-    the weather feed. It carried a cloud line until the line was found to be
-    reporting the sky NOW beside an event up to a day away; see _local_sky_note.
+    ⇒ TAKES NO `states`: this page asks nothing of the weather feed. It carried a
+    cloud line until the line was found to be reporting the sky NOW beside an
+    event up to a day away. The aurora page has since dropped its own, so the
+    conditions page is the only one that speaks about the sky at this moment.
 
     Returns None unless a pass clears every gate in core.satellites within the
     next day. That module decides visibility; this one decides only which of the
