@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.49.0"
+VERSION = "0.49.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1464,7 +1464,9 @@ SAT_GHOST_ALPHA = 90
 # reason and by different factors - see core/sky.py, where that is recorded as
 # settled rather than as an inconsistency.
 SAT_MARKER_PERIOD = 6.0
-SAT_MARKER_R = 9
+# Sized to the culmination dot this replaced, which was the right weight against
+# a 3 px track; the marker had been drawn half again as wide and read as heavy.
+SAT_MARKER_R = 7
 SAT_TICK_LEN = 9
 
 
@@ -1562,9 +1564,8 @@ SAT_SKY_MAX_Y = 1660
 # reducing a coverage mask by a whole number.
 TRACK_SS = 8
 TRACK_WIDTH = 3
-TRACK_DOT_R = 7
-# Room for the dot and the line's half-width at the plot's edges, where a pass
-# rises and sets exactly on the baseline.
+# Room for the marker and the line's half-width at the plot's edges, where a
+# pass rises and sets exactly on the baseline.
 TRACK_PAD = 12
 
 
@@ -1591,8 +1592,7 @@ def _composite_aa(img, origin, size, colour, paint):
     img.alpha_composite(layer, origin)
 
 
-def _draw_pass_track(img, track, colour, axis_origin=0.0, shadow_colour=None,
-                     dot=True):
+def _draw_pass_track(img, track, colour, axis_origin=0.0, shadow_colour=None):
     """The pass's own path across the bearing-by-altitude plot.
 
     `axis_origin` must be the one the axis beneath was drawn with, or the curve
@@ -1648,31 +1648,22 @@ def _draw_pass_track(img, track, colour, axis_origin=0.0, shadow_colour=None,
                         width=TRACK_WIDTH * ss, joint="curve")
         return paint
 
-    def paint_dot(ld, ss):
-        az, alt, _ = max(track, key=lambda p: p[1])
-        px, py = point(az, alt, ss)
-        r = TRACK_DOT_R * ss
-        ld.ellipse([px - r, py - r, px + r, py + r], fill=255)
-
     # ⇒ THE SHADOWED LIMB IS DRAWN, NOT DROPPED. The object is still up there and
     # still where the curve says; what stops is the sunlight on it. Drawing
     # nothing would imply the pass ends at that point, and drawing it solid would
     # promise something visible. A faint line says "it goes here and cannot be
     # seen", which is the honest third option.
+    #
+    # No culmination dot: the moving marker is the only dot on the plot now, and
+    # a second static one at the apex read as a second object. The heading above
+    # states the culmination's bearing and altitude, which is what the dot was
+    # standing in for.
     if shadow_colour is None:
         _composite_aa(img, corner, size, colour, paint_limb(None))
     else:
         if any(ecl for _, _, ecl in track):
             _composite_aa(img, corner, size, shadow_colour, paint_limb(True))
         _composite_aa(img, corner, size, colour, paint_limb(False))
-    # The culmination, marked but NOT labelled. _draw_panorama's labels avoid
-    # each other and know nothing about this track, so a name placed here landed
-    # squarely across the descending limb. The heading above the plot already
-    # names the object and states the bearing, so a label here would be
-    # duplication that damages the one thing the plot is for. Composited
-    # separately because it is a different colour from the line.
-    if dot:
-        _composite_aa(img, corner, size, WHITE, paint_dot)
 
 
 def _plot_points(track, axis_origin):
@@ -1849,8 +1840,7 @@ def render_satellites(states, lat, lon):
     axis_origin = _axis_origin(head_track, ghost_tracks)
 
     for gt in ghost_tracks:
-        _draw_pass_track(img, gt, STEEL + (SAT_GHOST_ALPHA,), axis_origin,
-                         dot=False)
+        _draw_pass_track(img, gt, STEEL + (SAT_GHOST_ALPHA,), axis_origin)
     _draw_pass_track(img, head_track, NOMINAL, axis_origin,
                      shadow_colour=STEEL + (110,))
     _draw_minute_ticks(img, head_track, axis_origin, nxt["rise"], nxt["set"])
