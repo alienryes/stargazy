@@ -82,7 +82,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.48.1"
+VERSION = "0.48.2"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1293,19 +1293,31 @@ def _draw_kp_forecast(draw, rows, top, f):
     draw.line([(x0, base), (x1, base)], fill=STEEL, width=2)
 
 
-def _local_sky_note(cloud):
+def _local_sky_note(cloud, imminent=True):
     """What the local sky is doing about whatever the page has just announced.
 
     Both the aurora and the satellite page carry this: a forecast the observer
     cannot act on because it is overcast is worth saying out loud rather than
     leaving them to go outside and find out. Shared so the two cannot drift
     into describing the same sky differently.
+
+    ⚠ THE CLOUD FIGURE DESCRIBES NOW, SO ONLY AN IMMINENT EVENT MAY BE JUDGED
+    BY IT. Aurora is a condition of the sky at this moment and the verdict
+    transfers directly. A satellite pass is an appointment, and the headline one
+    can be a day out - the page was printing "almost certainly not visible from
+    here" beside a pass nineteen hours away, which is a claim about weather
+    nothing here forecasts. When the event is not imminent the sky is reported
+    in the present tense and no verdict is offered.
     """
+    if not imminent:
+        if cloud <= 20:
+            return "The sky here is clear at the moment."
+        return f"The sky here is {cloud}% obscured at the moment."
     if cloud <= 20:
-        return "Your sky is clear."
+        return "The sky here is clear."
     if cloud < 80:
-        return f"Your sky is {cloud}% obscured."
-    return f"Your sky is {cloud}% obscured - almost certainly not visible from here."
+        return f"The sky here is {cloud}% obscured."
+    return f"The sky here is {cloud}% obscured - almost certainly not visible from here."
 
 
 def render_aurora(states, lat, lon):
@@ -1381,7 +1393,7 @@ def render_aurora(states, lat, lon):
                   "Strongest is the brightest patch in view; best placed is the "
                   "one highest",
                   font=f["fn"], fill=DIM)
-        draw.text((MARGIN, y + 32), "above your horizon.", font=f["fn"], fill=DIM)
+        draw.text((MARGIN, y + 32), "above the horizon.", font=f["fn"], fill=DIM)
         y += 60
 
     # What the local sky is doing about it. A forecast the observer cannot act
@@ -1423,6 +1435,11 @@ SAT_ENABLED = True
 # state a precision the elements do not carry. A week is already the edge of it.
 SAT_SCHEDULE_HOURS = 168
 SAT_ROWS = 8
+# How close a pass has to be before the CURRENT cloud is allowed to pass verdict
+# on it. Cloud measured now says something real about the next hour and nothing
+# about tomorrow morning, and this page routinely leads with a pass most of a
+# day away.
+SAT_SKY_VERDICT_HOURS = 1
 # Column offsets for a listing row, MEASURED on the panel's own fonts rather
 # than chosen: date 251 px, name 323 px, geometry 383 px, in a row 1120 px wide.
 # The name column was 220 px while the objects were two whose names were short,
@@ -1692,13 +1709,15 @@ def render_satellites(states, lat, lon):
     else:
         y = SAT_Y0
 
-    # What the local sky is doing about it, as the aurora page does: a pass the
-    # observer cannot see because it is overcast is worth saying rather than
-    # leaving them to go outside and find out. Pinned rather than following the
-    # list, so a short list cannot walk this line into the footer.
+    # What the local sky is doing about it, as the aurora page does - but only
+    # as a VERDICT when the pass is close enough for present cloud to bear on
+    # it. Beyond that the line states the sky now and claims nothing about the
+    # pass; see _local_sky_note. Pinned rather than following the list, so a
+    # short list cannot walk this line into the footer.
     cloud = obscuration_of(states)
-    draw.text((MARGIN, min(y + 40, SAT_SKY_MAX_Y)), _local_sky_note(cloud),
-              font=f["sm"], fill=MUTED)
+    imminent = nxt["culminate"] - now <= timedelta(hours=SAT_SKY_VERDICT_HOURS)
+    draw.text((MARGIN, min(y + 40, SAT_SKY_MAX_Y)),
+              _local_sky_note(cloud, imminent), font=f["sm"], fill=MUTED)
 
     # ⇒ NO BRIGHTNESS IS CLAIMED ANYWHERE ON THIS PAGE. Apparent magnitude
     # depends on which face the station has turned towards the observer, and
