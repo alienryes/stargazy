@@ -13,7 +13,9 @@ with its radiant up, never prints one.
 
 The formatter and the floor are imported rather than restated: a check carrying
 its own copy of a rule tests the copy. The site coordinates are read from the
-config the panel actually runs on, for the same reason.
+config the panel actually runs on, for the same reason; the tracked example
+config stands in where that file is absent, so the checks run on a fresh
+clone rather than failing to start. The heading line names which was used.
 
     python tools/check_meteor_rate.py
 """
@@ -46,10 +48,14 @@ def check(name, ok, detail=""):
         fails.append(name)
 
 
-with open(ROOT / "build10" / "config.toml", "rb") as fh:
+cfg = ROOT / "build10" / "config.toml"
+if not cfg.exists():
+    cfg = ROOT / "build10" / "config.example.toml"
+with open(cfg, "rb") as fh:
     site = tomllib.load(fh)["location"]
 LAT, LON = site["latitude"], site["longitude"]
-print(f"site {LAT:.4f}, {LON:.4f}   decimal below {RATE_DECIMAL_BELOW}/hr, "
+print(f"site {LAT:.4f}, {LON:.4f} ({cfg.name})   "
+      f"decimal below {RATE_DECIMAL_BELOW}/hr, "
       f"bound below {RATE_BOUND_BELOW}/hr\n")
 
 # --- The formatter itself, at the boundaries. Run against the values the old
