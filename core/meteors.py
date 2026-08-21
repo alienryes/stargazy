@@ -99,6 +99,14 @@ SPORADIC_ZHR = 8
 # latitude or with the radiant's altitude on the night. This is a DISPLAY
 # judgement and belongs to the page: active() keeps reporting these showers,
 # because they are still falling and the animated sky is still entitled to them.
+#
+# THE FLOOR IS NOT WHAT KEEPS A NAMED ROW ABOVE THE SPORADIC LINE ON THE PAGE,
+# and it was asked to be on 2026-08-21, when the Perseids printed ~0/hr four
+# lines above a sporadic background of ~1/hr. Measured, the shower was at 37% of
+# the sporadic rate all night - the printed pair was rounding, not ranking, and
+# the fix was to print a decimal rather than to move this floor. A second gate
+# in observed rate was measured and rejected: at any fraction that would have
+# caught that night it cost more than half the nights the page runs at all.
 NAMED_SHOWER_FLOOR = 0.25 * SPORADIC_ZHR
 
 # Above this fraction of its own peak rate, a shower is described as peaking.
@@ -177,6 +185,47 @@ def visible_rate(zhr, strength, radiant_alt, cloud_pct=0.0, moon_illum=0.0):
     # Full moon costs most of the faint end; a thin crescent barely registers.
     rate *= 1.0 - 0.75 * max(0.0, min(1.0, moon_illum))
     return rate
+
+
+# Below this an hourly rate is printed to a decimal place.
+#
+# WHY THE PAGE CANNOT PRINT WHOLE NUMBERS ALL THE WAY DOWN. Observed rates are
+# low single digits on most nights and cloud divides them again, so the
+# interesting end of the range sits under 1/hr - where a whole number has
+# exactly two values and one of them is zero. On 2026-08-21 a named Perseid row
+# printed ~0/hr four lines above a sporadic background of ~1/hr: a shower the
+# page had chosen to name, reporting that nothing was falling, above a rate it
+# was at 37% of. Under a clear sky the same night reads ~2/hr against ~6/hr and
+# is unremarkable. The pair was rounding, not ranking.
+#
+# The threshold is where the decimal stops being needed rather than a tuned
+# value: at and above 1/hr the whole number already separates the rows, and a
+# trailing ".0" on every clear-night figure would claim precision this page does
+# not have.
+RATE_DECIMAL_BELOW = 1.0
+# And below this even a decimal rounds to zero, so the figure is given as a
+# bound instead - the same defect one decimal place further down.
+RATE_BOUND_BELOW = 0.1
+
+
+def rate_text(rate):
+    """An hourly meteor rate, printed so that it never reads as nothing.
+
+    Zero itself is kept as a whole number, because there it is the answer rather
+    than a rounded one: a radiant below the horizon really does deliver none.
+
+    Formatting lives here, next to visible_rate, because the honest way to state
+    one of these numbers is a fact about the number and not about the layout -
+    and because every figure it is compared against on the page has to be
+    printed the same way or the comparison the page invites does not hold.
+    """
+    if rate <= 0:
+        return "~0/hr"
+    if rate < RATE_BOUND_BELOW:
+        return f"<{RATE_BOUND_BELOW:.1f}/hr"
+    if rate < RATE_DECIMAL_BELOW:
+        return f"~{rate:.1f}/hr"
+    return f"~{rate:.0f}/hr"
 
 
 def upcoming(when, exclude=(), within_days=200, limit=5):

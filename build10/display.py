@@ -32,9 +32,11 @@ from core.imagery import moon_image, paste_moon, paste_sun, sun_image
 from core.meteors import (
     NAMED_SHOWER_FLOOR,
     PEAKING_STRENGTH,
+    RATE_DECIMAL_BELOW,
     SPORADIC_ZHR,
     active,
     next_shower,
+    rate_text,
     solar_longitude,
     upcoming,
     visible_rate,
@@ -82,7 +84,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.55.0"
+VERSION = "0.55.1"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -996,8 +998,8 @@ def render_meteors(states, lat, lon):
             draw.rectangle([MARGIN, by, MARGIN + max(2, int(MET_BAR_W * frac)),
                             by + MET_BAR_H], fill=NOMINAL)
         draw.text((MARGIN + MET_BAR_W + 20, by - 4),
-                  f"~{rate:.0f}/hr", font=f["med"],
-                  fill=WHITE if rate >= 1 else DIM)
+                  rate_text(rate), font=f["med"],
+                  fill=WHITE if rate >= RATE_DECIMAL_BELOW else DIM)
         # The two figures on this row differ by a factor nothing named, which
         # read as a contradiction: 150 beside 100 with no stated link. "overhead"
         # is the link, because the radiant's altitude is what almost always
@@ -1057,9 +1059,11 @@ def render_meteors(states, lat, lon):
 
     draw.line([(0, sy - 30), (W, sy - 30)], fill=DIM, width=2)
     # Sporadics are the floor: quoting shower rates alone implies nothing falls
-    # on an ordinary night, which is not true.
+    # on an ordinary night, which is not true. Printed through the same formatter
+    # as the rows above it, because the whole point of the line is that a reader
+    # compares it with them - and two figures rounded differently do not compare.
     spor = visible_rate(SPORADIC_ZHR, 1.0, 45.0, cloud, moon_illum)
-    draw.text((MARGIN, sy), f"Sporadic background   ~{spor:.0f}/hr",
+    draw.text((MARGIN, sy), f"Sporadic background   {rate_text(spor)}",
               font=f["sm"], fill=MUTED)
     # The fallback for a page with no room for COMING UP, not a second copy of
     # it: when that list rendered, its first row IS the next peak, and printing
