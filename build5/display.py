@@ -31,7 +31,7 @@ from core.fonts import font
 from core.imagery import moon_image, paste_moon
 from core.meteors import SPORADIC_ZHR, active, visible_rate
 from core.night import (
-    NIGHT_CYCLE,
+    NIGHT_MODES,
     apply_night,
     night_mode_now,
     night_window,
@@ -73,7 +73,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.42.0"
+FIRMWARE_VERSION = "3.43.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1154,7 +1154,7 @@ def main():
     page_seconds = float(disp.get("page_seconds", 20))
     night = disp.get("night_mode", "off")
     night_dim = int(disp.get("night_dim", 45))
-    if night not in NIGHT_CYCLE:
+    if night not in NIGHT_MODES:
         raise ValueError(f'display.night_mode is "{night}"; '
                          'expected "off", "dim" or "red"')
     moon_ring = bool(disp.get("moon_ring", False))

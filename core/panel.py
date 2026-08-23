@@ -13,7 +13,6 @@ import numpy as np
 from PIL import Image
 
 from core.night import (
-    NIGHT_CYCLE,
     inside_window,
     night_filter,
     night_mode_now,
@@ -338,10 +337,18 @@ class Controls:
 
         The panel already shows which mode is active by being that colour, so
         nothing is lost by labelling the destination instead.
+
+        The button is a BINARY toggle rather than a walk through NIGHT_MODES,
+        which is what lets the caption be one word. A three-way destination had
+        to be spelt out - "Night -> dim" - and at 168px it was the one caption
+        that overflowed its button on the 10.1" targets page, where a seventh
+        button cuts the box to 151px. "dim" is still a valid configured mode;
+        it is simply not somewhere the button goes, because the backlight
+        buttons already dim the panel and do it by lowering the black level
+        rather than by scaling pixel values.
         """
         cur = self.night_now(window)
-        nxt = NIGHT_CYCLE[(NIGHT_CYCLE.index(cur) + 1) % len(NIGHT_CYCLE)]
-        return [f"Night → {nxt}",
+        return ["Day" if cur != "off" else "Night",
                 "Resume" if self.paused else "Pause",
                 "Next", "Dimmer", "Brighter", "Blank"] + (["More"] if paged else [])
 
@@ -405,8 +412,10 @@ class Controls:
         self.show()
         idx = self.strip.at(x, y, len(self.labels(window, paged)))
         if idx == 0:
-            cur = self.night_now(window)
-            self.override = NIGHT_CYCLE[(NIGHT_CYCLE.index(cur) + 1) % len(NIGHT_CYCLE)]
+            # Binary, so a configured "dim" is reachable by config but not by
+            # the button: the press leaves it for "off", and the override
+            # lapses at the next dusk or dawn, which restores it.
+            self.override = "off" if self.night_now(window) != "off" else "red"
             self.override_dark = inside_window(window)
         elif idx == 1:
             self.paused = not self.paused

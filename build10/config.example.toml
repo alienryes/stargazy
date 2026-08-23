@@ -146,10 +146,10 @@ out_dir = "/home/operations/uptonight/out"
 # away again. No controls are drawn until the screen is touched, and nothing
 # fires on that first tap - this is a display to look at, not a control panel.
 #
-# The buttons are: night mode (cycles off/dim/red), pause or resume the page
-# rotation, jump to the next page, dimmer, brighter, and blank. Blanking turns
-# the backlight off and stops compositing until the next touch, which is the
-# only state in which the display is not using a core.
+# The buttons are: night mode (turns the red filter on or off), pause or resume
+# the page rotation, jump to the next page, dimmer, brighter, and blank.
+# Blanking turns the backlight off and stops compositing until the next touch,
+# which is the only state in which the display is not using a core.
 #
 # Everything here is transient - the settings above are restored on restart.
 # Dimmer and brighter need write access to /sys/class/backlight, which setup.sh

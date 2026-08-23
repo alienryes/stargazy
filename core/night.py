@@ -12,7 +12,10 @@ from PIL import Image
 
 from core.values import _dt
 
-NIGHT_CYCLE = ("off", "dim", "red")
+# The modes config.toml may name. Not an order: the touch button toggles
+# between "off" and "red" rather than walking this, so "dim" is configurable
+# but not somewhere a press goes.
+NIGHT_MODES = ("off", "dim", "red")
 
 
 # Rec.709: 54/183/19 over 256 is 0.211/0.715/0.074. (This was described as

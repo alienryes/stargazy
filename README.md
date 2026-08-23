@@ -215,7 +215,7 @@ No controls are drawn until the screen is touched. **The first tap only reveals 
 
 | Button | What it does |
 |---|---|
-| **Night** | Cycles the night filter off → dim → red, immediately, whatever the hour |
+| **Night** / **Day** | Turns the red night filter on or off, immediately, whatever the hour |
 | **Pause** / **Resume** | Holds the current page instead of rotating |
 | **Next** | Jumps to the next page straight away |
 | **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
