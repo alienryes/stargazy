@@ -220,9 +220,11 @@ The buttons carry glyphs rather than words, drawn from primitives rather than sh
 | Night / Day | crescent moon / rayed sun | Turns the red night filter on or off, immediately, whatever the hour |
 | Pause / Resume | two bars / triangle | Holds the current page instead of rotating |
 | Next | chevron | Jumps to the next page straight away |
-| Dimmer / Brighter | half-filled ring with − / + | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
-| Blank | power symbol | Backlight off and compositing stopped. The display drops to **0% CPU** until it is touched again. |
+| Dimmer / Brighter | hollow sun with − / + | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
+| Blank | screen with a slash | Backlight off and compositing stopped. The display drops to **0% CPU** until it is touched again. |
 | More | three dots | *Targets page only.* Steps to the next screenful of deep-sky objects, and wraps at the end |
+
+The Day sun is **solid** and the brightness suns are **hollow**, which is the same distinction doing real work: both can be on the strip at once, since Day appears whenever the filter is on.
 
 **State is coded in luma, not hue** — fill against outline, solid against hollow — because the night filter puts Rec.709 luma on the red channel and destroys hue outright. A colour code would read correctly by day and collapse into an arbitrary brightness code after dusk, which is the whole time anyone is out there touching the panel.
 

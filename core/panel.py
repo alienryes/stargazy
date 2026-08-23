@@ -326,19 +326,31 @@ def chevron(d, cx, cy, u, fg):
 
 
 def _level(d, cx, cy, u, fg, plus):
-    """A ring with its left half filled, and a sign beside it.
+    """An OUTLINE sun with a sign beside it.
 
-    The contrast glyph rather than a small sun and a large sun: measured at
-    button size the two suns were barely distinguishable, and a rayed sun is
-    already the Day button.
+    ⇒ THE SAME OBJECT AS THE DAY GLYPH, SEPARATED BY FILL. Day is a SOLID sun
+    and carries no sign; brightness is a HOLLOW one and does. Both can be on
+    the strip at once - Day shows whenever the filter is on - so they had to be
+    told apart in the only channel the red transform preserves, which is luma.
+    That is the standing rule here, applied rather than worked around.
+
+    Three earlier attempts are recorded because each looked right until drawn
+    at button size: a ring with a sign beside it read as the Venus symbol; a
+    filled ramp is the volume glyph; stepped bars are signal strength. A frame
+    around this one, to say "screen", cost so much room that the rays blurred
+    into a halo, worse in red.
     """
-    r = u * 0.62
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=fg, width=max(2, int(u * 0.16)))
-    d.pieslice([cx - r, cy - r, cx + r, cy + r], 90, 270, fill=fg)
-    x, w = cx + u * 0.95, max(2, int(u * 0.16))
-    d.line([x - u * 0.28, cy, x + u * 0.28, cy], fill=fg, width=w)
+    w = max(2, int(u * 0.15))
+    sx, r = cx - u * 0.42, u * 0.34
+    d.ellipse([sx - r, cy - r, sx + r, cy + r], outline=fg, width=w)
+    for i in range(8):
+        a = 2 * np.pi * i / 8 + np.pi / 8
+        d.line([sx + np.cos(a) * r * 1.45, cy + np.sin(a) * r * 1.45,
+                sx + np.cos(a) * r * 2.15, cy + np.sin(a) * r * 2.15], fill=fg, width=w)
+    x = cx + u * 0.78
+    d.line([x - u * 0.3, cy, x + u * 0.3, cy], fill=fg, width=w)
     if plus:
-        d.line([x, cy - u * 0.28, x, cy + u * 0.28], fill=fg, width=w)
+        d.line([x, cy - u * 0.3, x, cy + u * 0.3], fill=fg, width=w)
 
 
 def dimmer(d, cx, cy, u, fg):
@@ -349,10 +361,31 @@ def brighter(d, cx, cy, u, fg):
     _level(d, cx, cy, u, fg, True)
 
 
-def power(d, cx, cy, u, fg):
-    r, w = u * 0.78, max(2, int(u * 0.17))
-    d.arc([cx - r, cy - r, cx + r, cy + r], 300, 240, fill=fg, width=w)
-    d.line([cx, cy - u * 0.95, cx, cy - u * 0.15], fill=fg, width=w)
+def screen_off(d, cx, cy, u, fg):
+    """A screen with a slash through it.
+
+    Not the power symbol, which was tried and reads as "shut down" rather than
+    "blank the screen" - a meaningful difference on a button that leaves the
+    daemon running. No glyph can carry the rest of what Blank does, which is to
+    stop compositing and drop the display to 0% CPU; that stays a README fact.
+
+    ⇒ THE SLASH CUTS rather than lying over: a gap in the button's own
+    background is knocked out along its path first, so the stroke and the
+    outline it crosses stay separate instead of merging where they meet.
+
+    ⚠ EVERY OFFSET IS SYMMETRIC ABOUT THE CENTRE, and the check asserts the
+    glyph is unchanged by a 180-degree rotation. An earlier draft was neither:
+    the slash ran from +1.02u to -1.16u, and the screen kept a layout meant for
+    a version with a stand under it, so it sat high. Both errors read as the
+    line poking out further below than above.
+    """
+    w = max(2, int(u * 0.15))
+    d.rounded_rectangle([cx - u * 1.08, cy - u * 0.61, cx + u * 1.08, cy + u * 0.61],
+                        radius=int(u * 0.2), outline=fg, width=w)
+    a = (cx - u * 1.24, cy + u * 1.0)
+    b = (cx + u * 1.24, cy - u * 1.0)
+    d.line([*a, *b], fill=BG, width=w * 3)
+    d.line([*a, *b], fill=fg, width=w)
 
 
 def dots(d, cx, cy, u, fg):
@@ -479,7 +512,7 @@ class Controls:
         return [(sun, WHITE) if cur != "off" else (moon, NIGHT_PREVIEW),
                 (play, WHITE) if self.paused else (pause, WHITE),
                 (chevron, WHITE), (dimmer, WHITE), (brighter, WHITE),
-                (power, WHITE)] + ([(dots, WHITE)] if paged else [])
+                (screen_off, WHITE)] + ([(dots, WHITE)] if paged else [])
 
     def night_now(self, window):
         """The night mode to apply right now, honouring a manual override.
