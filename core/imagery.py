@@ -33,6 +33,26 @@ CACHE_ROOT = Path(__file__).resolve().parent.parent / "cache"
 CACHE_DIR = CACHE_ROOT / "dso"
 HIPS_URL = "https://alasky.cds.unistra.fr/hips-image-services/hips2fits"
 
+# Objects whose cutout has already failed and been warned about.
+#
+# ⇒ BECAUSE SUCCESS IS CACHED TO DISK AND FAILURE IS NOT. A fetched image makes
+# later refreshes return at path.exists() and log nothing, which is why the
+# objects that work go quiet after their first fetch. A failure writes nothing,
+# so a name the HiPS resolver cannot resolve is re-requested every refresh - a
+# quarter of an hour apart, for the life of the process - and warned about every
+# time. Measured over 24 h on the 10.1" panel, two such objects accounted for
+# 188 warnings and nothing else warned at all.
+#
+# ⚠ THIS SHAPE FITS THIS CALL AND NO OTHER ONE IN core/. The moon frame is keyed
+# on an hourly stamp so its URL moves on; the solar frame has its own time-based
+# cache and falls back; aurora, Kp, weather and CelesTrak are whole-feed fetches
+# where a repeated warning means "this feed is still down", which is information.
+# Do not widen it.
+#
+# The request still goes out every refresh and success still logs, so a name
+# that starts resolving announces itself. Suppressing the repeat costs no signal.
+_CUTOUT_WARNED = set()
+
 # Real lunar imagery from NASA's Scientific Visualization Studio (Ernie Wright's
 # Dial-a-Moon). The API resolves the frame for a given hour, so the phase, the
 # libration and the terminator are all as they actually are that night -
@@ -172,9 +192,17 @@ def cutout(obj_id, size_arcmin, px=200):
         path.write_bytes(r.content)
         img = Image.open(path).convert("RGB")
         log.info("Cutout fetched for %s (fov %.1f')", obj_id, fov * 60)
+        # So a name that fails again later is reported again rather than
+        # silenced by a success it has since lost.
+        _CUTOUT_WARNED.discard(obj_id)
         return img
     except Exception as e:
-        log.warning("Cutout for %s failed: %s", obj_id, e)
+        # The repeats are still logged, at debug: the retry is worth being able
+        # to see, and reporting a state change at the level of the state it
+        # leaves is what keeps a recovery from being hidden by its own failure.
+        log.log(logging.DEBUG if obj_id in _CUTOUT_WARNED else logging.WARNING,
+                "Cutout for %s failed: %s", obj_id, e)
+        _CUTOUT_WARNED.add(obj_id)
         return None
 
 
