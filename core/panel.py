@@ -254,6 +254,113 @@ def set_brightness(value):
         log.warning("Backlight not writable: %s", e)
 
 
+# The moon glyph is painted in the colour WHITE becomes under the red filter,
+# so the button previews the change a press makes.
+#
+# ⇒ SOUND ONLY BECAUSE THAT GLYPH IS NEVER FILTERED. buttons() picks the moon
+# exactly when night_now() returns "off", and the daemon hands that same value
+# to to_bytes as the filter mode, so the moon is only ever drawn on frames that
+# get no transform. The sun is its mirror - shown only while the filter is on -
+# so it cannot carry hue and does not try to. The preview is worth having in
+# one direction only: at night the whole panel is already red, so previewing
+# "day" would restate what fills the view.
+#
+# ⚠ This is NOT a general licence to encode state in colour here. The red
+# branch takes Rec.709 luma and destroys hue outright, so anything that can be
+# filtered must be coded in luma - fill against outline, solid against hollow.
+# The moon is an exception because it is provably never filtered, not because
+# the rule is soft.
+#
+# Derived from night_filter rather than written down, so it cannot drift from
+# the transform it is quoting. The dim argument is unused by the red branch.
+NIGHT_PREVIEW = tuple(int(v) for v in night_filter(
+    np.array([[WHITE]], dtype=np.uint16), "red", 0)[0][0])
+
+# Glyph half-height as a fraction of the strip's height. One figure serves both
+# panels, the strips being 80px and 64px tall.
+GLYPH_FRAC = 0.27
+
+
+# ── Button glyphs ─────────────────────────────────────────────────────────
+# Drawn from PIL primitives rather than shipped as an icon font: the text faces
+# already arrive from an OS package via setup.sh, and adding a font asset to
+# that path is more moving parts than a triangle, two bars and an arc need.
+#
+# Each takes the centre of its button and `u`, the glyph half-height, so one
+# definition serves both panels.
+
+def moon(d, cx, cy, u, fg):
+    """Crescent: a filled disc with a second disc bitten out of it."""
+    d.ellipse([cx - u, cy - u, cx + u, cy + u], fill=fg)
+    d.ellipse([cx - u * 0.45, cy - u * 1.05, cx + u * 1.55, cy + u * 1.05], fill=BG)
+
+
+def sun(d, cx, cy, u, fg):
+    r = u * 0.52
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=fg)
+    for i in range(8):
+        a = np.pi * i / 4
+        d.line([cx + np.cos(a) * u * 0.75, cy + np.sin(a) * u * 0.75,
+                cx + np.cos(a) * u * 1.12, cy + np.sin(a) * u * 1.12],
+               fill=fg, width=max(2, int(u * 0.16)))
+
+
+def pause(d, cx, cy, u, fg):
+    bw, gap = u * 0.30, u * 0.24
+    for s in (-1, 1):
+        x = cx + s * (gap + bw) - bw / 2
+        d.rounded_rectangle([x, cy - u, x + bw, cy + u], radius=int(u * 0.12), fill=fg)
+
+
+def play(d, cx, cy, u, fg):
+    d.polygon([(cx - u * 0.55, cy - u), (cx - u * 0.55, cy + u), (cx + u * 0.85, cy)],
+              fill=fg)
+
+
+def chevron(d, cx, cy, u, fg):
+    """Next. A chevron rather than the conventional skip-triangle, which would
+    sit two buttons from the play triangle and read as the same shape."""
+    w = max(3, int(u * 0.22))
+    d.line([cx - u * 0.35, cy - u * 0.8, cx + u * 0.45, cy], fill=fg, width=w)
+    d.line([cx + u * 0.45, cy, cx - u * 0.35, cy + u * 0.8], fill=fg, width=w)
+
+
+def _level(d, cx, cy, u, fg, plus):
+    """A ring with its left half filled, and a sign beside it.
+
+    The contrast glyph rather than a small sun and a large sun: measured at
+    button size the two suns were barely distinguishable, and a rayed sun is
+    already the Day button.
+    """
+    r = u * 0.62
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=fg, width=max(2, int(u * 0.16)))
+    d.pieslice([cx - r, cy - r, cx + r, cy + r], 90, 270, fill=fg)
+    x, w = cx + u * 0.95, max(2, int(u * 0.16))
+    d.line([x - u * 0.28, cy, x + u * 0.28, cy], fill=fg, width=w)
+    if plus:
+        d.line([x, cy - u * 0.28, x, cy + u * 0.28], fill=fg, width=w)
+
+
+def dimmer(d, cx, cy, u, fg):
+    _level(d, cx, cy, u, fg, False)
+
+
+def brighter(d, cx, cy, u, fg):
+    _level(d, cx, cy, u, fg, True)
+
+
+def power(d, cx, cy, u, fg):
+    r, w = u * 0.78, max(2, int(u * 0.17))
+    d.arc([cx - r, cy - r, cx + r, cy + r], 300, 240, fill=fg, width=w)
+    d.line([cx, cy - u * 0.95, cx, cy - u * 0.15], fill=fg, width=w)
+
+
+def dots(d, cx, cy, u, fg):
+    r = u * 0.19
+    for s in (-1, 0, 1):
+        d.ellipse([cx + s * u * 0.62 - r, cy - r, cx + s * u * 0.62 + r, cy + r], fill=fg)
+
+
 def brightness_level(percent):
     """Raw backlight value for a percentage of this panel's maximum.
 
@@ -271,9 +378,9 @@ class Strip:
     thousands of frames nobody is touching.
     """
 
-    def __init__(self, w, margin, y, h, gap=8, text_dy=16):
+    def __init__(self, w, margin, y, h, gap=8):
         self.w, self.margin, self.y, self.h = w, margin, y, h
-        self.gap, self.text_dy = gap, text_dy
+        self.gap = gap
 
     def rects(self, n):
         """The n buttons, left to right, as (x0, y0, x1, y1)."""
@@ -289,14 +396,21 @@ class Strip:
                 return i
         return None
 
-    def draw(self, draw, labels, font):
-        """Stamp the control strip over a composed frame."""
-        for (x0, y0, x1, y1), label in zip(self.rects(len(labels)), labels):
+    def draw(self, draw, buttons):
+        """Stamp the control strip over a composed frame.
+
+        Buttons carry a glyph and a colour rather than a caption. A glyph is
+        drawn outward from its box's own centre at a size taken from the
+        strip's height, so it CANNOT exceed its button - which a caption could,
+        and did: the text was centred with no clamp, so "Night -> dim" at
+        168px in a 151px box spilled past both edges of the rounded rectangle.
+        Equal-width boxes also stop being a mismatch, a glyph having none of
+        the width spread that ran from "Next" at 65px to that caption.
+        """
+        for (x0, y0, x1, y1), (glyph, colour) in zip(self.rects(len(buttons)), buttons):
             draw.rounded_rectangle((x0, y0, x1, y1), radius=10,
                                    fill=BG, outline=STEEL, width=2)
-            tw = int(draw.textlength(label, font=font))
-            draw.text(((x0 + x1 - tw) // 2, y0 + self.text_dy), label,
-                      fill=WHITE, font=font)
+            glyph(draw, (x0 + x1) / 2, (y0 + y1) / 2, self.h * GLYPH_FRAC, colour)
 
 
 class Controls:
@@ -337,38 +451,35 @@ class Controls:
     def show(self):
         self.shown_until = time.time() + self.strip_seconds
 
-    def labels(self, window=None, paged=False):
-        """Button captions. Every one names what pressing it will DO.
+    def buttons(self, window=None, paged=False):
+        """(glyph, colour) per button. Every one shows what pressing it will DO.
 
         `paged` adds a seventh button, and only the targets page passes it: the
         other pages hold one screenful, so a More there would either lie or do
-        nothing. The strip divides its width by the number of captions, so the
-        button count changing between pages moves every button - which is safe
-        only because the loop holds the page still while the strip is up.
+        nothing. The strip divides its width by the number of buttons, so the
+        count changing between pages moves every button - which is safe only
+        because the loop holds the page still while the strip is up.
 
-        The night button used to name the mode in force, which read as state
-        beside five buttons naming actions - and was not even the mode in
-        force, since it showed the configured value while `night_now` returns
-        "off" in daylight whatever the config says. It now names the mode the
-        press will select, the way Pause and Resume name the state being moved
-        to rather than the one being left.
+        THE GLYPH NAMES THE DESTINATION, not the state in force, the way the
+        play triangle does: the moon means "press for night", not "it is
+        night". This is inherited from the captions it replaced, where the
+        night button used to name the mode in force and so read as state beside
+        five buttons naming actions - and was not even the mode in force, since
+        it showed the configured value while night_now returns "off" in
+        daylight whatever the config says. The panel already shows which mode
+        is active by being that colour.
 
-        The panel already shows which mode is active by being that colour, so
-        nothing is lost by labelling the destination instead.
-
-        The button is a BINARY toggle rather than a walk through NIGHT_MODES,
-        which is what lets the caption be one word. A three-way destination had
-        to be spelt out - "Night -> dim" - and at 168px it was the one caption
-        that overflowed its button on the 10.1" targets page, where a seventh
-        button cuts the box to 151px. "dim" is still a valid configured mode;
-        it is simply not somewhere the button goes, because the backlight
-        buttons already dim the panel and do it by lowering the black level
-        rather than by scaling pixel values.
+        The night button is a BINARY toggle rather than a walk through
+        NIGHT_MODES. "dim" is still a valid configured mode; it is simply not
+        somewhere the button goes, because the backlight buttons already dim
+        the panel and do it by lowering the black level rather than by scaling
+        pixel values.
         """
         cur = self.night_now(window)
-        return ["Day" if cur != "off" else "Night",
-                "Resume" if self.paused else "Pause",
-                "Next", "Dimmer", "Brighter", "Blank"] + (["More"] if paged else [])
+        return [(sun, WHITE) if cur != "off" else (moon, NIGHT_PREVIEW),
+                (play, WHITE) if self.paused else (pause, WHITE),
+                (chevron, WHITE), (dimmer, WHITE), (brighter, WHITE),
+                (power, WHITE)] + ([(dots, WHITE)] if paged else [])
 
     def night_now(self, window):
         """The night mode to apply right now, honouring a manual override.
@@ -428,7 +539,7 @@ class Controls:
             self.show()
             return
         self.show()
-        idx = self.strip.at(x, y, len(self.labels(window, paged)))
+        idx = self.strip.at(x, y, len(self.buttons(window, paged)))
         if idx == 0:
             # Binary, so a configured "dim" is reachable by config but not by
             # the button: the press leaves it for "off", and the override

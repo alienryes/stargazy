@@ -84,7 +84,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.58.0"
+VERSION = "0.59.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -235,7 +235,7 @@ AURORA_EMISSION_KM = 250.0
 # as its layout.
 sky = Sky(W, H, stars=520, twinkle=TWINKLE_AMP, twinkle_max=TWINKLE_MAX, fov=CAMERA_FOV)
 fb = Framebuffer(W, H, FB_W, FB_H, ROTATE, FB_DEV)
-strip = Strip(W, MARGIN, STRIP_Y, STRIP_H, BTN_GAP, text_dy=24)
+strip = Strip(W, MARGIN, STRIP_Y, STRIP_H, BTN_GAP)
 
 PHASE_NAMES = {
     "moon-new":             "New Moon",
@@ -2794,7 +2794,7 @@ def build_pages(states, targets, lat, moon_ring=False):
     return pages
 
 
-def compose(frame, overlay, labels=None):
+def compose(frame, overlay, buttons=None):
     """Dashboard, clock and control strip over a painted sky frame.
 
     This puts the clouds BEHIND the moon disc, which looks wrong and is not.
@@ -2823,8 +2823,8 @@ def compose(frame, overlay, labels=None):
                              int(round(my)) - marker.height // 2), marker)
     d = ImageDraw.Draw(frame)
     draw_clock(d)
-    if labels:
-        strip.draw(d, labels, font("IBMPlexSans-SemiBold.ttf", 30))
+    if buttons:
+        strip.draw(d, buttons)
     return frame
 
 

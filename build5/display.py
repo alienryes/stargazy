@@ -73,7 +73,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.45.0"
+FIRMWARE_VERSION = "3.46.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1085,7 +1085,7 @@ def build_pages(states, targets, lat, moon_ring=False):
     return pages
 
 
-def compose(frame, overlay, labels=None):
+def compose(frame, overlay, buttons=None):
     """Dashboard, clock and control strip over a painted sky frame.
 
     This puts the clouds BEHIND the moon disc, which looks wrong and is not.
@@ -1105,8 +1105,8 @@ def compose(frame, overlay, labels=None):
     # Drawn per frame alongside the clock rather than into the cached overlay:
     # they change on their own timers, and the overlay only changes when the
     # data does.
-    if labels:
-        strip.draw(d, labels, font("IBMPlexSans-SemiBold.ttf", 26))
+    if buttons:
+        strip.draw(d, buttons)
     return frame
 
 

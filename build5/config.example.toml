@@ -157,8 +157,9 @@ out_dir = "/home/operations/uptonight/out"
 # away again. No controls are drawn until the screen is touched, and nothing
 # fires on that first tap - this is a display to look at, not a control panel.
 #
-# The buttons are: night mode (turns the red filter on or off), pause or resume
-# the page rotation, jump to the next page, dimmer, brighter, and blank.
+# The buttons carry glyphs, not words. They are: night mode (turns the red
+# filter on or off), pause or resume the page rotation, jump to the next
+# page, dimmer, brighter, and blank.
 # Blanking turns the backlight off and stops compositing until the next touch,
 # which is the only state in which the display is not using a core.
 #

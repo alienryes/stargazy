@@ -213,14 +213,20 @@ Since the panel is a touchscreen, there are touch controls. The display reads th
 
 No controls are drawn until the screen is touched. **The first tap only reveals a control strip** along the bottom, which will disappear after six seconds; a second tap presses a button. That way the ambient display stays uncluttered and brushing past the panel in the dark can't affect anything.
 
-| Button | What it does |
-|---|---|
-| **Night** / **Day** | Turns the red night filter on or off, immediately, whatever the hour |
-| **Pause** / **Resume** | Holds the current page instead of rotating |
-| **Next** | Jumps to the next page straight away |
-| **Dimmer** / **Brighter** | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
-| **Blank** | Backlight off and compositing stopped. The display drops to **0% CPU** until it is touched again. |
-| **More** | *Targets page only.* Steps to the next screenful of deep-sky objects, and wraps at the end |
+The buttons carry glyphs rather than words, drawn from primitives rather than shipped as an icon font. Each shows what pressing it will **do**, the way a play triangle does — the moon means "press for night", not "it is night".
+
+| Button | Glyph | What it does |
+|---|---|---|
+| Night / Day | crescent moon / rayed sun | Turns the red night filter on or off, immediately, whatever the hour |
+| Pause / Resume | two bars / triangle | Holds the current page instead of rotating |
+| Next | chevron | Jumps to the next page straight away |
+| Dimmer / Brighter | half-filled ring with − / + | Backlight, via `/sys/class/backlight`. Never goes below the lowest visible step |
+| Blank | power symbol | Backlight off and compositing stopped. The display drops to **0% CPU** until it is touched again. |
+| More | three dots | *Targets page only.* Steps to the next screenful of deep-sky objects, and wraps at the end |
+
+**State is coded in luma, not hue** — fill against outline, solid against hollow — because the night filter puts Rec.709 luma on the red channel and destroys hue outright. A colour code would read correctly by day and collapse into an arbitrary brightness code after dusk, which is the whole time anyone is out there touching the panel.
+
+The moon is the single exception, and it is a provable one. It is drawn only when the filter is off, so it is never transformed, and it is painted in the colour white *becomes* under the filter — the button previews the change it makes. The sun is its mirror, shown only while the filter is on, so it carries no colour and does not try to: at night the whole panel is already red, and previewing "day" would restate what fills the view.
 
 **More** exists because the deep-sky list is far longer than one screenful. UpTonight commonly passes forty objects on a dark night, against six cards on the 10.1 inch panel and four on the 5 inch, and the heading has always said so — `DEEP SKY (1–6 of 40)`. Pressing **More** reaches the rest, six or four at a time; on the 10.1 inch build the altitude-versus-bearing plot follows, so the plot and the cards always describe the same objects.
 

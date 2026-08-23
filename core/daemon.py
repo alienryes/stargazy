@@ -8,7 +8,7 @@ build passes in, which must provide:
     sky         core.sky.Sky
     strip       core.panel.Strip
     build_pages(states, targets, lat, moon_ring) -> [RGBA overlay, ...]
-    compose(frame, overlay, labels) -> Image
+    compose(frame, overlay, buttons) -> Image
 
 build_pages is only ever called from the data thread, so it is the right place
 for the network calls that fetch the lunar frame and the deep-sky cutouts. It
@@ -214,10 +214,10 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
                 # Wraps, so pressing past the last screenful returns to the
                 # best targets rather than stopping on the worst.
                 page = page[card_i % len(page)]
-            labels = (controls.labels(state["window"], paged)
-                      if controls and controls.visible else None)
+            buttons = (controls.buttons(state["window"], paged)
+                       if controls and controls.visible else None)
             frame = layout.compose(sky.paint(params, t, meteors, cloud_scroll),
-                                   page, labels)
+                                   page, buttons)
             mode = controls.night_now(state["window"]) if controls \
                 else night_mode_now(night, state["window"])
             out.seek(0)
