@@ -254,6 +254,15 @@ def set_brightness(value):
         log.warning("Backlight not writable: %s", e)
 
 
+def brightness_level(percent):
+    """Raw backlight value for a percentage of this panel's maximum.
+
+    Never 0: blanking is what the Blank button is for, and a panel that came up
+    dark at startup would read as a fault rather than as a setting.
+    """
+    return max(1, round(read_brightness("max_brightness") * percent / 100))
+
+
 class Strip:
     """Geometry and painting for the hidden control strip.
 
@@ -296,9 +305,16 @@ class Controls:
     None of this is persisted: config.toml stays the source of truth for the
     defaults, so a restart always comes back to a known state rather than to
     whatever was last poked at in the dark.
+
+    The backlight is the exception that has to be worked at, because it is the
+    one setting held by the HARDWARE rather than by this object. Reading it
+    back at startup inherits the last session's presses across a restart, and
+    the driver's own boot value is not a sensible default either - both panels
+    come up at 4 of 31. So the caller sets it from config.toml and passes the
+    level it chose.
     """
 
-    def __init__(self, night, strip_seconds, strip):
+    def __init__(self, night, strip_seconds, strip, brightness=None):
         self.config_night   = night
         self.strip_seconds  = strip_seconds
         self.strip          = strip
@@ -310,7 +326,9 @@ class Controls:
         self.blanked        = False
         self.shown_until    = 0.0
         self.max_brightness = read_brightness("max_brightness")
-        self.brightness     = read_brightness() or self.max_brightness
+        # Falls back to the hardware only for a caller that set nothing, which
+        # is a test harness rather than the daemon.
+        self.brightness     = brightness or read_brightness() or self.max_brightness
 
     @property
     def visible(self):

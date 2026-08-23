@@ -73,7 +73,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.43.0"
+FIRMWARE_VERSION = "3.44.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -1158,6 +1158,9 @@ def main():
         raise ValueError(f'display.night_mode is "{night}"; '
                          'expected "off", "dim" or "red"')
     moon_ring = bool(disp.get("moon_ring", False))
+    brightness = int(disp.get("brightness", 100))
+    if not 1 <= brightness <= 100:
+        raise ValueError(f"display.brightness is {brightness}; expected 1 to 100")
     METEOR_COMPRESSION = float(disp.get("meteor_compression", METEOR_COMPRESSION))
     tch = config.get("touch", {})
 
@@ -1220,7 +1223,7 @@ def main():
                page_seconds=page_seconds, demo=args.demo, night=night,
                night_dim=night_dim, touch_reader=reader,
                strip_seconds=float(tch.get("strip_seconds", 6)),
-               moon_ring=moon_ring)
+               moon_ring=moon_ring, brightness=brightness)
 
 
 if __name__ == "__main__":

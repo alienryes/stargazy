@@ -96,6 +96,13 @@ out_dir = "/home/operations/uptonight/out"
 # night_mode = "off"
 # night_dim = 45
 
+# Panel backlight at startup, as a percentage of the panel's maximum. Set
+# rather than left alone because the backlight is the one setting the hardware
+# keeps across a restart: leaving it brings the panel back at whatever was last
+# pressed, or after a reboot at the driver's own value, which is 4 of 31 on
+# both panels. Dimmer and Brighter move from here and are not remembered.
+# brightness = 100
+
 # Draw a thin ivory circle around the moon image, marking the full disc rather
 # than only the lit part. Off by default - the photograph reads better without
 # it - but worth enabling if the card looks too empty near new moon, when

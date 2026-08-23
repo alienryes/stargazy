@@ -27,7 +27,7 @@ import threading
 import time
 
 from core.night import night_mode_now
-from core.panel import Controls
+from core.panel import Controls, brightness_level, set_brightness
 from core.sky import DEMO_PARAMS
 
 log = logging.getLogger(__name__)
@@ -76,7 +76,8 @@ def running():
 
 def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
                refresh_min, page_seconds, demo=False, night="off", night_dim=45,
-               touch_reader=None, strip_seconds=6, moon_ring=False):
+               touch_reader=None, strip_seconds=6, moon_ring=False,
+               brightness=100):
     state = {"pages": [], "params": None, "window": None}
     sky, fb = layout.sky, layout.fb
 
@@ -121,10 +122,17 @@ def run_daemon(layout, fetch, read_targets, out_dir, lat, animated, fps,
 
     threading.Thread(target=refresher, daemon=True).start()
 
+    # Set rather than read, and set whether or not touch came up: the backlight
+    # is the one setting the hardware keeps across a restart, so leaving it
+    # alone brings the panel back at the last session's presses - or, after a
+    # reboot, at the driver's own 4 of 31.
+    level = brightness_level(brightness)
+    set_brightness(level)
+
     controls = None
     reader = touch_reader if animated else None
     if reader and reader.start():
-        controls = Controls(night, strip_seconds, layout.strip)
+        controls = Controls(night, strip_seconds, layout.strip, level)
     else:
         reader = None
 

@@ -324,6 +324,8 @@ That distinction is not cosmetic. The Open-Meteo model was pinned in code to a c
 
 **Night mode** (`night_mode = "off" | "dim" | "red"`) applies between real dusk and dawn rather than on a clock schedule, because the point is to stop the panel ruining dark adaptation and that starts when the dark sky does. `"dim"` keeps the colours at `night_dim`% brightness; `"red"` goes monochrome red because long wavelengths leave low-light vision alone. Nothing is lost by going red. No reading is carried by colour alone, so the verdict word, the numbers and the bar lengths all still say what they said. It applies to the finished frame, so it covers the animated sky and the sky photographs too.
 
+**Backlight** (`brightness`, a percentage of the panel's maximum, default 100) is applied at startup. It is set rather than left alone because the backlight is the one setting the hardware keeps across a restart: left alone, the panel comes back at whatever the Dimmer and Brighter buttons were last pressed to, and after a reboot at the driver's own value — 4 of 31 on both panels, which is dim enough to read as a fault. Everything else already returns to this file on restart; this makes the backlight do the same.
+
 To read from Home Assistant instead, set `source = "homeassistant"` and add an `[ha]` section with the HA URL and a long-lived access token (HA → Profile → Security → Long-Lived Access Tokens).
 
 Both sources are the same underlying model, so they agree. `display.py --compare` fetches from each back to back and prints a per-value diff if local confirmation is required.
