@@ -180,6 +180,24 @@ def _observer(lat, lon, elevation=0.0):
     return obs
 
 
+def _ephem_date(when):
+    """A datetime as an ephem date, in UTC.
+
+    ⚠ `ephem.Date` IGNORES tzinfo AND TREATS EVERYTHING AS UTC, so handing it an
+    aware local datetime silently shifts every result by the offset - an hour
+    through British summer time. Everything reaching this module from a page is
+    aware, so the conversion belongs here rather than at each call. The same
+    guard core.solar carries, for the same reason.
+    """
+    if when is None:
+        return ephem.now()
+    if isinstance(when, datetime):
+        if when.tzinfo is not None:
+            when = when.astimezone(timezone.utc).replace(tzinfo=None)
+        return ephem.Date(when)
+    return ephem.Date(when)
+
+
 def _altitude(obs, when):
     """The Moon's altitude in degrees at `when`, topocentric."""
     obs.date = ephem.Date(when)
@@ -314,6 +332,75 @@ def _revive(event):
     return out
 
 
+def umbra_geometry(now=None):
+    """Where Earth's umbra lies across the Moon's disc, or None if it does not.
+
+    Everything is returned in units of the MOON'S OWN RADIUS, so a caller
+    multiplies by whatever radius it draws the disc at and the shadow comes out
+    at the correct relative size and curvature. That relation is the one honest
+    thing about an exaggerated card: the disc is drawn about fifty times the
+    Moon's true angular size, and scaling the shadow by the same factor leaves
+    the geometry between them exact. The curvature of the shadow's edge against
+    the limb is the whole visual point - the umbra is about 2.7 lunar radii
+    across, so its edge is a noticeably gentler arc than the limb it crosses.
+
+    ⇒ THE FRAME IS CELESTIAL NORTH UP AND EAST TO THE LEFT, so `dx` is
+    right-positive and `dy` DOWN-positive to match image coordinates. This was
+    established from the frames rather than assumed: SVS renders Dial-a-Moon
+    north up (it publishes a separate south-up set, and supplies `posangle`, the
+    lunar pole's angle from CELESTIAL north, per frame). Checked on the
+    2026-08-28 frame, where posangle is 340.2 and Mare Crisium - which a pole-up
+    rendering puts near 1:30 - sits at about 3 o'clock, the ~20 degrees of roll
+    that posangle predicts.
+
+    ⇒ SO THE SHADOW ARRIVES FROM THE LEFT. The Moon travels east against the
+    stars far faster than the antisolar point does, so it runs into the shadow
+    leading with its celestial-eastern limb, and east is left in a north-up
+    frame. A render showing first contact on the right has the sign wrong.
+    """
+    when = _ephem_date(now)
+    sep, umbra, penumbra, r_moon = _shadow(when)
+    if sep >= umbra + r_moon:
+        return None
+
+    d = ephem.Date(when)
+    sun, moon = ephem.Sun(d), ephem.Moon(d)
+    anti_ra, anti_dec = float(sun.g_ra) + math.pi, -float(sun.g_dec)
+    moon_ra, moon_dec = float(moon.g_ra), float(moon.g_dec)
+    # Position angle of the shadow's centre from the Moon, north through east.
+    dra = anti_ra - moon_ra
+    pa = math.atan2(
+        math.sin(dra) * math.cos(anti_dec),
+        math.cos(moon_dec) * math.sin(anti_dec)
+        - math.sin(moon_dec) * math.cos(anti_dec) * math.cos(dra))
+    offset = sep / r_moon
+    return {
+        "dx": -math.sin(pa) * offset,        # east is -x
+        "dy": -math.cos(pa) * offset,        # north is -y in image coordinates
+        "umbra": umbra / r_moon,
+        "penumbra": penumbra / r_moon,
+        # The fraction of the disc's AREA inside the umbra, for a caller that
+        # wants to state it and for a check that wants to measure the drawn
+        # mask against something computed independently of the drawing.
+        "covered": _overlap(sep, r_moon, umbra),
+    }
+
+
+def _overlap(sep, r_disc, r_shadow):
+    """Fraction of a disc of radius r_disc covered by a circle of r_shadow."""
+    if sep >= r_disc + r_shadow:
+        return 0.0
+    if sep <= r_shadow - r_disc:
+        return 1.0
+    if sep <= r_disc - r_shadow:
+        return (r_shadow / r_disc) ** 2
+    d2, a2, b2 = sep * sep, r_disc * r_disc, r_shadow * r_shadow
+    a1 = math.acos(max(-1.0, min(1.0, (d2 + a2 - b2) / (2 * sep * r_disc))))
+    a2_ = math.acos(max(-1.0, min(1.0, (d2 + b2 - a2) / (2 * sep * r_shadow))))
+    return (a2 * (a1 - math.sin(2 * a1) / 2)
+            + b2 * (a2_ - math.sin(2 * a2_) / 2)) / (math.pi * a2)
+
+
 def is_imminent(event, now, hours):
     """Whether the Moon card should be given over to this eclipse.
 
@@ -359,17 +446,31 @@ def summary(event, now):
     # the eclipse are different facts, and printing the earlier one unlabelled
     # would read as the eclipse itself finishing there.
     tail = f"{stop:%H:%M} moonset" if event["sets_during"] else f"{stop:%H:%M}"
-    window = f"{start:%H:%M} - {tail}   ·   "
+    window = window_full = f"{start:%H:%M} - {tail}   ·   "
     # ⚠ UMBRAL MAGNITUDE EXCEEDS 1 AT A TOTAL ECLIPSE, so a percentage is the
     # wrong figure there: "142% of the diameter covered" is arithmetically what
     # the definition gives and reads as a mistake, since a disc cannot be more
     # than wholly covered. Past totality the quantity a viewer wants is how long
     # it lasts, not how deep it goes.
     if event["total"] and event["total_begins"] and event["total_ends"]:
-        window += (f"total {event['total_begins']:%H:%M}-"
-                   f"{event['total_ends']:%H:%M}")
+        totality = (f"total {event['total_begins']:%H:%M}-"
+                    f"{event['total_ends']:%H:%M}")
+        window += totality
+        window_full += totality
     else:
-        window += f"{event['magnitude'] * 100:.0f}%"
+        # ⚠ MAGNITUDE IS A FRACTION OF THE DIAMETER, AND THE DRAWN UMBRA SHOWS
+        # AN AREA. They are different numbers - 93% and 96% at this event - so a
+        # bare "93%" printed beside a picture of a disc that is plainly more
+        # than 93% dark invites the reader to check one against the other and
+        # find them disagreeing. core.solar carries the same rule for the same
+        # pair; the shadow overlay is what made it bite here.
+        #
+        # Two forms because the two panels have different room, measured in
+        # their own faces: the full phrase needs 944px and the 5" column is 480.
+        # "across" is the shortest wording that still says diameter rather than
+        # area - it is 454px, and the alternatives all overflowed.
+        window += f"{event['magnitude'] * 100:.0f}% across"
+        window_full += f"{event['magnitude'] * 100:.0f}% of the Moon's diameter"
 
     if event["sets_during"]:
         # ⚠ DIFFERENCED AFTER TRUNCATING TO THE MINUTE, because both endpoints
@@ -392,7 +493,8 @@ def summary(event, now):
         note = f"{event['altitude']:.0f}° up at maximum"
         if event["sun_altitude"] > -18.0:
             note += ", in twilight"
-    return {"heading": heading, "window": window, "note": note, "day": day}
+    return {"heading": heading, "window": window, "window_full": window_full,
+            "note": note, "day": day}
 
 
 def next_eclipse(lat, lon, elevation=0.0, now=None, horizon_days=HORIZON_DAYS):

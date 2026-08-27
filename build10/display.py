@@ -28,10 +28,11 @@ from core.aurora import FIELD_ALT_BINS, FIELD_AZ_BINS, compass
 from core.aurora import visible_now as aurora_now
 from core.daemon import Paged, flatten, install_signal_handlers, run_daemon
 from core.fonts import font
-from core.imagery import moon_image, paste_moon, paste_sun, sun_image
+from core.imagery import moon_image, paste_moon, paste_sun, shade_umbra, sun_image
 from core.lunar import is_imminent as eclipse_imminent
 from core.lunar import next_eclipse as next_lunar_eclipse
 from core.lunar import summary as eclipse_summary
+from core.lunar import umbra_geometry
 from core.meteors import (
     NAMED_SHOWER_FLOOR,
     PEAKING_STRENGTH,
@@ -87,7 +88,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.60.0"
+VERSION = "0.61.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -377,7 +378,7 @@ def _moon_facts(facts):
 
 
 def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None,
-                      dropped=(), eclipse=None):
+                      dropped=(), eclipse=None, umbra=None):
     """Page 1 as an RGBA overlay: opaque content, transparent sky.
 
     `eclipse` is core.lunar.summary() for an imminent lunar eclipse, or None.
@@ -445,9 +446,22 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None,
 
     # ── Moon ──────────────────────────────────────────────────────────
     if moon_photo is not None:
-        paste_moon(img, moon_photo, W // 2, MOON_CY, MOON_R, ring=moon_ring)
+        limb = paste_moon(img, moon_photo, W // 2, MOON_CY, MOON_R, ring=moon_ring)
     else:
         _draw_moon(draw, W // 2, MOON_CY, MOON_R, moon_phase, waxing)
+        limb = MOON_R
+    # ⇒ THE SHADOW IS DRAWN OVER THE FRAME BECAUSE THE FRAME DOES NOT CARRY IT.
+    # Dial-a-Moon models phase and libration and NOT eclipses - its own metadata
+    # reports obscuration 0.0 at the maximum of the 2026-08-28 eclipse - so
+    # during one the photograph shows an ordinary full Moon and would sit
+    # contradicting the caption beneath it.
+    #
+    # ⚠ AS STALE AS THE OVERLAY, which is up to data_refresh_min (15 by default)
+    # against an umbral phase of some three and a half hours, so the shadow
+    # advances in steps of about a fourteenth of its travel. Same staleness as
+    # every other figure here, and why the caption gives absolute times.
+    if umbra:
+        shade_umbra(img, W // 2, MOON_CY, MOON_R, umbra, limb)
 
     # ⇒ AN IMMINENT ECLIPSE TAKES ALL FOUR CAPTIONS. Everything it displaces is
     # either implied by it or routine: the phase is full by definition during a
@@ -459,7 +473,7 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None,
     if eclipse:
         _centre(draw, eclipse["heading"], MOON_CY + MOON_R + MOON_CAP1,
                 MOON, f["med"])
-        _centre(draw, eclipse["window"], MOON_CY + MOON_R + MOON_CAP2,
+        _centre(draw, eclipse["window_full"], MOON_CY + MOON_R + MOON_CAP2,
                 WHITE, f["sm"])
         _centre(draw, eclipse["note"], MOON_CY + MOON_R + MOON_CAP3,
                 MUTED, f["xs"])
@@ -2826,8 +2840,13 @@ def build_pages(states, targets, lat, moon_ring=False):
     event = next_lunar_eclipse(lat or 0.0, LON or 0.0, now=now)
     eclipse = (eclipse_summary(event, now)
                if eclipse_imminent(event, now, LUNAR_ECLIPSE_HOURS) else None)
+    # Asked of the instant, not of the event: whether the shadow is on the disc
+    # now is a different question from whether an eclipse is close enough to
+    # caption. None whenever no umbra touches the Moon, which is almost always.
+    umbra = umbra_geometry(now)
 
-    pages = [render_conditions(states, photo, moon_ring, facts, dropped, eclipse)]
+    pages = [render_conditions(states, photo, moon_ring, facts, dropped,
+                               eclipse, umbra)]
     for page in (page2, page3, page4, page5, page6):
         if page is not None:
             pages.append(page)

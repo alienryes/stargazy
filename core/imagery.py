@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from core.palette import MOON
 
@@ -388,3 +388,70 @@ def paste_moon(img, photo, cx, cy, r, ring=True):
         # and at apogee r is a dozen pixels clear of it.
         ImageDraw.Draw(img).ellipse([cx - mr, cy - mr, cx + mr, cy + mr],
                                     outline=MOON, width=3)
+    # The MEASURED limb, for the same reason the ring uses it: an eclipse shadow
+    # clipped to r rather than to this would spill past the drawn disc onto the
+    # frame's black surround, most visibly at apogee.
+    return mr
+
+
+# Earth's umbra is not black. Sunlight refracted through the whole ring of
+# Earth's atmosphere fills it, reddened by the same scattering that reddens a
+# sunset, so a totally eclipsed Moon is a dim copper rather than absent. The
+# colour is representative, not photometric: the true brightness ratio between
+# umbra and full Moon is several thousand to one, and drawing that would render
+# the eclipsed part invisible on a panel viewed in a lit room.
+UMBRA_RGB = (78, 26, 14)
+# Short of opaque, so the maria stay faintly readable through the shadow the way
+# they do in a photograph of a real eclipse.
+UMBRA_ALPHA = 0.88
+# The umbral edge is genuinely soft - Earth's atmosphere has no sharp boundary
+# and the penumbra grades into it - so a hard edge reads as drawn rather than
+# cast. In units of the lunar radius, so both builds get the same softness.
+UMBRA_SOFTNESS = 0.045
+# ⇒ SUPERSAMPLED BECAUSE PIL ANTIALIASES NOTHING. An ellipse drawn straight into
+# a mask has hard stair-stepped edges, and this one is a long shallow arc across
+# a 600px disc, which is the worst case for it. Drawn at 4x into an L mask and
+# reduced by area, per the same rule the starfield and the moon mask follow.
+UMBRA_SUPERSAMPLE = 4
+
+
+def shade_umbra(img, cx, cy, r, geom, limb=None):
+    """Lay Earth's umbra over a moon disc already drawn at (cx, cy, r).
+
+    `geom` is core.lunar.umbra_geometry(), whose offsets and radii are in units
+    of the Moon's radius; `limb` is the measured limb from paste_moon, which is
+    what the shadow is clipped to. Without one the drawn radius is used, which
+    is right for the parametric fallback where the disc really is r across.
+
+    Only the UMBRA is drawn. The penumbra dims the Moon by an amount that is
+    imperceptible until it is nearly the umbra - a penumbral eclipse is famously
+    hard to notice at all - so shading it would put a visible mark on the panel
+    where an observer would see nothing.
+    """
+    limb = int(limb or r)
+    n = 2 * limb * UMBRA_SUPERSAMPLE
+    if n <= 0:
+        return
+
+    # The umbra, drawn as its own disc in supersampled pixels. Its centre is
+    # offset from the Moon's by geom["dx"], geom["dy"] lunar radii - and it is
+    # scaled by `limb` rather than r so that shadow and disc share one scale.
+    ur = geom["umbra"] * limb * UMBRA_SUPERSAMPLE
+    ux = n / 2.0 + geom["dx"] * limb * UMBRA_SUPERSAMPLE
+    uy = n / 2.0 + geom["dy"] * limb * UMBRA_SUPERSAMPLE
+    mask = Image.new("L", (n, n), 0)
+    ImageDraw.Draw(mask).ellipse([ux - ur, uy - ur, ux + ur, uy + ur],
+                                 fill=int(255 * UMBRA_ALPHA))
+    mask = mask.filter(ImageFilter.GaussianBlur(
+        UMBRA_SOFTNESS * limb * UMBRA_SUPERSAMPLE))
+
+    # Clipped to the lunar disc AFTER the blur, so the shadow's own edge is soft
+    # while the limb stays crisp. Blurring the two together would fray the limb
+    # and make the Moon look out of focus on the shadowed side only.
+    disc = Image.new("L", (n, n), 0)
+    ImageDraw.Draw(disc).ellipse([0, 0, n - 1, n - 1], fill=255)
+    mask = ImageChops.multiply(mask, disc)
+    mask = mask.resize((2 * limb, 2 * limb), Image.BOX)
+
+    img.paste(Image.new("RGBA", (2 * limb, 2 * limb), UMBRA_RGB + (255,)),
+              (cx - limb, cy - limb), mask)

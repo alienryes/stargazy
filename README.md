@@ -21,7 +21,7 @@ Everything that is not layout (both weather sources, the target reports, the ima
 - Tonight's deep-sky verdict (EXCELLENT → NONE) spelled out in bold display type
 - Condition bars: cloudless %, seeing, transparency, calm. A reading below its warning mark is drawn hollow instead of filled. **Cloudless is the inverse of obscuration, not of raw cloud cover**: a sky fully covered by thin cirrus is largely observable and is reported that way
 - **A real image of the Moon** for the current hour (true phase, libration and terminator) with constellation and next new/full moon dates
-- **A lunar eclipse takes over the moon card** for the day before it starts, with the times clipped to the Moon's own rise and set so the panel cannot name a phase that happens after moonset
+- **A lunar eclipse takes over the moon card** for the day before it starts, with the times clipped to the Moon's own rise and set so the panel cannot name a phase that happens after moonset, and **Earth's shadow drawn across the lunar frame at the real geometry** while it runs
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
 - **Live animated night sky** behind the dashboard: **the actual stars overhead**, plotted from a catalogue at their real positions for the configured location and the moment, plus drifting clouds and meteors from tonight's active showers — all **reactive to the actual conditions**
@@ -99,6 +99,12 @@ The moon card shows **a real image of the Moon** (set `display.moon_ring = true`
 **A lunar eclipse replaces those captions** for the 24 hours before it begins, on both builds: the kind of eclipse, the window it can be watched in, and how much of the Moon's diameter enters the umbra. The 10.1 inch build has the room for two further lines and adds the date and an observing note.
 
 **The times are clipped to the Moon's own rise and set, and that is the part that depends on the site.** A lunar eclipse is visible from a whole hemisphere at once, so "is it visible from here" barely filters anything; what is genuinely local is that the Moon can set partway through. At the partial eclipse of 28 August 2026, seen from 51.4°N, the shadow left the Moon at 06:52 with the Moon already below the horizon (it set at 06:24, still deep in the umbra). The card gives the window as ending at moonset and says how much of the eclipse that costs, rather than printing a last contact for something that has gone.
+
+**Earth's shadow is drawn over the lunar frame while the eclipse is running**, because the frame does not carry it: Dial-a-Moon models phase and libration but not eclipses, and reports an obscuration of zero at the maximum of this one. Without the overlay the card would show an ordinary full Moon directly above a caption announcing an eclipse.
+
+**The geometry is computed; the colour is representative.** The shadow's size, position and the curvature of its edge against the limb are real — the umbra is about 2.7 lunar radii across, and it is scaled by the same factor as the disc, so the relation between the two is exact even though the disc itself is drawn far larger than the Moon's true angular size. What is not physical is the brightness: a real umbra is thousands of times fainter than the full Moon, which on a panel in a lit room would simply read as absent, so the shadowed part is drawn as a dim copper (the colour comes from sunlight refracted through Earth's atmosphere, reddened the way a sunset is). The shading is carried by brightness rather than hue, so it survives red night mode — which is the mode the panel is in whenever an eclipse is worth watching.
+
+**The shadow's position is as fresh as the rest of the page**, which is to say it advances a step at each data refresh rather than continuously.
 
 **Only umbral eclipses appear.** A penumbral eclipse is a faint shading that cannot be separated from an ordinary full Moon by eye, and the penumbral contacts of a partial one are no more visible — announcing them would name a time to go out and look at nothing. This is the same test every conditional page here has to pass.
 

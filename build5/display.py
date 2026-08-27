@@ -28,10 +28,11 @@ from PIL import Image, ImageDraw
 
 from core.daemon import Paged, flatten, install_signal_handlers, run_daemon
 from core.fonts import font
-from core.imagery import moon_image, paste_moon
+from core.imagery import moon_image, paste_moon, shade_umbra
 from core.lunar import is_imminent as eclipse_imminent
 from core.lunar import next_eclipse as next_lunar_eclipse
 from core.lunar import summary as eclipse_summary
+from core.lunar import umbra_geometry
 from core.meteors import SPORADIC_ZHR, active, visible_rate
 from core.night import (
     NIGHT_MODES,
@@ -76,7 +77,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.47.0"
+FIRMWARE_VERSION = "3.48.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -237,7 +238,7 @@ def _glyph(draw, cx, cy, r, otype):
 
 
 def render_foreground(states, moon_photo=None, moon_ring=False, dropped=(),
-                      eclipse=None):
+                      eclipse=None, umbra=None):
     """Render the dashboard as an RGBA overlay: opaque content, transparent sky.
 
     moon_photo is a Dial-a-Moon frame fetched by the caller (network, so never
@@ -388,9 +389,24 @@ def render_foreground(states, moon_photo=None, moon_ring=False, dropped=(),
     MR  = 100
     MCY = 364
     if moon_photo is not None:
-        paste_moon(img, moon_photo, MCX, MCY, MR, ring=moon_ring)
+        limb = paste_moon(img, moon_photo, MCX, MCY, MR, ring=moon_ring)
     else:
         _draw_moon(draw, MCX, MCY, MR, moon_phase, waxing)
+        limb = MR
+    # ⇒ THE SHADOW IS DRAWN OVER THE FRAME BECAUSE THE FRAME DOES NOT CARRY IT.
+    # Dial-a-Moon models phase and libration and NOT eclipses - its own metadata
+    # reports obscuration 0.0 at the maximum of this one - so during an eclipse
+    # the photograph shows an ordinary full Moon and would sit contradicting the
+    # caption beside it.
+    #
+    # ⚠ THE POSITION IS AS STALE AS THE OVERLAY, which is up to data_refresh_min
+    # (15 by default) against an umbral phase of about three and a half hours.
+    # The shadow therefore advances in steps of roughly a fourteenth of its
+    # travel rather than continuously. That is the same staleness every other
+    # figure on this cached overlay carries, and it is why the caption states
+    # absolute contact times rather than a position.
+    if umbra:
+        shade_umbra(img, MCX, MCY, MR, umbra, limb)
 
     # ⇒ AN IMMINENT ECLIPSE TAKES BOTH CAPTION LINES. The phase name is the one
     # thing it displaces that a reader loses nothing by: a lunar eclipse happens
@@ -1122,11 +1138,16 @@ def build_pages(states, targets, lat, moon_ring=False):
     event = next_lunar_eclipse(LAT or 0.0, LON or 0.0, now=now)
     eclipse = (eclipse_summary(event, now)
                if eclipse_imminent(event, now, LUNAR_ECLIPSE_HOURS) else None)
+    # Asked of the instant, not of the event: the shadow is either on the disc
+    # now or it is not, and that is a different question from whether an eclipse
+    # is close enough to caption. It returns None whenever no umbra touches the
+    # Moon, which is almost always.
+    umbra = umbra_geometry(now)
 
     # The 5" layout has no room for the accompanying facts, so it takes the
     # frame and drops them; the 10" build shows them.
     pages = [render_foreground(states, moon_image()[0], moon_ring, dropped,
-                               eclipse)]
+                               eclipse, umbra)]
     if page2:
         pages.append(page2)
     return pages
