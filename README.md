@@ -21,6 +21,7 @@ Everything that is not layout (both weather sources, the target reports, the ima
 - Tonight's deep-sky verdict (EXCELLENT → NONE) spelled out in bold display type
 - Condition bars: cloudless %, seeing, transparency, calm. A reading below its warning mark is drawn hollow instead of filled. **Cloudless is the inverse of obscuration, not of raw cloud cover**: a sky fully covered by thin cirrus is largely observable and is reported that way
 - **A real image of the Moon** for the current hour (true phase, libration and terminator) with constellation and next new/full moon dates
+- **A lunar eclipse takes over the moon card** for the day before it starts, with the times clipped to the Moon's own rise and set so the panel cannot name a phase that happens after moonset
 - Footer grouped by type — astronomical (moon dates, dusk/dawn) on the right under the moon; meteorological (lifted index, weather) on the left
 - Handles the no-astronomical-darkness case for midsummer at high latitudes
 - **Live animated night sky** behind the dashboard: **the actual stars overhead**, plotted from a catalogue at their real positions for the configured location and the moment, plus drifting clouds and meteors from tonight's active showers — all **reactive to the actual conditions**
@@ -94,6 +95,14 @@ The sky is a live layer composited behind the dashboard each frame (12 fps on a 
 | No astronomical darkness | Sky washes to twilight blue; meteors suppressed |
 
 The moon card shows **a real image of the Moon** (set `display.moon_ring = true` to outline the full disc), fetched hourly from NASA SVS's Dial-a-Moon and cached on disk. It uses actual phase, libration and terminator rather than a drawn approximation. If the API can't be reached the display falls back to drawing the phase geometrically, so it degrades rather than breaks. It deliberately does not reuse an older cached frame: the phase moves about 12° a day, so yesterday's picture would be incorrect, and the correct drawing is better than an attractive but wrong photograph.
+
+**A lunar eclipse replaces those captions** for the 24 hours before it begins, on both builds: the kind of eclipse, the window it can be watched in, and how much of the Moon's diameter enters the umbra. The 10.1 inch build has the room for two further lines and adds the date and an observing note.
+
+**The times are clipped to the Moon's own rise and set, and that is the part that depends on the site.** A lunar eclipse is visible from a whole hemisphere at once, so "is it visible from here" barely filters anything; what is genuinely local is that the Moon can set partway through. At the partial eclipse of 28 August 2026, seen from 51.4°N, the shadow left the Moon at 06:52 with the Moon already below the horizon (it set at 06:24, still deep in the umbra). The card gives the window as ending at moonset and says how much of the eclipse that costs, rather than printing a last contact for something that has gone.
+
+**Only umbral eclipses appear.** A penumbral eclipse is a faint shading that cannot be separated from an ordinary full Moon by eye, and the penumbral contacts of a partial one are no more visible — announcing them would name a time to go out and look at nothing. This is the same test every conditional page here has to pass.
+
+Like the solar eclipse on the 10.1 inch build's Sun page, **it needs no network**: it is computed locally and cached until the event has passed, so it still announces itself with the internet down.
 
 Star and cloud brightness always keep a visible floor, so the sky stays alive even on poor nights.
 

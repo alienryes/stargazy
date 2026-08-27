@@ -29,6 +29,9 @@ from PIL import Image, ImageDraw
 from core.daemon import Paged, flatten, install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon
+from core.lunar import is_imminent as eclipse_imminent
+from core.lunar import next_eclipse as next_lunar_eclipse
+from core.lunar import summary as eclipse_summary
 from core.meteors import SPORADIC_ZHR, active, visible_rate
 from core.night import (
     NIGHT_MODES,
@@ -73,7 +76,7 @@ from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_
 # the tag build5-hardware-verified marks the last state that was. Repo releases
 # are versioned separately in pyproject.toml and will keep moving; the two were
 # never going to line up.
-FIRMWARE_VERSION = "3.46.1"
+FIRMWARE_VERSION = "3.47.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -105,6 +108,11 @@ HLINE2 = 252                # verdict bottom
 HLINE3 = 548                # footer top
 DIV_X  = 800                # vertical divider: conditions | moon
 RIGHT_CX = (DIV_X + W) // 2  # centre of right (moon) panel = 1040
+
+# How close a lunar eclipse has to be before it takes over the Moon card's
+# captions. Matches SOL_ECLIPSE_BAND_HOURS on the 10.1" build's solar page, so
+# the two kinds of eclipse announce themselves on the same notice.
+LUNAR_ECLIPSE_HOURS = 24.0
 
 # Touch control strip. Hidden until the panel is tapped, because this is an
 # ambient display and permanent on-screen buttons would cost content space on
@@ -228,11 +236,16 @@ def _glyph(draw, cx, cy, r, otype):
         draw.ellipse([cx - r * 0.6, cy - r * 0.45, cx + r * 0.6, cy + r * 0.45], outline=STEEL)
 
 
-def render_foreground(states, moon_photo=None, moon_ring=False, dropped=()):
+def render_foreground(states, moon_photo=None, moon_ring=False, dropped=(),
+                      eclipse=None):
     """Render the dashboard as an RGBA overlay: opaque content, transparent sky.
 
     moon_photo is a Dial-a-Moon frame fetched by the caller (network, so never
     from the render loop); without one the phase is drawn parametrically.
+
+    `eclipse` is core.lunar.summary() for an imminent lunar eclipse, or None.
+    Passed in rather than computed here so the render stays free of the two-year
+    search on a cache miss.
     """
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -379,16 +392,38 @@ def render_foreground(states, moon_photo=None, moon_ring=False, dropped=()):
     else:
         _draw_moon(draw, MCX, MCY, MR, moon_phase, waxing)
 
-    phase_name = PHASE_NAMES.get(
-        moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title()
-    )
-    pn_w = int(draw.textlength(phase_name, font=f_sm))
-    draw.text((MCX - pn_w // 2, MCY + MR + 8), phase_name, fill=MOON, font=f_sm)
+    # ⇒ AN IMMINENT ECLIPSE TAKES BOTH CAPTION LINES. The phase name is the one
+    # thing it displaces that a reader loses nothing by: a lunar eclipse happens
+    # at full moon by definition, so "Full Moon" under an eclipse heading states
+    # what the heading already implies. The constellation goes with it, being
+    # the least actionable line on the card.
+    #
+    # ⚠ ONLY TWO LINES FIT HERE. Measured on the panel in its own faces, in the
+    # 480px right column: the heading is 365px at f_sm and the window line 418px
+    # at f_xs, both worst case over every state the strings take. The 10.1"
+    # build also carries core.lunar.summary()'s `note`, which needs 666px and
+    # cannot go anywhere on this panel - so the window line's "moonset" token is
+    # what has to carry the warning that the Moon sets before the shadow leaves
+    # it. Do not lengthen these strings without re-measuring; a caption that
+    # overruns here runs into the vertical divider at DIV_X.
+    if eclipse:
+        head_w = int(draw.textlength(eclipse["heading"], font=f_sm))
+        draw.text((MCX - head_w // 2, MCY + MR + 8), eclipse["heading"],
+                  fill=MOON, font=f_sm)
+        win_w = int(draw.textlength(eclipse["window"], font=f_xs))
+        draw.text((MCX - win_w // 2, MCY + MR + 44), eclipse["window"],
+                  fill=WHITE, font=f_xs)
+    else:
+        phase_name = PHASE_NAMES.get(
+            moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title()
+        )
+        pn_w = int(draw.textlength(phase_name, font=f_sm))
+        draw.text((MCX - pn_w // 2, MCY + MR + 8), phase_name, fill=MOON, font=f_sm)
 
-    if moon_const:
-        mc_text = f"in {moon_const}"
-        mc_w    = int(draw.textlength(mc_text, font=f_xs))
-        draw.text((MCX - mc_w // 2, MCY + MR + 44), mc_text, fill=WHITE, font=f_xs)
+        if moon_const:
+            mc_text = f"in {moon_const}"
+            mc_w    = int(draw.textlength(mc_text, font=f_xs))
+            draw.text((MCX - mc_w // 2, MCY + MR + 44), mc_text, fill=WHITE, font=f_xs)
 
     # ── Footer ────────────────────────────────────────────────────────
     draw.line([(0, HLINE3), (W, HLINE3)], fill=DIM, width=2)
@@ -1077,9 +1112,21 @@ def build_pages(states, targets, lat, moon_ring=False):
     # carries every object UpTonight passed, as a Paged run stepped by its own
     # button; four cards against a list of forty is the case that most needs it.
     page2 = _optional("Targets", target_pages, states, targets, lat, dropped=dropped)
+
+    # ⇒ COMPUTED IN THE DATA THREAD, WHICH IS WHERE THE COST BELONGS. A cache
+    # miss searches full moon by full moon over two years; it is cheap, but it
+    # is not free, and the render loop must not carry it. Needs no network, so
+    # unlike everything else built here it cannot fail for lack of one - and it
+    # is deliberately not wrapped in _optional, because it cannot drop a page.
+    now = datetime.now().astimezone()
+    event = next_lunar_eclipse(LAT or 0.0, LON or 0.0, now=now)
+    eclipse = (eclipse_summary(event, now)
+               if eclipse_imminent(event, now, LUNAR_ECLIPSE_HOURS) else None)
+
     # The 5" layout has no room for the accompanying facts, so it takes the
     # frame and drops them; the 10" build shows them.
-    pages = [render_foreground(states, moon_image()[0], moon_ring, dropped)]
+    pages = [render_foreground(states, moon_image()[0], moon_ring, dropped,
+                               eclipse)]
     if page2:
         pages.append(page2)
     return pages

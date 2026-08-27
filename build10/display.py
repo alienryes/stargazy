@@ -29,6 +29,9 @@ from core.aurora import visible_now as aurora_now
 from core.daemon import Paged, flatten, install_signal_handlers, run_daemon
 from core.fonts import font
 from core.imagery import moon_image, paste_moon, paste_sun, sun_image
+from core.lunar import is_imminent as eclipse_imminent
+from core.lunar import next_eclipse as next_lunar_eclipse
+from core.lunar import summary as eclipse_summary
 from core.meteors import (
     NAMED_SHOWER_FLOOR,
     PEAKING_STRENGTH,
@@ -84,7 +87,7 @@ from core.touch import TouchReader
 from core.values import _dt, _f, _i, _phrase, load_config
 from core.weather import KMH_TO_MPH, compare_sources, make_fetcher, obscuration_of
 
-VERSION = "0.59.1"
+VERSION = "0.60.0"
 
 # The largest image this program legitimately opens is a 730x730 moon frame.
 # PIL's default decompression-bomb threshold (~178M pixels) would let a hostile
@@ -141,6 +144,11 @@ MOON_R = 300                # 600px across
 # pushed the moon dates behind the condition bars entirely.
 MOON_CAP1, MOON_CAP2 = 24, 86           # offsets below the disc edge
 MOON_CAP3, MOON_CAP4 = 140, 186
+
+# How close a lunar eclipse has to be before it takes over those four captions.
+# The same 24 hours as SOL_ECLIPSE_BAND_HOURS on the solar page, so the two
+# kinds of eclipse give the same notice.
+LUNAR_ECLIPSE_HOURS = 24.0
 
 BAR_Y0, BAR_GAP = 1284, 88
 BAR_LBLW, BAR_W, BAR_H = 300, 620, 40
@@ -369,8 +377,13 @@ def _moon_facts(facts):
 
 
 def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None,
-                      dropped=()):
-    """Page 1 as an RGBA overlay: opaque content, transparent sky."""
+                      dropped=(), eclipse=None):
+    """Page 1 as an RGBA overlay: opaque content, transparent sky.
+
+    `eclipse` is core.lunar.summary() for an imminent lunar eclipse, or None.
+    Passed in rather than computed here so the render stays free of the two-year
+    search a cache miss runs.
+    """
     img  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     f = _fonts()
@@ -436,22 +449,40 @@ def render_conditions(states, moon_photo=None, moon_ring=False, moon_facts=None,
     else:
         _draw_moon(draw, W // 2, MOON_CY, MOON_R, moon_phase, waxing)
 
-    phase_name = PHASE_NAMES.get(
-        moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title())
-    _centre(draw, phase_name, MOON_CY + MOON_R + MOON_CAP1, MOON, f["med"])
-    if moon_const:
-        _centre(draw, f"in {moon_const}", MOON_CY + MOON_R + MOON_CAP2, WHITE, f["sm"])
+    # ⇒ AN IMMINENT ECLIPSE TAKES ALL FOUR CAPTIONS. Everything it displaces is
+    # either implied by it or routine: the phase is full by definition during a
+    # lunar eclipse, the next new and full dates are the calendar the eclipse is
+    # an event in, and the frame's own libration figures describe the picture
+    # rather than the event. Widths measured on the panel in these faces against
+    # the 1120px usable width - heading 544 at med, window 611 at sm, note 769
+    # at xs - over every state the strings take, not one sample.
+    if eclipse:
+        _centre(draw, eclipse["heading"], MOON_CY + MOON_R + MOON_CAP1,
+                MOON, f["med"])
+        _centre(draw, eclipse["window"], MOON_CY + MOON_R + MOON_CAP2,
+                WHITE, f["sm"])
+        _centre(draw, eclipse["note"], MOON_CY + MOON_R + MOON_CAP3,
+                MUTED, f["xs"])
+        if eclipse["day"]:
+            _centre(draw, eclipse["day"], MOON_CY + MOON_R + MOON_CAP4,
+                    MUTED, f["xs"])
+    else:
+        phase_name = PHASE_NAMES.get(
+            moon_icon, moon_icon.replace("moon-", "").replace("-", " ").title())
+        _centre(draw, phase_name, MOON_CY + MOON_R + MOON_CAP1, MOON, f["med"])
+        if moon_const:
+            _centre(draw, f"in {moon_const}", MOON_CY + MOON_R + MOON_CAP2, WHITE, f["sm"])
 
-    moon_dates = []
-    if next_new:
-        moon_dates.append(f"New {next_new.strftime('%d %b')}")
-    if next_full:
-        moon_dates.append(f"Full {next_full.strftime('%d %b')}")
-    if moon_dates:
-        _centre(draw, "   -   ".join(moon_dates), MOON_CY + MOON_R + MOON_CAP3, MUTED, f["xs"])
-    line = _moon_facts(moon_facts)
-    if line:
-        _centre(draw, line, MOON_CY + MOON_R + MOON_CAP4, MUTED, f["xs"])
+        moon_dates = []
+        if next_new:
+            moon_dates.append(f"New {next_new.strftime('%d %b')}")
+        if next_full:
+            moon_dates.append(f"Full {next_full.strftime('%d %b')}")
+        if moon_dates:
+            _centre(draw, "   -   ".join(moon_dates), MOON_CY + MOON_R + MOON_CAP3, MUTED, f["xs"])
+        line = _moon_facts(moon_facts)
+        if line:
+            _centre(draw, line, MOON_CY + MOON_R + MOON_CAP4, MUTED, f["xs"])
     draw.line([(0, HLINE3), (W, HLINE3)], fill=DIM, width=2)
 
     # ── Conditions ────────────────────────────────────────────────────
@@ -2787,7 +2818,16 @@ def build_pages(states, targets, lat, moon_ring=False):
     # the rotation, which is what the render loop indexes from and what a reader
     # expects to see. render_conditions is still the one page never wrapped: the
     # rotation cannot be empty.
-    pages = [render_conditions(states, photo, moon_ring, facts, dropped)]
+    # ⇒ COMPUTED IN THE DATA THREAD, WHICH IS WHERE THE COST BELONGS, and not
+    # wrapped in _optional: it needs no network, so it cannot fail for want of
+    # one, and it cannot drop a page either way - it is a caption on a page that
+    # is always built.
+    now = datetime.now().astimezone()
+    event = next_lunar_eclipse(lat or 0.0, LON or 0.0, now=now)
+    eclipse = (eclipse_summary(event, now)
+               if eclipse_imminent(event, now, LUNAR_ECLIPSE_HOURS) else None)
+
+    pages = [render_conditions(states, photo, moon_ring, facts, dropped, eclipse)]
     for page in (page2, page3, page4, page5, page6):
         if page is not None:
             pages.append(page)
