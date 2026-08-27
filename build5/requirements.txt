@@ -5,6 +5,13 @@ pillow
 numpy
 requests
 
+# Needed by BOTH weather sources: the targets page computes alt-az from right
+# ascension and declination, and the Moon card computes lunar eclipses. It also
+# arrives with pyastroweatherio below, but a build configured for Home Assistant
+# installs none of that - so it is listed here in its own right rather than
+# relied on as somebody else's dependency, as it already is on the 10.1" build.
+ephem
+
 # Only needed when weather.source = "direct". pyastroweatherio's published
 # package declares NO dependencies of its own - its setup.py reads
 # requirements.txt at build time and that file is not in the sdist - so every
